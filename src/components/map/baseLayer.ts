@@ -19,7 +19,8 @@ export function createBaseLayer(theme: MapTheme, provider: TileProviderId = mapC
     maxZoom: spec.maxZoom,
     subdomains: spec.subdomains ?? 'abc',
     className: spec.className,
-    detectRetina: true,
+    // No detectRetina: CARTO's {r} placeholder already serves @2x tiles on high-DPI
+    // screens. Using both shrinks map labels to half size on retina displays.
     crossOrigin: true,
   });
 }
