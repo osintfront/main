@@ -1,0 +1,359 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', 'Heebo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-slate-50 font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  }
+  :lang(he) body,
+  [lang='he'] body {
+    font-family: 'Heebo', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+  :focus-visible {
+    outline-color: var(--color-sky-500);
+  }
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────── */
+.ofm-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-300) transparent;
+}
+.dark .ofm-scroll {
+  scrollbar-color: var(--color-slate-700) transparent;
+}
+
+/* ── Feed cards ─────────────────────────────────────────────── */
+.ofm-card__accent {
+  position: absolute;
+  inset-block: 12px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--card-accent, var(--color-slate-400));
+}
+[dir='rtl'] .ofm-card__accent {
+  border-radius: 3px 0 0 3px;
+}
+
+/* Category chip: tinted with the category colour, readable in both themes. */
+.ofm-category-chip {
+  color: color-mix(in srgb, var(--chip-color) 78%, black);
+  background: color-mix(in srgb, var(--chip-color) 11%, white);
+  --tw-ring-color: color-mix(in srgb, var(--chip-color) 30%, transparent);
+}
+.dark .ofm-category-chip {
+  color: color-mix(in srgb, var(--chip-color) 55%, white);
+  background: color-mix(in srgb, var(--chip-color) 16%, transparent);
+  --tw-ring-color: color-mix(in srgb, var(--chip-color) 35%, transparent);
+}
+
+/* ── Map container & tiles ──────────────────────────────────── */
+.ofm-map.leaflet-container {
+  direction: ltr; /* Leaflet internals assume LTR; content is mirrored separately. */
+  font-family: inherit;
+  background: #e5e7eb;
+}
+.dark .ofm-map.leaflet-container {
+  background: #0b0f17;
+}
+.ofm-tiles-muted {
+  filter: saturate(0.62) contrast(0.98);
+}
+.ofm-tiles-dark {
+  filter: saturate(0.8) brightness(0.95);
+}
+.ofm-tiles-inverted {
+  filter: invert(1) hue-rotate(180deg) saturate(0.35) brightness(0.85) contrast(0.95);
+}
+.leaflet-control-attribution {
+  font-size: 10px;
+}
+.dark .leaflet-control-attribution {
+  background: rgb(15 23 42 / 0.75) !important;
+  color: var(--color-slate-400);
+}
+.dark .leaflet-control-attribution a {
+  color: var(--color-sky-300);
+}
+.leaflet-bar a {
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 32px !important;
+}
+.dark .leaflet-bar {
+  border-color: rgb(255 255 255 / 0.1) !important;
+}
+.dark .leaflet-bar a {
+  background: rgb(15 23 42 / 0.92);
+  color: var(--color-slate-200);
+  border-bottom-color: rgb(255 255 255 / 0.08);
+}
+.dark .leaflet-bar a:hover {
+  background: var(--color-slate-800);
+}
+
+/* ── Markers (teardrop pins) ────────────────────────────────── */
+.ofm-pin-wrap {
+  background: transparent;
+  border: 0;
+}
+.ofm-pin {
+  position: relative;
+  width: var(--pin-size);
+  height: var(--pin-size);
+  transition: transform 160ms ease;
+  transform-origin: 50% 100%;
+}
+.ofm-pin__body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--pin-color);
+  border: 2px solid #fff;
+  box-shadow:
+    0 2px 6px rgb(0 0 0 / 0.35),
+    0 0 0 1px rgb(0 0 0 / 0.15);
+}
+.ofm-pin__glyph {
+  display: flex;
+  transform: rotate(45deg);
+}
+.ofm-pin--critical .ofm-pin__body {
+  box-shadow:
+    0 0 0 3px rgb(220 38 38 / 0.45),
+    0 2px 8px rgb(0 0 0 / 0.4);
+}
+.ofm-pin.is-breaking::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: calc(var(--pin-size) * 1.1);
+  height: calc(var(--pin-size) * 1.1);
+  margin-left: calc(var(--pin-size) * -0.55);
+  margin-bottom: calc(var(--pin-size) * -0.55);
+  border-radius: 9999px;
+  border: 2px solid var(--pin-color);
+  animation: ofm-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.ofm-pin.is-selected .ofm-pin__body {
+  border-color: #0ea5e9;
+  box-shadow:
+    0 0 0 4px rgb(14 165 233 / 0.35),
+    0 4px 12px rgb(0 0 0 / 0.4);
+}
+.leaflet-marker-icon:hover .ofm-pin,
+.leaflet-marker-icon:focus-visible .ofm-pin {
+  transform: scale(1.08);
+}
+.leaflet-marker-icon:focus-visible {
+  outline: none;
+}
+.leaflet-marker-icon:focus-visible .ofm-pin__body {
+  outline: 3px solid #0ea5e9;
+  outline-offset: 2px;
+}
+@keyframes ofm-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ofm-pin.is-breaking::after {
+    animation: none;
+    opacity: 0.6;
+  }
+  .ofm-pin {
+    transition: none;
+  }
+}
+
+/* ── Popups ─────────────────────────────────────────────────── */
+.ofm-popup-shell .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.28);
+  padding: 0;
+}
+.ofm-popup-shell .leaflet-popup-content {
+  margin: 0;
+  width: auto !important;
+  min-width: 240px;
+}
+.dark .ofm-popup-shell .leaflet-popup-content-wrapper,
+.dark .ofm-popup-shell .leaflet-popup-tip {
+  background: var(--color-slate-900);
+  color: var(--color-slate-100);
+}
+.dark .ofm-popup-shell a.leaflet-popup-close-button {
+  color: var(--color-slate-400);
+}
+.ofm-popup {
+  padding: 14px 16px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ofm-popup__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-right: 18px; /* close button is always top-right (Leaflet is LTR) */
+}
+.ofm-popup__category,
+.ofm-popup__severity,
+.ofm-popup__breaking {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ofm-popup__category {
+  color: color-mix(in srgb, var(--chip-color) 78%, black);
+  background: color-mix(in srgb, var(--chip-color) 12%, white);
+}
+.dark .ofm-popup__category {
+  color: color-mix(in srgb, var(--chip-color) 55%, white);
+  background: color-mix(in srgb, var(--chip-color) 18%, transparent);
+}
+.ofm-popup__severity--low {
+  background: #ecfdf5;
+  color: #065f46;
+}
+.ofm-popup__severity--medium {
+  background: #fffbeb;
+  color: #92400e;
+}
+.ofm-popup__severity--high {
+  background: #fff7ed;
+  color: #9a3412;
+}
+.ofm-popup__severity--critical {
+  background: #fef2f2;
+  color: #991b1b;
+}
+.dark .ofm-popup__severity--low {
+  background: rgb(16 185 129 / 0.12);
+  color: #6ee7b7;
+}
+.dark .ofm-popup__severity--medium {
+  background: rgb(245 158 11 / 0.12);
+  color: #fcd34d;
+}
+.dark .ofm-popup__severity--high {
+  background: rgb(249 115 22 / 0.12);
+  color: #fdba74;
+}
+.dark .ofm-popup__severity--critical {
+  background: rgb(239 68 68 / 0.16);
+  color: #fca5a5;
+}
+.ofm-popup__breaking {
+  background: #dc2626;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ofm-popup__title {
+  margin: 8px 0 2px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.ofm-popup__sub {
+  margin: 0 !important;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--color-slate-500);
+  font-size: 12px;
+}
+.ofm-popup__time {
+  font-variant-numeric: tabular-nums;
+}
+.ofm-popup__desc {
+  margin: 8px 0 0 !important;
+  color: var(--color-slate-600);
+}
+.dark .ofm-popup__sub {
+  color: var(--color-slate-400);
+}
+.dark .ofm-popup__desc {
+  color: var(--color-slate-300);
+}
+.ofm-popup__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-slate-200);
+}
+.dark .ofm-popup__footer {
+  border-top-color: var(--color-slate-800);
+}
+.ofm-popup__verified {
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dark .ofm-popup__verified {
+  color: #7dd3fc;
+}
+.ofm-popup__source,
+.ofm-popup__source-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--color-slate-500) !important;
+}
+.ofm-popup__source:hover {
+  text-decoration: underline;
+}
+.ofm-popup__view {
+  margin-inline-start: auto;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--color-slate-900);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.ofm-popup__view:hover {
+  background: var(--color-slate-700);
+}
+.ofm-popup__view:focus-visible {
+  outline: 2px solid var(--color-sky-500);
+  outline-offset: 2px;
+}
+.dark .ofm-popup__view {
+  background: #fff;
+  color: var(--color-slate-900);
+}
