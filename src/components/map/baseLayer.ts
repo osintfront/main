@@ -9,8 +9,8 @@ export function createBaseLayer(theme: MapTheme, provider: TileProviderId = mapC
   if (provider === 'google') {
     // Google Maps requires leaflet.gridlayer.googlemutant + the Maps JS API.
     // Until that is wired in, fall back to CARTO so the map never renders blank.
-    console.warn('[map] Google tiles are not wired up yet — falling back to CARTO. See src/config/map.ts.');
-    return createBaseLayer(theme, 'carto');
+    console.warn('[map] Google tiles are not wired up yet — falling back to OpenStreetMap. See src/config/map.ts.');
+    return createBaseLayer(theme, 'osm');
   }
 
   const spec = TILE_PROVIDERS[provider][theme];

@@ -62,8 +62,9 @@ export const TILE_PROVIDERS: Record<Exclude<TileProviderId, 'google'>, Record<Ma
 };
 
 function readProvider(): TileProviderId {
-  const raw = (import.meta.env.VITE_MAP_TILE_PROVIDER ?? 'carto').toString().trim().toLowerCase();
-  return raw === 'osm' || raw === 'google' || raw === 'carto' ? raw : 'carto';
+  // Default: OpenStreetMap — no API key needed. CARTO basemaps now require a key.
+  const raw = (import.meta.env.VITE_MAP_TILE_PROVIDER ?? 'osm').toString().trim().toLowerCase();
+  return raw === 'osm' || raw === 'google' || raw === 'carto' ? raw : 'osm';
 }
 
 export const mapConfig = {
