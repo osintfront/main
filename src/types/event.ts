@@ -18,6 +18,17 @@ export const SOURCE_TYPES = [
 ] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
+/**
+ * How precisely the pin marks the event. 'region' / 'country' mean the report
+ * named only an area, and the server placed the pin at that area's centre.
+ */
+export const LOCATION_PRECISIONS = ['exact', 'city', 'region', 'country'] as const;
+export type LocationPrecision = (typeof LOCATION_PRECISIONS)[number];
+
+export function isApproximateLocation(p: LocationPrecision | null | undefined): p is 'region' | 'country' {
+  return p === 'region' || p === 'country';
+}
+
 /** Optional per-language overrides, prepared for future translated titles/summaries. */
 export type EventTranslations = Partial<Record<string, { title?: string; description?: string }>>;
 
@@ -33,6 +44,7 @@ export interface PublicEvent {
   latitude: number;
   longitude: number;
   locationName: string;
+  locationPrecision?: LocationPrecision | null;
   country: string;
   region: string;
   city: string;
@@ -63,6 +75,7 @@ export interface AdminEvent {
   region: string;
   city: string;
   address: string | null;
+  locationPrecision: LocationPrecision | null;
   sourceName: string | null;
   sourceUrl: string | null;
   sourceType: SourceType;
@@ -97,6 +110,7 @@ export interface EventInput {
   region: string;
   city: string;
   address: string;
+  locationPrecision: LocationPrecision | null;
   sourceName: string;
   sourceUrl: string;
   sourceType: SourceType;

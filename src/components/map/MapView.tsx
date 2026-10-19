@@ -138,6 +138,7 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
               breaking: t('feed.breaking'),
               viewEvent: t('map.viewEvent'),
               openSource: t('map.openSource'),
+              approximate: t('feed.approximate'),
               locale,
               dir,
             },

@@ -25,6 +25,9 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261019000001_initial_schema.sql
    supabase/migrations/20261019000002_rls_policies.sql
    supabase/migrations/20261019000003_default_categories.sql
+   supabase/migrations/20261019000004_lock_down_trigger_functions.sql
+   supabase/migrations/20261019000005_location_resolution.sql
+   supabase/migrations/20261019000006_location_refinement.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.
@@ -114,8 +117,15 @@ Everything provider-specific is in `src/config/map.ts` and `src/components/map/b
 - **Location:** place search through a swappable geocoding module (`src/services/geocodingService.ts`, OpenStreetMap Nominatim, no key), click the map to drop a pin, drag to adjust, reverse lookup fills empty place fields, manual coordinates.
 - **Workflow:** save draft · submit for review · publish · reject (reason required) · archive · back to draft · soft delete / restore, mirroring the database rules in `src/lib/eventWorkflow.ts`. Writes are conditional on the current status, so two people can't publish or reject the same event at once.
 
+### Location resolution for imported reports (migrations 0005–0006)
+- Events saved **without coordinates** are placed by the database from their place names (`location_name`, city, region, country) using the `place_gazetteer` table (~155 places in Israel, Gaza, the West Bank, Lebanon, Syria, Iran, Yemen, Iraq…), Hebrew and English, with Hebrew prefix letters (ב/ל/מ/ה…) handled.
+- `location_precision` records how precise the pin is: `exact` · `city` · `region` · `country`. Region/country pins are shown with an **"Approx. location"** label on the public feed and popup.
+- Every 5 minutes (`pg_cron` → `refine_event_locations`) region/country-level events whose specific place isn't in the gazetteer are looked up on OpenStreetMap Nominatim; a match is accepted only inside the same country and when the place's name matches.
+- **Auto-publish:** drafts from sources listed in `app_settings.auto_publish` (default: names starting with "WhatsApp") publish themselves once they have a title, category and location. Toggle it in **Admin → Settings**.
+- In the editor, publishing no longer needs a pin when a place name is filled in — the server places it on save.
+
 ## Next phases
-- **Phase 3:** automatic location extraction from the report text (the geocoding service and map picker already exist).
+- **Phase 3:** automatic location extraction from free report text (place-name resolution already exists).
 - **Phase 4:** classification Edge Function with a rule-based fallback, confidence display, duplicate detection.
 - **Phase 5:** user management UI, invitation emails via an Edge Function, audit-log and history viewers.
 - **Phase 6:** realtime feed, filters, category layers, marker clustering.

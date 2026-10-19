@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { SEVERITIES, SOURCE_TYPES, type AdminEvent, type EventHistoryEntry, type EventInput, type EventStatus, type Severity, type SourceType } from '@/types/event';
+import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type AdminEvent, type LocationPrecision, type EventHistoryEntry, type EventInput, type EventStatus, type Severity, type SourceType } from '@/types/event';
 import { safeExternalUrl } from '@/utils/url';
 import { ServiceError, toServiceError } from './serviceError';
 
@@ -7,7 +7,7 @@ import { ServiceError, toServiceError } from './serviceError';
 
 const ADMIN_EVENT_COLUMNS = [
   'id', 'title', 'description', 'original_report_text', 'category_id', 'status', 'severity',
-  'latitude', 'longitude', 'location_name', 'country', 'region', 'city', 'address',
+  'latitude', 'longitude', 'location_name', 'country', 'region', 'city', 'address', 'location_precision',
   'source_name', 'source_url', 'source_type', 'occurred_at', 'published_at', 'created_at', 'updated_at',
   'created_by', 'approved_by', 'is_breaking', 'is_verified', 'geocoding_confidence', 'classification_confidence',
   'coordinates_manually_corrected', 'rejection_reason', 'duplicate_of_event_id', 'deleted_at',
@@ -30,6 +30,7 @@ interface EventRow {
   region: string;
   city: string;
   address: string | null;
+  location_precision: string | null;
   source_name: string | null;
   source_url: string | null;
   source_type: string;
@@ -72,6 +73,9 @@ function mapRow(r: EventRow): AdminEvent {
     region: r.region,
     city: r.city,
     address: r.address,
+    locationPrecision: (LOCATION_PRECISIONS as readonly string[]).includes(r.location_precision ?? '')
+      ? (r.location_precision as LocationPrecision)
+      : null,
     sourceName: r.source_name,
     sourceUrl: r.source_url,
     sourceType: (SOURCE_TYPES as readonly string[]).includes(r.source_type) ? (r.source_type as SourceType) : 'other',
@@ -113,6 +117,8 @@ function toRow(input: EventInput) {
     region: clean(input.region, 100),
     city: clean(input.city, 100),
     address: clean(input.address, 300) || null,
+    // No coordinates → null, and the server places the pin from the place names.
+    location_precision: input.latitude === null || input.longitude === null ? null : (input.locationPrecision ?? 'exact'),
     source_name: clean(input.sourceName, 200) || null,
     source_url: safeExternalUrl(input.sourceUrl),
     source_type: input.sourceType,
@@ -313,6 +319,7 @@ export function eventToInput(e: AdminEvent): EventInput {
     region: e.region,
     city: e.city,
     address: e.address ?? '',
+    locationPrecision: e.locationPrecision,
     sourceName: e.sourceName ?? '',
     sourceUrl: e.sourceUrl ?? '',
     sourceType: e.sourceType,

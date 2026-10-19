@@ -48,6 +48,7 @@ export function buildDemoEvents(): PublicEvent[] {
       latitude: 31.7795,
       longitude: 35.1325,
       locationName: 'Jerusalem Hills',
+      locationPrecision: 'region',
       country: 'Israel',
       region: 'Jerusalem District',
       city: 'Jerusalem',

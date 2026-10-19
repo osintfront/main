@@ -87,8 +87,13 @@ export function validateEvent(input: EventInput, target: EventStatus): FieldErro
   }
   if (target === 'published') {
     if (!input.categoryId) errors.categoryId = 'validation.categoryRequired';
-    if (input.latitude === null || input.longitude === null) errors.latitude = errors.latitude ?? 'validation.coordsRequired';
-    if (!input.locationName.trim()) errors.locationName = 'validation.locationRequired';
+    // Without coordinates the server places the pin from the place names,
+    // so publishing needs either coordinates or at least one place name.
+    const hasPlace = [input.locationName, input.city, input.region, input.country].some((v) => v.trim());
+    if ((input.latitude === null || input.longitude === null) && !hasPlace) {
+      errors.latitude = errors.latitude ?? 'validation.coordsRequired';
+      errors.locationName = 'validation.locationRequired';
+    }
   }
   return errors;
 }

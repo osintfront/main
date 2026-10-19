@@ -1,7 +1,7 @@
 import { memo, type CSSProperties, type MouseEvent } from 'react';
 import { Crosshair, ExternalLink, MapPin } from 'lucide-react';
 import { useI18n } from '@/i18n';
-import type { PublicEvent } from '@/types/event';
+import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
 import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
@@ -76,6 +76,14 @@ function EventCardImpl({ event, selected, now, onLocate }: EventCardProps) {
           <span className="truncate" dir="auto">
             {where}
           </span>
+          {isApproximateLocation(event.locationPrecision) ? (
+            <span
+              className="shrink-0 rounded bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+              title={t('feed.approximateHint')}
+            >
+              {t('feed.approximate')}
+            </span>
+          ) : null}
         </p>
       ) : null}
 

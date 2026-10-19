@@ -290,6 +290,10 @@
   color: var(--color-slate-500);
   font-size: 12px;
 }
+.ofm-popup__approx {
+  font-style: italic;
+  opacity: 0.85;
+}
 .ofm-popup__time {
   font-variant-numeric: tabular-nums;
 }

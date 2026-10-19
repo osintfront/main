@@ -1,4 +1,4 @@
-import type { PublicEvent } from '@/types/event';
+import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { formatDateTime } from '@/utils/time';
 import { hostnameOf, safeExternalUrl } from '@/utils/url';
 
@@ -9,6 +9,7 @@ export interface PopupLabels {
   breaking: string;
   viewEvent: string;
   openSource: string;
+  approximate: string;
   locale: string;
   dir: 'ltr' | 'rtl';
 }
@@ -53,6 +54,9 @@ export function buildPopupContent(
     const w = el('bdi', '', where);
     w.dir = 'auto';
     sub.append(w);
+    if (isApproximateLocation(event.locationPrecision)) {
+      sub.append(el('span', 'ofm-popup__approx', `(${labels.approximate})`));
+    }
   }
   if (where && time) sub.append(el('span', 'ofm-popup__sep', '·'));
   if (time) {

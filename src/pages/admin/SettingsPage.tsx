@@ -1,5 +1,10 @@
-import type { ReactNode } from 'react';
-import { Database, KeyRound, Map as MapIcon, ShieldCheck } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Database, KeyRound, Map as MapIcon, Send, ShieldCheck } from 'lucide-react';
+import { ToggleField } from '@/components/common/Form';
+import { useToast } from '@/components/common/Toast';
+import { usePermissions } from '@/hooks/usePermissions';
+import { friendlyError } from '@/services/serviceError';
+import { getAutoPublish, setAutoPublish, type AutoPublishSetting } from '@/services/settingsService';
 import { authConfig } from '@/config/auth';
 import { mapConfig } from '@/config/map';
 import { supabaseHost } from '@/integrations/supabase/client';
@@ -19,6 +24,60 @@ function Row({ icon, title, children }: { icon: ReactNode; title: string; childr
   );
 }
 
+function AutoPublishRow() {
+  const { t } = useI18n();
+  const toast = useToast();
+  const { can } = usePermissions();
+  const [setting, setSetting] = useState<AutoPublishSetting | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getAutoPublish()
+      .then((s) => alive && setSetting(s))
+      .catch((err) => alive && setLoadError(friendlyError(err, t)));
+    return () => {
+      alive = false;
+    };
+  }, [t]);
+
+  const toggle = async (enabled: boolean) => {
+    if (!setting) return;
+    const next = { ...setting, enabled };
+    setSaving(true);
+    try {
+      await setAutoPublish(next);
+      setSetting(next);
+      toast.success(t('settings.saved'));
+    } catch (err) {
+      toast.error(friendlyError(err, t));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Row icon={<Send className="size-[18px]" aria-hidden />} title={t('settings.autoPublish')}>
+      <p>{t('settings.autoPublishBody')}</p>
+      {loadError ? <p className="mt-2 text-red-600 dark:text-red-400">{loadError}</p> : null}
+      {setting ? (
+        <div className="mt-3">
+          <ToggleField
+            label={t('settings.autoPublishToggle')}
+            description={t('settings.autoPublishSources', {
+              sources: setting.sourcePrefixes.join(', ') || t('settings.none'),
+            })}
+            checked={setting.enabled}
+            onChange={(v) => void toggle(v)}
+            disabled={saving || !can('settings.manage')}
+          />
+        </div>
+      ) : null}
+    </Row>
+  );
+}
+
 export function SettingsPage() {
   const { t } = useI18n();
   const roles = authConfig.requireMfaForRoles.map((r) => t(`role.${r}`)).join(', ') || t('settings.none');
@@ -29,6 +88,7 @@ export function SettingsPage() {
         <Row icon={<Database className="size-[18px]" aria-hidden />} title={t('settings.backend')}>
           {t('settings.connectedTo', { host: supabaseHost })}
         </Row>
+        <AutoPublishRow />
         <Row icon={<MapIcon className="size-[18px]" aria-hidden />} title={t('settings.mapProvider')}>
           {t('settings.mapProviderBody', { provider: mapConfig.provider })}
         </Row>

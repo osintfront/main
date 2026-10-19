@@ -109,7 +109,11 @@ reset role;
 -- ── Admin ────────────────────────────────────────────────────────────
 select pg_temp.act_as((select admin_id from _ids));
 select pg_temp.check(exists (select 1 from public.events where status = 'draft'), 'admin sees all drafts');
-select pg_temp.expect_error($q$update public.events set status = 'published' where title = 'Explosion reported in Gaza'$q$, 'publishing without coordinates is blocked');
+reset role;
+insert into public.events (title, original_report_text, occurred_at, created_by, category_id, status, location_name, country)
+values ('Nowhere draft', 'x', now(), (select admin_id from _ids), (select fire_id from _ids), 'draft', '', '');
+select pg_temp.act_as((select admin_id from _ids));
+select pg_temp.expect_error($q$update public.events set status = 'published' where title = 'Nowhere draft'$q$, 'publishing without any location is blocked');
 select pg_temp.expect_error($q$update public.events set status = 'rejected' where title = 'Editor draft'$q$, 'rejecting without a reason is blocked');
 select pg_temp.expect_error($q$update public.events set status = 'published' where title = 'Editor draft' and status = 'pending_review'$q$, 'publishing needs coordinates (Editor draft has none)');
 update public.events set latitude = 31.78, longitude = 35.21 where title = 'Editor draft';

@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { FALLBACK_CATEGORY, safeColor } from '@/data/categoryRegistry';
-import { SEVERITIES, SOURCE_TYPES, type PublicEvent, type Severity, type SourceType } from '@/types/event';
+import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type LocationPrecision, type PublicEvent, type Severity, type SourceType } from '@/types/event';
 import { safeExternalUrl } from '@/utils/url';
 import { ServiceError, toServiceError } from './serviceError';
 
@@ -17,6 +17,7 @@ const PUBLIC_EVENT_COLUMNS = [
   'latitude',
   'longitude',
   'location_name',
+  'location_precision',
   'country',
   'region',
   'city',
@@ -44,6 +45,7 @@ interface PublishedEventRow {
   latitude: number | string | null;
   longitude: number | string | null;
   location_name: string | null;
+  location_precision?: string | null;
   country: string | null;
   region: string | null;
   city: string | null;
@@ -102,6 +104,9 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     latitude,
     longitude,
     locationName: row.location_name ?? '',
+    locationPrecision: (LOCATION_PRECISIONS as readonly string[]).includes(row.location_precision ?? '')
+      ? (row.location_precision as LocationPrecision)
+      : null,
     country: row.country ?? '',
     region: row.region ?? '',
     city: row.city ?? '',

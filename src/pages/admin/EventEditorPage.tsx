@@ -21,7 +21,7 @@ import { friendlyError } from '@/services/serviceError';
 import { getCategoryIcon } from '@/data/categoryRegistry';
 import type { GeocodeResult } from '@/services/geocodingService';
 import type { EventCategory } from '@/types/category';
-import { SEVERITIES, SOURCE_TYPES, type AdminEvent, type EventHistoryEntry, type EventInput, type EventStatus } from '@/types/event';
+import { SEVERITIES, SOURCE_TYPES, isApproximateLocation, type AdminEvent, type EventHistoryEntry, type EventInput, type EventStatus } from '@/types/event';
 import { formatDateTime } from '@/utils/time';
 import { StatusBadge } from '@/components/common/Badges';
 import { Alert, Spinner } from '@/components/common/Feedback';
@@ -56,6 +56,7 @@ function emptyInput(): EventInput {
     region: '',
     city: '',
     address: '',
+    locationPrecision: null,
     sourceName: '',
     sourceUrl: '',
     sourceType: 'manual_report',
@@ -459,6 +460,7 @@ export function EventEditorPage() {
                   ...prev,
                   latitude: Math.round(lat * 1e6) / 1e6,
                   longitude: Math.round(lng * 1e6) / 1e6,
+                  locationPrecision: 'exact',
                   geocodingConfidence: null,
                   coordinatesManuallyCorrected: prev.geocodingConfidence !== null || prev.coordinatesManuallyCorrected,
                 }));
@@ -467,7 +469,7 @@ export function EventEditorPage() {
               onReverse={(r) => !disabled && fillPlace(r, false)}
               onSelectResult={(r) => {
                 if (disabled) return;
-                setInput((prev) => ({ ...prev, latitude: r.latitude, longitude: r.longitude, geocodingConfidence: Math.round(r.confidence * 1000) / 1000, coordinatesManuallyCorrected: false }));
+                setInput((prev) => ({ ...prev, latitude: r.latitude, longitude: r.longitude, locationPrecision: 'city', geocodingConfidence: Math.round(r.confidence * 1000) / 1000, coordinatesManuallyCorrected: false }));
                 fillPlace(r, true);
                 setErrors((p) => ({ ...p, latitude: undefined, longitude: undefined, locationName: undefined }));
               }}
@@ -480,7 +482,7 @@ export function EventEditorPage() {
                 inputMode="decimal"
                 dir="ltr"
                 value={input.latitude ?? ''}
-                onChange={(e) => set('latitude', e.target.value === '' ? null : Number(e.target.value))}
+                onChange={(e) => setInput((prev) => ({ ...prev, latitude: e.target.value === '' ? null : Number(e.target.value), locationPrecision: 'exact' }))}
                 error={errorText('latitude')}
                 disabled={disabled}
               />
@@ -491,7 +493,7 @@ export function EventEditorPage() {
                 inputMode="decimal"
                 dir="ltr"
                 value={input.longitude ?? ''}
-                onChange={(e) => set('longitude', e.target.value === '' ? null : Number(e.target.value))}
+                onChange={(e) => setInput((prev) => ({ ...prev, longitude: e.target.value === '' ? null : Number(e.target.value), locationPrecision: 'exact' }))}
                 error={errorText('longitude')}
                 disabled={disabled}
               />
@@ -500,6 +502,24 @@ export function EventEditorPage() {
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('form.geocodingConfidence', { value: Math.round(input.geocodingConfidence * 100) })}
               </p>
+            ) : null}
+            {input.latitude === null || input.longitude === null ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('form.autoLocateHint')}</p>
+            ) : isApproximateLocation(input.locationPrecision) ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+                <span className="min-w-0 flex-1">
+                  {t('form.approximateNote', { level: t(`form.precision.${input.locationPrecision}`) })}
+                </span>
+                {!disabled ? (
+                  <button
+                    type="button"
+                    className="font-semibold underline underline-offset-2 hover:no-underline"
+                    onClick={() => setInput((prev) => ({ ...prev, latitude: null, longitude: null, locationPrecision: null, geocodingConfidence: null }))}
+                  >
+                    {t('form.relocate')}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
             {input.coordinatesManuallyCorrected ? (
               <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{t('form.manuallyCorrected')}</p>
