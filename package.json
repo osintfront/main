@@ -6,9 +6,10 @@
   "description": "Live conflict & event map with a secure moderation back office (React + Leaflet + Supabase).",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json && vite build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
