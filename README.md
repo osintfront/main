@@ -107,9 +107,15 @@ Everything provider-specific is in `src/config/map.ts` and `src/components/map/b
 
 ---
 
+### Phase 2 — moderation (complete)
+- **Dashboard** (`/admin`): published / drafts / pending / critical / active staff / created today, recent created · updated · published events, recent staff actions, quick actions.
+- **Events table** (`/admin/events`): search, status, category, severity, country, verified, breaking, date range, "only mine", deleted view; publish, archive, duplicate and delete per row, all permission-aware; pagination.
+- **Event editor** (`/admin/events/new`, `/admin/events/:id`): original report, event time, title, summary, category, severity, breaking, verified, source, internal notes, change history.
+- **Location:** place search through a swappable geocoding module (`src/services/geocodingService.ts`, OpenStreetMap Nominatim, no key), click the map to drop a pin, drag to adjust, reverse lookup fills empty place fields, manual coordinates.
+- **Workflow:** save draft · submit for review · publish · reject (reason required) · archive · back to draft · soft delete / restore, mirroring the database rules in `src/lib/eventWorkflow.ts`. Writes are conditional on the current status, so two people can't publish or reject the same event at once.
+
 ## Next phases
-- **Phase 2:** dashboard metrics, `/admin/events` table, `/admin/events/new` form, draft → review → publish actions.
-- **Phase 3:** location extraction + modular geocoding service (Nominatim first), preview map with draggable marker.
+- **Phase 3:** automatic location extraction from the report text (the geocoding service and map picker already exist).
 - **Phase 4:** classification Edge Function with a rule-based fallback, confidence display, duplicate detection.
 - **Phase 5:** user management UI, invitation emails via an Edge Function, audit-log and history viewers.
 - **Phase 6:** realtime feed, filters, category layers, marker clustering.

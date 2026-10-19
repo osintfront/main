@@ -97,7 +97,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     descriptionKey: 'admin.module.categories',
     icon: Tags,
     anyOf: ['category.manage'],
-    phase: 2,
+    phase: 5,
     backend: ['event_categories (16 defaults)'],
     showInNav: true,
   },

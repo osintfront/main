@@ -10,7 +10,10 @@ import { MapPage } from '@/pages/public/MapPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
-import { AdminHomePage } from '@/pages/admin/AdminHomePage';
+import { DashboardPage } from '@/pages/admin/DashboardPage';
+import { EventsListPage } from '@/pages/admin/EventsListPage';
+import { EventEditorPage } from '@/pages/admin/EventEditorPage';
+import { ToastProvider } from '@/components/common/Toast';
 import { AccountPage } from '@/pages/admin/AccountPage';
 import { SettingsPage } from '@/pages/admin/SettingsPage';
 import { ModulePlaceholderPage } from '@/pages/admin/ModulePlaceholderPage';
@@ -18,7 +21,10 @@ import { NotFoundPage } from '@/pages/NotFoundPage';
 
 /** Section id → page. Sections not listed render their phase placeholder. */
 const IMPLEMENTED: Record<string, ComponentType> = {
-  dashboard: AdminHomePage,
+  dashboard: DashboardPage,
+  events: EventsListPage,
+  newEvent: EventEditorPage,
+  eventDetail: EventEditorPage,
   settings: SettingsPage,
 };
 
@@ -27,6 +33,7 @@ export function App() {
     <ThemeProvider>
       <I18nProvider>
         <AuthProvider>
+          <ToastProvider>
           <BrowserRouter>
             <Routes>
               {/* Public — no login required */}
@@ -71,6 +78,7 @@ export function App() {
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </BrowserRouter>
+          </ToastProvider>
         </AuthProvider>
       </I18nProvider>
     </ThemeProvider>

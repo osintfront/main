@@ -46,3 +46,72 @@ export interface PublicEvent {
   category: CategoryRef;
   translations: EventTranslations;
 }
+
+/** Full event as staff see it in the back office. */
+export interface AdminEvent {
+  id: string;
+  title: string;
+  description: string;
+  originalReportText: string;
+  categoryId: string | null;
+  status: EventStatus;
+  severity: Severity;
+  latitude: number | null;
+  longitude: number | null;
+  locationName: string;
+  country: string;
+  region: string;
+  city: string;
+  address: string | null;
+  sourceName: string | null;
+  sourceUrl: string | null;
+  sourceType: SourceType;
+  occurredAt: string;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  createdByName: string | null;
+  approvedBy: string | null;
+  isBreaking: boolean;
+  isVerified: boolean;
+  geocodingConfidence: number | null;
+  classificationConfidence: number | null;
+  coordinatesManuallyCorrected: boolean;
+  rejectionReason: string | null;
+  duplicateOfEventId: string | null;
+  deletedAt: string | null;
+}
+
+/** Editable fields of an event (what the form submits). */
+export interface EventInput {
+  title: string;
+  description: string;
+  originalReportText: string;
+  categoryId: string | null;
+  severity: Severity;
+  latitude: number | null;
+  longitude: number | null;
+  locationName: string;
+  country: string;
+  region: string;
+  city: string;
+  address: string;
+  sourceName: string;
+  sourceUrl: string;
+  sourceType: SourceType;
+  occurredAt: string;
+  isBreaking: boolean;
+  isVerified: boolean;
+  geocodingConfidence: number | null;
+  coordinatesManuallyCorrected: boolean;
+}
+
+export interface EventHistoryEntry {
+  id: string;
+  action: string;
+  previousValues: Record<string, unknown>;
+  newValues: Record<string, unknown>;
+  changedBy: string | null;
+  createdAt: string;
+}

@@ -67,7 +67,7 @@ const STATUS_STYLES: Record<EventStatus, string> = {
 
 export function StatusBadge({ status }: { status: EventStatus }) {
   const { t } = useI18n();
-  return <span className={cn(BASE, STATUS_STYLES[status])}>{t(`status.${status}`)}</span>;
+  return <span className={cn(BASE, 'whitespace-nowrap', STATUS_STYLES[status])}>{t(`status.${status}`)}</span>;
 }
 
 const ROLE_STYLES: Record<AppRole, string> = {

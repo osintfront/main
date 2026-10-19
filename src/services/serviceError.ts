@@ -1,3 +1,5 @@
+import type { TranslationKey } from '@/i18n/en';
+
 export type ServiceErrorCode =
   | 'not_configured'
   | 'network'
@@ -47,5 +49,25 @@ export function toServiceError(error: unknown): ServiceError {
       return new ServiceError('validation', message, error);
     default:
       return new ServiceError('unknown', message, error);
+  }
+}
+
+type Translate = (key: TranslationKey, vars?: Record<string, string | number>) => string;
+
+/** Turns any error into a specific, translated, user-facing message. */
+export function friendlyError(err: unknown, t: Translate): string {
+  const e = toServiceError(err);
+  const msg = e.message || '';
+  if (msg.includes('events_publish_requirements')) return t('validation.publishRequirements');
+  if (msg.includes('events_rejection_reason_required')) return t('validation.reasonRequired');
+  if (msg.includes('events_occurred_at_sane')) return t('validation.timeFuture');
+  if (msg.includes('row-level security')) return t('validation.noPermission');
+  switch (e.code) {
+    case 'not_configured':
+      return t('setup.title');
+    case 'network':
+      return t('auth.errorNetwork');
+    default:
+      return msg;
   }
 }
