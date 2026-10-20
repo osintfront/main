@@ -1,4 +1,3 @@
-import { EventMedia } from "@/components/EventMedia";
 import { memo, type CSSProperties, type MouseEvent } from 'react';
 import { Crosshair, ExternalLink, MapPin } from 'lucide-react';
 import { useI18n } from '@/i18n';
@@ -7,6 +6,7 @@ import { cn } from '@/utils/cn';
 import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
 import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
+import { EventMedia } from './EventMedia';
 
 interface EventCardProps {
   event: PublicEvent;
@@ -75,6 +75,8 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false }: EventC
           {description}
         </p>
       ) : null}
+
+      <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
 
       {where ? (
         <p className="mt-2 flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
