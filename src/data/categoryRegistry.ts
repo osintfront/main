@@ -14,6 +14,7 @@ import {
   Plane,
   Rocket,
   ShieldAlert,
+  Siren,
   Swords,
   type LucideIcon,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Bomb,
   Footprints,
   ShieldAlert,
+  Siren,
   Swords,
   Landmark,
   Megaphone,
@@ -60,8 +62,10 @@ interface CategoryDefinition {
   color: string;
 }
 
-/** Mirrors supabase/migrations/20261019000003_default_categories.sql. */
+/** Mirrors supabase/migrations/20261019000003_default_categories.sql (+ 0007). */
 export const DEFAULT_CATEGORIES: readonly CategoryDefinition[] = [
+  // Filled automatically from Home Front Command alerts (migration 0007), not by staff.
+  { slug: 'home-front-alerts', name: 'Home Front Command Alerts', icon: 'Siren', color: '#ff2d2d' },
   { slug: 'shooting-gunfire', name: 'Shooting / Gunfire', icon: 'Crosshair', color: '#e11d48' },
   { slug: 'missile-rocket-attack', name: 'Missile or Rocket Attack', icon: 'Rocket', color: '#f97316' },
   { slug: 'airstrike', name: 'Airstrike', icon: 'Plane', color: '#9333ea' },

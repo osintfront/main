@@ -1,5 +1,6 @@
 /** Canonical category slugs. Stored in English; display names are translated in src/i18n. */
 export const CATEGORY_SLUGS = [
+  'home-front-alerts',
   'shooting-gunfire',
   'missile-rocket-attack',
   'airstrike',

@@ -3,6 +3,7 @@ import { List, Map as MapIcon } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { usePublicEvents } from '@/hooks/useEvents';
 import { useMapSelection } from '@/hooks/useMapSelection';
+import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
 import { AdSlot } from '@/components/common/AdSlot';
@@ -32,6 +33,12 @@ export function MapPage() {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim());
   const [mobilePane, setMobilePane] = useState<MobilePane>('map');
+  const { alerts, now: alertsNow } = useHfcAlerts();
+  const [alertFocus, setAlertFocus] = useState<{ id: string; nonce: number } | null>(null);
+  const handleLocateAlert = useCallback((id: string) => {
+    setMobilePane('map');
+    setAlertFocus({ id, nonce: Date.now() });
+  }, []);
 
   const visibleEvents = useMemo(
     () =>
@@ -92,6 +99,9 @@ export function MapPage() {
             onRetry={reload}
             onClearQuery={() => setQuery('')}
             onLocate={handleLocate}
+            alerts={alerts}
+            alertsNow={alertsNow}
+            onLocateAlert={handleLocateAlert}
             footer={
               <div className="hidden border-t border-slate-200 p-3 lg:block [@media(max-height:720px)]:hidden dark:border-slate-800">
                 <AdSlot variant="square" slotId="feed-rectangle" />
@@ -116,13 +126,15 @@ export function MapPage() {
               focusRequest={focusRequest}
               onMarkerSelect={handleMarkerSelect}
               onViewEvent={handleViewEvent}
+              alerts={alerts}
+              alertFocus={alertFocus}
             />
           </div>
         </main>
 
         {/* Column 3 — legend + skyscraper (wide screens) */}
         <aside className="ofm-scroll hidden min-h-0 flex-col items-center gap-5 overflow-y-auto border-s border-slate-200 bg-white px-4 py-4 xl:flex dark:border-slate-800 dark:bg-slate-950">
-          <CategoryLegend events={visibleEvents} />
+          <CategoryLegend events={visibleEvents} alertCount={alerts.length} />
           <AdSlot variant="skyscraper" slotId="sidebar-skyscraper" />
         </aside>
       </div>
@@ -136,7 +148,7 @@ export function MapPage() {
           {(
             [
               ['map', MapIcon, t('mobile.map')],
-              ['feed', List, `${t('mobile.feed')} · ${visibleEvents.length}`],
+              ['feed', List, `${t('mobile.feed')} · ${visibleEvents.length + alerts.length}`],
             ] as const
           ).map(([pane, Icon, label]) => (
             <button

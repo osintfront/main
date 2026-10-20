@@ -28,6 +28,7 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261019000004_lock_down_trigger_functions.sql
    supabase/migrations/20261019000005_location_resolution.sql
    supabase/migrations/20261019000006_location_refinement.sql
+   supabase/migrations/20261020000007_home_front_alerts.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.
@@ -123,6 +124,14 @@ Everything provider-specific is in `src/config/map.ts` and `src/components/map/b
 - Every 5 minutes (`pg_cron` → `refine_event_locations`) region/country-level events whose specific place isn't in the gazetteer are looked up on OpenStreetMap Nominatim; a match is accepted only inside the same country and when the place's name matches.
 - **Auto-publish:** drafts from sources listed in `app_settings.auto_publish` (default: names starting with "WhatsApp") publish themselves once they have a title, category and location. Toggle it in **Admin → Settings**.
 - In the editor, publishing no longer needs a pin when a place name is filled in — the server places it on save.
+
+### Home Front Command alerts — red alerts (migration 0007)
+- **Source:** the free public feed of the Tzofar / "Tzeva Adom" app (`api.tzevaadom.co.il`), which relays Home Front Command alerts. The official `oref.org.il` feed blocks servers outside Israel, so it can't be polled from Supabase (Frankfurt). Tzofar is unofficial — **this map is not a life-safety system; people must rely on the official Home Front Command app and sirens.**
+- **Polling:** pg_cron calls `hfc_ingest('live')` every 5 s and `hfc_ingest('history')` every 20 s (safety net). Every alert is stored once in `hfc_alerts` (unique per area + threat + time).
+- **Polygons:** `hfc_areas` holds all ≈1,450 alert areas with their official polygons (refreshed weekly by `hfc_sync_areas()`), in PostGIS.
+- **Merging:** an alert joins a live cluster of the **same threat type** when it is in an area already in the cluster or within **15 km** of it, and within the cluster's timer. Each alert restarts the timer; the cluster disappears **10 minutes after its last alert**. An alert that touches two live clusters merges them. Settings live in `app_settings.hfc_alerts` (`ttl_minutes`, `merge_km`, `include_drills`, `enabled`).
+- **Public site:** reads the `active_hfc_alerts` view; a Realtime "pulse" (`hfc_pulse`) triggers an immediate refresh, with a 15 s poll as fallback. Alerts show as pulsing polygons coloured by threat with a siren pin, a "Red alert" banner on the map, cards with a countdown pinned at the top of the feed, and a "Home Front Command Alerts" category in the legend.
+- **Admin → Settings:** turn the feature on/off and see when the feed was last checked successfully.
 
 ## Next phases
 - **Phase 3:** automatic location extraction from free report text (place-name resolution already exists).

@@ -1,12 +1,14 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
-import { AlertTriangle, Inbox, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Inbox, RefreshCw, Siren } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import type { FocusRequest } from '@/hooks/useMapSelection';
 import type { LoadStatus } from '@/hooks/useEvents';
 import type { PublicEvent } from '@/types/event';
+import type { HfcAlert } from '@/types/hfcAlert';
 import { formatRelative } from '@/utils/time';
 import { Button } from '@/components/common/Form';
 import { EventCard } from './EventCard';
+import { AlertCard } from './AlertCard';
 
 interface EventFeedProps {
   events: PublicEvent[];
@@ -20,6 +22,10 @@ interface EventFeedProps {
   onRetry: () => void;
   onClearQuery: () => void;
   onLocate: (id: string) => void;
+  /** Active Home Front Command alerts, pinned above the events. */
+  alerts?: HfcAlert[];
+  alertsNow?: number;
+  onLocateAlert?: (id: string) => void;
   /** Docked under the list on desktop. */
   footer?: ReactNode;
   /** Shown between cards on phones/tablets instead of the docked footer. */
@@ -69,6 +75,9 @@ export function EventFeed({
   onLocate,
   footer,
   inlineAd,
+  alerts = [],
+  alertsNow,
+  onLocateAlert,
 }: EventFeedProps) {
   const { t, locale } = useI18n();
   const now = useNow();
@@ -110,6 +119,24 @@ export function EventFeed({
       </div>
 
       <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        {alerts.length > 0 ? (
+          <section aria-labelledby="hfc-heading" className="mb-4">
+            <h3
+              id="hfc-heading"
+              className="mb-2 flex items-center gap-1.5 px-1 text-xs font-bold uppercase tracking-wide text-red-600 dark:text-red-400"
+            >
+              <Siren className="size-3.5" aria-hidden />
+              {t('hfc.activeTitle', { count: alerts.length })}
+            </h3>
+            <ul className="space-y-3" aria-live="polite">
+              {alerts.map((alert) => (
+                <li key={alert.id}>
+                  <AlertCard alert={alert} now={alertsNow ?? now} onLocate={(id) => onLocateAlert?.(id)} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         {status === 'loading' ? (
           <FeedSkeleton />
         ) : status === 'error' ? (

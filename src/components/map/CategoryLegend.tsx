@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { getCategoryIcon } from '@/data/categoryRegistry';
 import { useI18n } from '@/i18n';
 import type { PublicEvent } from '@/types/event';
+import { HFC_CATEGORY } from '@/config/hfcThreats';
 
 /** Categories present on the map with event counts. Becomes the layer control in Phase 6. */
-export function CategoryLegend({ events }: { events: PublicEvent[] }) {
+export function CategoryLegend({ events, alertCount = 0 }: { events: PublicEvent[]; alertCount?: number }) {
   const { t, categoryLabel } = useI18n();
   const rows = useMemo(() => {
     const counts = new Map<string, { count: number; event: PublicEvent }>();
@@ -13,8 +14,11 @@ export function CategoryLegend({ events }: { events: PublicEvent[] }) {
       if (entry) entry.count += 1;
       else counts.set(e.category.slug, { count: 1, event: e });
     }
-    return [...counts.values()].sort((a, b) => b.count - a.count);
-  }, [events]);
+    const list = [...counts.values()].sort((a, b) => b.count - a.count);
+    // Active Home Front Command alerts always lead the legend.
+    if (alertCount > 0) list.unshift({ count: alertCount, event: { category: HFC_CATEGORY } as PublicEvent });
+    return list;
+  }, [events, alertCount]);
 
   return (
     <section aria-labelledby="legend-heading" className="w-full">

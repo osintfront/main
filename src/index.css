@@ -361,3 +361,35 @@
   background: #fff;
   color: var(--color-slate-900);
 }
+
+/* ─── Home Front Command alerts ─────────────────────────────────── */
+.ofm-hfc-area {
+  animation: ofm-hfc-breathe 1.6s ease-in-out infinite;
+}
+@keyframes ofm-hfc-breathe {
+  0%,
+  100% {
+    fill-opacity: 0.32;
+    stroke-opacity: 1;
+  }
+  50% {
+    fill-opacity: 0.14;
+    stroke-opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ofm-hfc-area {
+    animation: none;
+  }
+}
+.ofm-hfc-tooltip {
+  font-weight: 600;
+}
+.ofm-popup__hfc-clear {
+  margin-inline-start: auto;
+  font-weight: 600;
+  color: var(--color-red-600);
+}
+.dark .ofm-popup__hfc-clear {
+  color: var(--color-red-400);
+}

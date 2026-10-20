@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Globe2, LocateFixed, Maximize2 } from 'lucide-react';
+import { Globe2, LocateFixed, Maximize2, Siren } from 'lucide-react';
 import { mapConfig } from '@/config/map';
 import { useTheme } from '@/context/ThemeContext';
 import { useI18n } from '@/i18n';
 import type { FocusRequest } from '@/hooks/useMapSelection';
 import type { PublicEvent } from '@/types/event';
+import type { HfcAlert } from '@/types/hfcAlert';
+import { alertNames, HFC_CATEGORY, threatInfo, zoneHeadline } from '@/config/hfcThreats';
+import { formatEventTime } from '@/utils/time';
+import { buildHfcPopup } from './hfcPopup';
 import { createBaseLayer } from './baseLayer';
 import { createMarkerIcon } from './markerIcon';
 import { buildPopupContent } from './popupContent';
@@ -17,7 +21,17 @@ interface MapViewProps {
   focusRequest: FocusRequest | null;
   onMarkerSelect: (id: string) => void;
   onViewEvent: (id: string) => void;
+  /** Active Home Front Command alerts, drawn as polygons under the event pins. */
+  alerts?: HfcAlert[];
+  alertFocus?: { id: string; nonce: number } | null;
 }
+
+interface AlertEntry {
+  marker: L.Marker | null;
+  bounds: L.LatLngBounds | null;
+}
+
+const NO_ALERTS: HfcAlert[] = [];
 
 interface MarkerEntry {
   marker: L.Marker;
@@ -28,13 +42,17 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
-export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onViewEvent }: MapViewProps) {
+export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onViewEvent, alerts = NO_ALERTS, alertFocus = null }: MapViewProps) {
   const { theme } = useTheme();
-  const { t, dir, locale, categoryLabel } = useI18n();
+  const { t, dir, locale, lang, categoryLabel } = useI18n();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const alertLayerRef = useRef<L.LayerGroup | null>(null);
+  const alertEntriesRef = useRef(new Map<string, AlertEntry>());
+  const [alertsVersion, setAlertsVersion] = useState(0);
+  const handledAlertFocusRef = useRef<number | null>(null);
   const baseLayerRef = useRef<L.Layer | null>(null);
   const zoomControlRef = useRef<L.Control.Zoom | null>(null);
   const markersRef = useRef(new Map<string, MarkerEntry>());
@@ -61,6 +79,7 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
       zoomControl: false,
       worldCopyJump: true,
     });
+    alertLayerRef.current = L.layerGroup().addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
@@ -73,6 +92,9 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
       map.remove();
       mapRef.current = null;
       markerLayerRef.current = null;
+      alertLayerRef.current = null;
+      alertEntriesRef.current.clear();
+      handledAlertFocusRef.current = null;
       baseLayerRef.current = null;
       zoomControlRef.current = null;
       markersRef.current.clear();
@@ -152,6 +174,104 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     }
     setMarkersVersion((v) => v + 1);
   }, [events, t, dir, locale, categoryLabel]);
+
+  // 4b. Home Front Command alerts: merged polygon + a pulsing siren pin at its centre.
+  useEffect(() => {
+    const layer = alertLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    alertEntriesRef.current.clear();
+
+    for (const alert of alerts) {
+      const threat = threatInfo(alert.threat);
+      const threatLabel = t(`hfc.threat.${threat.key}`);
+      const { areas, zones } = alertNames(alert, lang);
+      const popup = () =>
+        buildHfcPopup(alert, {
+          category: categoryLabel(HFC_CATEGORY.slug, HFC_CATEGORY.name),
+          threat: threatLabel,
+          color: threat.color,
+          areas,
+          zones,
+          started: t('hfc.started'),
+          lastAlert: t('hfc.lastAlert'),
+          clearsAt: t('hfc.clearsAt', { time: formatEventTime(alert.expiresAt, locale) }),
+          alertsCount: t('hfc.areasCount', { count: areas.length }),
+          more: (n) => t('hfc.moreAreas', { count: n }),
+          locale,
+          dir,
+        });
+      const popupOptions = { maxWidth: 320, minWidth: 240, autoPanPadding: [28, 28] as [number, number], className: 'ofm-popup-shell' };
+
+      let bounds: L.LatLngBounds | null = null;
+      if (alert.geometry) {
+        const shape = L.geoJSON(alert.geometry, {
+          style: {
+            color: threat.color,
+            weight: 2,
+            opacity: 0.95,
+            fillColor: threat.color,
+            fillOpacity: 0.28,
+            className: 'ofm-hfc-area',
+          },
+        });
+        shape.bindTooltip(`${threatLabel} · ${zoneHeadline(zones, areas, 2)}`, { sticky: true, direction: 'top', className: 'ofm-hfc-tooltip' });
+        shape.bindPopup(popup, popupOptions);
+        shape.addTo(layer);
+        bounds = shape.getBounds();
+      }
+
+      let marker: L.Marker | null = null;
+      if (alert.center) {
+        marker = L.marker(alert.center, {
+          icon: createMarkerIcon({ iconName: 'Siren', color: threat.color, severity: 'critical', selected: false, breaking: true }),
+          title: `${threatLabel} — ${zoneHeadline(zones, areas, 2)}`,
+          alt: threatLabel,
+          keyboard: true,
+          zIndexOffset: 800,
+        });
+        marker.bindPopup(popup, popupOptions);
+        marker.addTo(layer);
+        if (!bounds) bounds = L.latLngBounds([alert.center]);
+      }
+      alertEntriesRef.current.set(alert.id, { marker, bounds });
+    }
+    setAlertsVersion((v) => v + 1);
+  }, [alerts, t, dir, locale, lang, categoryLabel]);
+
+  // 4c. Alert card "Locate": fit the polygon and open its popup.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !alertFocus || handledAlertFocusRef.current === alertFocus.nonce) return;
+    const entry = alertEntriesRef.current.get(alertFocus.id);
+    if (!entry || !entry.bounds) return;
+    handledAlertFocusRef.current = alertFocus.nonce;
+    map.closePopup();
+    const open = () => entry.marker?.openPopup();
+    const reduce = prefersReducedMotion();
+    map.once('moveend', open);
+    map.flyToBounds(entry.bounds, { padding: [56, 56], maxZoom: 12, duration: reduce ? 0 : 0.9 });
+    const fallback = window.setTimeout(open, 1400);
+    return () => {
+      window.clearTimeout(fallback);
+      map.off('moveend', open);
+    };
+  }, [alertFocus, alertsVersion]);
+
+  const fitAlerts = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    let all: L.LatLngBounds | null = null;
+    alertEntriesRef.current.forEach(({ bounds }) => {
+      if (!bounds) return;
+      all = all ? all.extend(bounds) : L.latLngBounds([]).extend(bounds);
+    });
+    const target = all as L.LatLngBounds | null;
+    if (target && target.isValid()) {
+      map.closePopup();
+      map.flyToBounds(target, { padding: [56, 56], maxZoom: 11, duration: prefersReducedMotion() ? 0 : 0.8 });
+    }
+  }, []);
 
   // 5. Highlight the selected marker.
   useEffect(() => {
@@ -233,6 +353,18 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     // so they can't cover the top bar, menus or the phone pane switcher.
     <div className="relative isolate h-full w-full">
       <div ref={containerRef} className="ofm-map h-full w-full" role="region" aria-label={t('map.label')} />
+      {alerts.length > 0 ? (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-[500] flex justify-center px-16">
+          <button
+            type="button"
+            onClick={fitAlerts}
+            className="ofm-hfc-banner pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-full bg-red-600 px-3.5 py-1.5 text-sm font-bold text-white shadow-lg ring-2 ring-red-300/60 hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            <Siren className="size-4 shrink-0" aria-hidden />
+            <span className="truncate">{t('hfc.banner', { count: alerts.length })}</span>
+          </button>
+        </div>
+      ) : null}
       <div className="pointer-events-none absolute start-3 top-3 z-[500] flex flex-col gap-2">
         <IconButton label={t('map.resetView')} onClick={resetView} className="pointer-events-auto shadow-md" variant="map">
           <LocateFixed className="size-4" aria-hidden />
