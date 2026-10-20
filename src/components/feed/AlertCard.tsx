@@ -21,6 +21,13 @@ function AlertCardImpl({ alert, now, onLocate }: AlertCardProps) {
   const remaining = Date.parse(alert.expiresAt) - now;
   const shownAreas = areas.slice(0, MAX_AREAS).join(', ');
   const moreAreas = areas.length - MAX_AREAS;
+  const title = zoneHeadline(zones, areas);
+  const subtitle =
+    areas.length === 1
+      ? zones.join(', ')
+      : moreAreas > 0
+        ? `${shownAreas} ${t('hfc.moreAreas', { count: moreAreas })}`
+        : shownAreas;
 
   return (
     <article
@@ -62,11 +69,13 @@ function AlertCardImpl({ alert, now, onLocate }: AlertCardProps) {
       </div>
 
       <h3 className="mt-2 text-[15px] font-semibold leading-snug text-slate-900 dark:text-white" dir="auto">
-        {zoneHeadline(zones, areas)}
+        {title}
       </h3>
-      <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-slate-700 dark:text-slate-300" dir="auto">
-        {moreAreas > 0 ? `${shownAreas} ${t('hfc.moreAreas', { count: moreAreas })}` : shownAreas}
-      </p>
+      {subtitle && subtitle !== title ? (
+        <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-slate-700 dark:text-slate-300" dir="auto">
+          {subtitle}
+        </p>
+      ) : null}
 
       <footer className="mt-3 flex items-center gap-2 border-t border-red-200/70 pt-2.5 text-xs text-slate-600 dark:border-red-500/20 dark:text-slate-400">
         <span>

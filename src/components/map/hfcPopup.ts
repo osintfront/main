@@ -39,7 +39,8 @@ export function buildHfcPopup(alert: HfcAlert, labels: HfcPopupLabels): HTMLElem
   meta.append(live);
   root.append(meta);
 
-  const title = el('h3', 'ofm-popup__title', labels.zones.join(', ') || labels.areas.slice(0, 3).join(', '));
+  const single = labels.areas.length === 1;
+  const title = el('h3', 'ofm-popup__title', single ? labels.areas[0] : labels.zones.join(', ') || labels.areas.slice(0, 3).join(', '));
   title.dir = 'auto';
   root.append(title);
 
@@ -51,7 +52,7 @@ export function buildHfcPopup(alert: HfcAlert, labels: HfcPopupLabels): HTMLElem
 
   const shown = labels.areas.slice(0, MAX_AREAS).join(', ');
   const rest = labels.areas.length - MAX_AREAS;
-  const desc = el('p', 'ofm-popup__desc', rest > 0 ? `${shown} ${labels.more(rest)}` : shown);
+  const desc = el('p', 'ofm-popup__desc', single ? labels.zones.join(', ') : rest > 0 ? `${shown} ${labels.more(rest)}` : shown);
   desc.dir = 'auto';
   root.append(desc);
 

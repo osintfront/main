@@ -52,8 +52,9 @@ export function alertNames(alert: HfcAlert, lang: string): { areas: string[]; zo
   };
 }
 
-/** "Upper Galilee, Haifa Bay +2" — short headline from zone names. */
+/** Headline: the place itself for a single-area alert, else "Upper Galilee, Haifa Bay +2". */
 export function zoneHeadline(zones: string[], areas: string[], max = 3): string {
+  if (areas.length === 1) return areas[0];
   const list = zones.length ? zones : areas;
   const head = list.slice(0, max).join(', ');
   return list.length > max ? `${head} +${list.length - max}` : head;
