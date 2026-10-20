@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, Inbox, RefreshCw, Siren } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import type { FocusRequest } from '@/hooks/useMapSelection';
@@ -96,11 +96,16 @@ export function EventFeed({
   const { t, locale } = useI18n();
   const now = useNow();
 
-  // When a marker (or a shared URL) selects an event, bring its card into view.
+  // When a marker (or a shared URL) selects an event, bring its card into view —
+  // once per selection. (Re-running on every list refresh pulled the reader back
+  // to that card while they were scrolling through newer events.)
+  const scrolledFor = useRef<number | null>(null);
   useEffect(() => {
     if (!focusRequest || focusRequest.source === 'feed') return;
+    if (scrolledFor.current === focusRequest.nonce) return;
     const node = document.getElementById(`event-card-${focusRequest.id}`);
-    if (!node) return;
+    if (!node) return; // not loaded yet: try again when the list arrives
+    scrolledFor.current = focusRequest.nonce;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     node.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
   }, [focusRequest, events]);
