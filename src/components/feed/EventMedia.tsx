@@ -1,60 +1,67 @@
-// Show WhatsApp images and videos attached to an event (table public.event_media, bucket "event-media").
-// Drop <EventMedia eventId={event.id} supabase={supabase} /> into the event popup / side panel.
-// Old videos are removed automatically (FIFO) when storage fills up; the thumbnail then stays as an image.
-import { useEffect, useState } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { useEffect, useState } from 'react';
+import { loadEventMedia, toMediaView, type EventMediaView } from '@/services/eventMediaService';
 
-type Media = { id: string; public_url: string; width: number | null; height: number | null; kind: "image" | "video_thumb" | "video"; source_msg_key: string | null };
+/** Photos and videos of an event, loaded lazily (batched across cards). */
+const RECENT_MS = 30 * 60_000; // keep checking fresh events for late photos/videos
+const POLL_MS = 30_000;
 
-export function EventMedia({ eventId, supabase }: { eventId: string; supabase: SupabaseClient }) {
-  const [media, setMedia] = useState<Media[]>([]);
+export function EventMedia({ eventId, occurredAt }: { eventId: string; occurredAt: string }) {
+  const [view, setView] = useState<EventMediaView | null>(null);
 
   useEffect(() => {
     let alive = true;
-    supabase
-      .from("event_media")
-      .select("id, public_url, width, height, kind, source_msg_key")
-      .eq("event_id", eventId)
-      .order("created_at")
-      .then(({ data }) => alive && setMedia((data as Media[]) ?? []));
-    return () => { alive = false; };
-  }, [eventId, supabase]);
+    let timer: number | undefined;
+    const load = (force: boolean) =>
+      loadEventMedia(eventId, force).then((items) => {
+        if (!alive) return;
+        setView(items.length ? toMediaView(items) : null);
+        if (Date.now() - new Date(occurredAt).getTime() < RECENT_MS) timer = window.setTimeout(() => void load(true), POLL_MS);
+      });
+    void load(false);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [eventId, occurredAt]);
 
-  // a video replaces its own thumbnail (same WhatsApp message); the thumbnail becomes the poster
-  const videos = media.filter((m) => m.kind === "video");
-  const posterFor = (v: Media) => media.find((m) => m.kind === "video_thumb" && m.source_msg_key === v.source_msg_key)?.public_url;
-  const shown = media.filter((m) => !(m.kind === "video_thumb" && videos.some((v) => v.source_msg_key === m.source_msg_key)));
-  if (!shown.length) return null;
+  if (!view) return null;
+  const tiles = view.images.length + view.stills.length;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: shown.length > 1 ? "1fr 1fr" : "1fr", gap: 6, marginTop: 8 }}>
-      {shown.map((m) =>
-        m.kind === "video" ? (
-          <video
-            key={m.id}
-            src={m.public_url}
-            poster={posterFor(m)}
-            controls
-            preload="metadata"
-            playsInline
-            style={{ width: "100%", borderRadius: 6, background: "#000", gridColumn: "1 / -1" }}
-          />
-        ) : (
-          <a key={m.id} href={m.public_url} target="_blank" rel="noopener noreferrer" style={{ position: "relative", display: "block" }}>
-            <img
-              src={m.public_url}
-              alt=""
-              loading="lazy"
-              width={m.width ?? undefined}
-              height={m.height ?? undefined}
-              style={{ width: "100%", height: "auto", borderRadius: 6, display: "block" }}
-            />
-            {m.kind === "video_thumb" && (
-              <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#fff", fontSize: 28, textShadow: "0 1px 4px #000" }}>▶</span>
-            )}
-          </a>
-        )
-      )}
+    <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+      {view.videos.map(({ video, poster }) => (
+        <video
+          key={video.id}
+          src={video.url}
+          poster={poster ?? undefined}
+          controls
+          preload="none"
+          playsInline
+          className="w-full rounded-lg bg-black"
+          style={{ aspectRatio: video.width && video.height ? `${video.width} / ${video.height}` : '16 / 9', maxHeight: 320 }}
+        />
+      ))}
+      {tiles ? (
+        <div className={tiles > 1 ? 'grid grid-cols-2 gap-1.5' : 'grid grid-cols-1'}>
+          {[...view.images, ...view.stills].map((m) => (
+            <a key={m.id} href={m.url} target="_blank" rel="noopener noreferrer" className="relative block overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
+              <img
+                src={m.url}
+                alt=""
+                loading="lazy"
+                width={m.width ?? undefined}
+                height={m.height ?? undefined}
+                className="block h-auto max-h-60 w-full object-cover"
+              />
+              {m.kind === 'video_thumb' ? (
+                <span className="absolute inset-0 grid place-items-center text-2xl text-white [text-shadow:0_1px_4px_#000]" aria-hidden>
+                  ▶
+                </span>
+              ) : null}
+            </a>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
