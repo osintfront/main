@@ -36,6 +36,15 @@ export interface EventSource {
   at: string | null;
 }
 
+/** A further place the report names; each gets its own pin on the map. */
+export interface EventPlace {
+  name: string;
+  nameEn: string;
+  latitude: number;
+  longitude: number;
+  precision: LocationPrecision | null;
+}
+
 /** Optional per-language overrides, prepared for future translated titles/summaries. */
 export type EventTranslations = Partial<Record<string, { title?: string; description?: string }>>;
 
@@ -59,6 +68,8 @@ export interface PublicEvent {
   sourceUrl: string | null;
   /** Additional sources for the same event. */
   sources?: EventSource[];
+  /** Further places named in the report (not the main pin); one extra pin each. */
+  places?: EventPlace[];
   sourceType: SourceType;
   occurredAt: string;
   publishedAt: string | null;

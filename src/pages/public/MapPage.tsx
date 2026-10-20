@@ -13,6 +13,8 @@ import { EventFeed } from '@/components/feed/EventFeed';
 import { MapView } from '@/components/map/MapView';
 import { CategoryLegend } from '@/components/map/CategoryLegend';
 import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
+import { MobileEventSheet } from '@/components/map/MobileEventSheet';
+import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 import { installAudioUnlock, playChime } from '@/lib/notifySound';
 import { isCategoryAudible } from '@/hooks/useSoundSetting';
 import { HFC_CATEGORY } from '@/config/hfcThreats';
@@ -94,7 +96,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     url.searchParams.set('date', day);
     window.history.replaceState(window.history.state, '', url);
   }, [day, isArchive]);
-  const { selectedId, focusRequest, select } = useMapSelection();
+  const { selectedId, focusRequest, select, clear: clearSelection } = useMapSelection();
+  const isPhone = useMediaQuery(PHONE_QUERY);
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim());
   const [mobilePane, setMobilePane] = useState<MobilePane>('map');
@@ -161,6 +164,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   );
   const detailsEvent = detailsId ? events.find((e) => e.id === detailsId) ?? null : null;
   const closeDetails = useCallback(() => setDetailsId(null), []);
+  // Phones: the selected event shows as a card along the bottom of the map.
+  const sheetEvent =
+    isPhone && mobilePane === 'map' && selectedId && !detailsId ? visibleEvents.find((e) => e.id === selectedId) ?? null : null;
+  const openDetailsFromSheet = useCallback((id: string) => setDetailsId(id), []);
   const locateFromDetails = useCallback(
     (id: string) => {
       setDetailsId(null);
@@ -236,6 +243,9 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               alerts={alerts}
               alertFocus={alertFocus}
               alertShapes={alertShapes}
+              compact={isPhone}
+              legend={<CategoryLegend events={visibleEvents} alertCount={alerts.length} />}
+              onBackgroundClick={isPhone ? clearSelection : undefined}
             />
           </div>
         </main>
@@ -246,6 +256,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           <AdSlot variant="skyscraper" slotId="sidebar-skyscraper" />
         </aside>
       </div>
+
+      {sheetEvent ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(env(safe-area-inset-bottom),12px)+56px)] z-[1100] mx-auto max-w-lg lg:hidden">
+          <MobileEventSheet key={sheetEvent.id} event={sheetEvent} onClose={clearSelection} onOpenDetails={openDetailsFromSheet} />
+        </div>
+      ) : null}
 
       {/* Phone pane switcher */}
       <nav

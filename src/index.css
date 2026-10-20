@@ -430,3 +430,31 @@
   border-radius: 8px;
   background: #000;
 }
+
+/* Phones: event card along the bottom of the map */
+.ofm-sheet {
+  transition: transform 0.15s ease-out;
+  animation: ofm-sheet-in 0.2s ease-out;
+}
+@keyframes ofm-sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ofm-sheet {
+    animation: none;
+    transition: none;
+  }
+}
+/* Phones: no grey flash on tap */
+@media (pointer: coarse) {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+}

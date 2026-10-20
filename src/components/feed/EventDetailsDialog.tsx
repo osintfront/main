@@ -94,6 +94,19 @@ export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDia
               ) : null}
             </p>
           ) : null}
+          {event.places && event.places.length ? (
+            <ul className="-mt-1 mb-3 flex flex-wrap gap-1.5" aria-label={t('details.places', { count: event.places.length + 1 })}>
+              {event.places.map((p, i) => (
+                <li
+                  key={`${p.latitude},${p.longitude},${i}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <MapPin className="size-3 shrink-0 text-slate-400" aria-hidden />
+                  <bdi>{(lang === 'he' ? p.name : p.nameEn) || p.name || p.nameEn}</bdi>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {description ? (
             <p className="whitespace-pre-line break-words text-[15px] leading-relaxed text-slate-800 dark:text-slate-200" dir="auto">
               <LinkifiedText text={description} mapsLabel={t('details.openInMaps')} />

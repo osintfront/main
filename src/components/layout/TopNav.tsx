@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
+import { ArrowLeft, History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
 import { SoundMenu } from './SoundMenu';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,6 +20,15 @@ export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
   const { status } = useAuth();
   const { can } = usePermissions();
   const showAdmin = status === 'signed_in' && can('dashboard.view');
+  // Phones: search is an icon that opens a full-width field over the bar.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (searchOpen) inputRef.current?.focus();
+  }, [searchOpen]);
+  const closeSearch = () => setSearchOpen(false);
+  const iconBtn =
+    'inline-flex size-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-500 sm:size-9 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white';
   return (
     <header className="relative z-[1000] flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white/90 px-3 backdrop-blur sm:px-4 dark:border-slate-800 dark:bg-slate-950/90">
       <Logo />
@@ -47,21 +57,39 @@ export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
         </Link>
       </nav>
 
-      <form role="search" className="mx-auto w-full max-w-md min-w-0 flex-1" onSubmit={(e) => e.preventDefault()}>
+      <form
+        role="search"
+        className={cn(
+          'min-w-0 sm:mx-auto sm:block sm:w-full sm:max-w-md sm:flex-1',
+          searchOpen
+            ? 'absolute inset-0 z-10 flex items-center gap-1 bg-white px-2 sm:static sm:z-auto sm:bg-transparent sm:px-0 dark:bg-slate-950 sm:dark:bg-transparent'
+            : 'hidden',
+        )}
+        onSubmit={(e) => {
+          e.preventDefault();
+          inputRef.current?.blur();
+        }}
+      >
+        <button type="button" onClick={closeSearch} aria-label={t('common.close')} className={cn(iconBtn, 'shrink-0 sm:hidden')}>
+          <ArrowLeft className="size-5 rtl:-scale-x-100" aria-hidden />
+        </button>
         <label htmlFor="global-search" className="sr-only">
           {t('nav.searchLabel')}
         </label>
-        <div className="relative">
+        <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
           <input
             id="global-search"
+            ref={inputRef}
             type="search"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && closeSearch()}
+            enterKeyHint="search"
             placeholder={t('nav.searchPlaceholder')}
             maxLength={120}
             autoComplete="off"
-            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 ps-9 pe-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-900 [&::-webkit-search-cancel-button]:hidden"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 ps-9 pe-8 text-base text-slate-900 sm:h-9 sm:text-sm placeholder:text-slate-400 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-900 [&::-webkit-search-cancel-button]:hidden"
           />
           {query ? (
             <button
@@ -76,12 +104,21 @@ export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
         </div>
       </form>
 
-      <nav className="flex shrink-0 items-center gap-0.5" aria-label="Site">
+      <nav className="ms-auto flex shrink-0 items-center gap-0.5 sm:ms-0" aria-label="Site">
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          aria-label={t('nav.openSearch')}
+          className={cn(iconBtn, 'relative sm:hidden')}
+        >
+          <Search className="size-5" aria-hidden />
+          {query ? <span className="absolute end-2 top-2 size-2 rounded-full bg-sky-500" aria-hidden /> : null}
+        </button>
         <Link
           to={mode === 'live' ? '/archive' : '/'}
           aria-label={mode === 'live' ? t('nav.archive') : t('nav.live')}
           title={mode === 'live' ? t('nav.archive') : t('nav.live')}
-          className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-500 md:hidden dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+          className={cn(iconBtn, 'md:hidden')}
         >
           {mode === 'live' ? <History className="size-4" aria-hidden /> : <Radio className="size-4 text-red-500" aria-hidden />}
         </Link>

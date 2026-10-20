@@ -8,7 +8,7 @@
 // description as an "עדכון" (update) — and the source is recorded as well.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { editReport, formatDescription, formatWhatsApp, mainPoint, type EditResult } from "../_shared/editor.ts";
+import { editReport, formatDescription, formatWhatsApp, locationsForDb, mainCountry, mainPoint, type EditResult } from "../_shared/editor.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -200,7 +200,7 @@ const CLASSIFY_TOOL = {
       location_name: { type: "string", description: "Most specific place named, in the message's language; empty if none" },
       city: { type: "string" },
       region: { type: "string" },
-      country: { type: "string", description: "Country in English, e.g. Lebanon, Syria, Israel, Iran, Yemen; empty if unknown" },
+      country: { type: "string", description: "Main country the report is about, in English, e.g. Lebanon, Syria, Israel, Iran, Yemen, United States. Fill it whenever the country is clear, even if no specific place is named." },
       latitude: { type: ["number", "null"], description: "Only if you are confident of the specific place; else null" },
       longitude: { type: ["number", "null"] },
       geocoding_confidence: { type: ["number", "null"], description: "0-1" },
@@ -391,20 +391,29 @@ async function processOne(m: InMsg) {
     row.published_at = new Date().toISOString();
     row.approved_by = BOT_USER_ID;
   }
-  const { data: ins, error } = await db.from("events").insert(row).select("id").single();
+  let { data: ins, error } = await db.from("events").insert(row).select("id,status").single();
+  // No place and no country yet: save as a draft; the editor agent may still place it.
+  let waitingForPlace = false;
+  if (error?.code === "23514" && /publish_requirements/.test(error.message) && status === "published") {
+    delete row.published_at;
+    delete row.approved_by;
+    waitingForPlace = true;
+    ({ data: ins, error } = await db.from("events").insert({ ...row, status: "draft" }).select("id,status").single());
+  }
   if (error) throw error;
-  await log(status === "published" ? "event_published" : "event_draft", ins.id);
+  const finalStatus = ins!.status === "published" ? "published" : "draft";
+  await log(finalStatus === "published" ? "event_published" : "event_draft", ins!.id);
   // Editor agent runs in the background so the extension gets its answer quickly;
   // the event appears at once and is rewritten in the house template seconds later.
-  background.push(applyEditor(ins.id, row, text, `${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, sourceUrl(m, text), sentIso));
-  const media_saved = await storeMedia(ins.id, key, m.media);
-  return { key, status: status === "published" ? "event_published" : "event_draft", event_id: ins.id, title: row.title, media_saved };
+  background.push(applyEditor(ins!.id, row, text, `${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, sourceUrl(m, text), sentIso, waitingForPlace));
+  const media_saved = await storeMedia(ins!.id, key, m.media);
+  return { key, status: finalStatus === "published" ? "event_published" : "event_draft", event_id: ins!.id, title: row.title, media_saved };
 }
 
 const background: Promise<unknown>[] = [];
 
 // Editor agent: Hebrew template, verified names, sources. The raw text stays if it fails.
-async function applyEditor(eventId: string, row: Record<string, unknown>, text: string, srcLabel: string, url: string | null, sentIso: string) {
+async function applyEditor(eventId: string, row: Record<string, unknown>, text: string, srcLabel: string, url: string | null, sentIso: string, publishWhenPlaced = false) {
   const edited = await runEditor(text, srcLabel, url, sentIso);
   if (!edited) return;
   const srcName = clip(srcLabel, 200)!;
@@ -413,6 +422,9 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     whatsapp_text: formatWhatsApp(edited, [{ name: srcName, url }, ...extra]),
     ai_suggestions: { ...(row.ai_suggestions as object), editor_model: edited.model, countries: edited.countries },
   };
+  // All places the report names (one pin each); the country is the fallback pin.
+  update.locations = locationsForDb(edited);
+  if (!row.country && mainCountry(edited)) update.country = mainCountry(edited);
   if (edited.title) update.title = clip(edited.title, 200);
   if (edited.summary) update.description = formatDescription(edited);
   // Keep sources added meanwhile (duplicates of this event) and add the editor's.
@@ -428,7 +440,16 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     if (!cur?.location_name) update.location_name = clip(pt.name, 200);
   }
   const { error } = await db.from("events").update(update).eq("id", eventId);
-  if (error) console.error("editor update failed", error.message);
+  if (error) return void console.error("editor update failed", error.message);
+  // Was held back only for lack of a place: publish now that the database placed it.
+  if (publishWhenPlaced) {
+    const { data: now } = await db.from("events").select("status,latitude").eq("id", eventId).maybeSingle();
+    if (now?.status === "draft" && now.latitude != null) {
+      const { error: pubErr } = await db.from("events")
+        .update({ status: "published", published_at: new Date().toISOString(), approved_by: BOT_USER_ID }).eq("id", eventId);
+      if (pubErr) console.error("publish after placing failed", pubErr.message);
+    }
+  }
 }
 
 let editorDomains: string[] | null = null;

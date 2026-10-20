@@ -25,6 +25,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
   const fullDescription = event.translations[lang]?.description || event.description;
   const description = previewText(fullDescription);
   const where = [event.locationName, event.country].filter(Boolean).join(', ');
+  const placeCount = (event.places?.length ?? 0) + 1;
   const sourceLabel = event.sourceName || (event.sourceUrl ? hostnameOf(event.sourceUrl) : '');
 
   const handleCardClick = (e: MouseEvent<HTMLElement>) => {
@@ -83,7 +84,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
         <button
           type="button"
           onClick={() => onOpenDetails(event.id)}
-          className="mt-1 text-xs font-semibold text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-sky-400"
+          className="-my-1 mt-0 py-2 text-xs font-semibold text-sky-700 hover:underline sm:my-0 sm:mt-1 sm:py-0 focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-sky-400"
         >
           {t('details.readMore')}
         </button>
@@ -97,7 +98,14 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
           <span className="truncate" dir="auto">
             {where}
           </span>
-          {isApproximateLocation(event.locationPrecision) ? (
+          {placeCount > 1 ? (
+            <span
+              className="shrink-0 rounded bg-sky-100 px-1.5 py-px text-[10px] font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-300"
+              title={t('feed.placesHint')}
+            >
+              {t('feed.places', { count: placeCount })}
+            </span>
+          ) : isApproximateLocation(event.locationPrecision) ? (
             <span
               className="shrink-0 rounded bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
               title={t('feed.approximateHint')}
@@ -143,7 +151,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
           type="button"
           onClick={() => onLocate(event.id)}
           aria-label={t('feed.locateLabel', { title })}
-          className="ms-auto inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-slate-900 px-2.5 text-xs font-semibold text-white transition-colors hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+          className="ms-auto inline-flex h-9 shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-3 text-xs sm:h-7 sm:rounded-md sm:px-2.5 font-semibold text-white transition-colors hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
         >
           <Crosshair className="size-3.5" aria-hidden />
           {t('feed.locate')}

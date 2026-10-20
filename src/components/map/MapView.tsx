@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
-import { Globe2, LocateFixed, Maximize2, Siren } from 'lucide-react';
+import { Globe2, Layers, LocateFixed, Maximize2, Siren, X } from 'lucide-react';
 import { mapConfig } from '@/config/map';
 import { useTheme } from '@/context/ThemeContext';
 import { useI18n } from '@/i18n';
@@ -26,6 +26,15 @@ interface MapViewProps {
   alertFocus?: { id: string; nonce: number } | null;
   /** Neighbouring alert polygons merged for display (null: draw each alert's own). */
   alertShapes?: HfcShape[] | null;
+  /**
+   * Phones: no popups (the page shows a card along the bottom instead) and no
+   * +/− buttons (pinch to zoom).
+   */
+  compact?: boolean;
+  /** Category legend, shown from a map button where there is no legend column. */
+  legend?: ReactNode;
+  /** A tap on the map itself (not on a pin) — phones use it to close the event card. */
+  onBackgroundClick?: () => void;
 }
 
 interface AlertEntry {
@@ -40,21 +49,29 @@ const COMPACT_ALERT_PINS = 25;
 const NO_ALERTS: HfcAlert[] = [];
 
 interface MarkerEntry {
-  marker: L.Marker;
+  /** Main pin first, then one pin per further place the report names. */
+  markers: L.Marker[];
   event: PublicEvent;
+}
+
+/** All points of an event: the main pin and its further places. */
+function eventPoints(event: PublicEvent): [number, number][] {
+  return [[event.latitude, event.longitude], ...(event.places ?? []).map((p) => [p.latitude, p.longitude] as [number, number])];
 }
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
-export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onViewEvent, alerts = NO_ALERTS, alertFocus = null, alertShapes = null }: MapViewProps) {
+export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onViewEvent, alerts = NO_ALERTS, alertFocus = null, alertShapes = null, compact = false, legend, onBackgroundClick }: MapViewProps) {
   const { theme } = useTheme();
   const { t, dir, locale, lang, categoryLabel } = useI18n();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const linkLayerRef = useRef<L.LayerGroup | null>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
   const alertLayerRef = useRef<L.LayerGroup | null>(null);
   const alertEntriesRef = useRef(new Map<string, AlertEntry>());
   const [alertsVersion, setAlertsVersion] = useState(0);
@@ -72,6 +89,8 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
   onMarkerSelectRef.current = onMarkerSelect;
   const onViewEventRef = useRef(onViewEvent);
   onViewEventRef.current = onViewEvent;
+  const onBackgroundClickRef = useRef(onBackgroundClick);
+  onBackgroundClickRef.current = onBackgroundClick;
 
   // 1. Create the map once.
   useEffect(() => {
@@ -86,8 +105,10 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
       worldCopyJump: true,
     });
     alertLayerRef.current = L.layerGroup().addTo(map);
+    linkLayerRef.current = L.layerGroup().addTo(map);
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+    map.on('click', () => onBackgroundClickRef.current?.());
 
     // Keeps tiles correct when the column is resized or shown on mobile.
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
@@ -98,6 +119,7 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
       map.remove();
       mapRef.current = null;
       markerLayerRef.current = null;
+      linkLayerRef.current = null;
       alertLayerRef.current = null;
       alertEntriesRef.current.clear();
       handledAlertFocusRef.current = null;
@@ -123,6 +145,8 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     const map = mapRef.current;
     if (!map) return;
     zoomControlRef.current?.remove();
+    zoomControlRef.current = null;
+    if (compact) return; // phones: pinch to zoom
     zoomControlRef.current = L.control
       .zoom({
         position: dir === 'rtl' ? 'topleft' : 'topright',
@@ -130,9 +154,9 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
         zoomOutTitle: t('map.zoomOut'),
       })
       .addTo(map);
-  }, [dir, t]);
+  }, [dir, t, compact]);
 
-  // 4. One marker per event with valid coordinates.
+  // 4. One marker per place: the event's main pin plus a pin for every further place it names.
   useEffect(() => {
     const layer = markerLayerRef.current;
     if (!layer) return;
@@ -141,45 +165,60 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
 
     for (const event of events) {
       const selected = event.id === selectedRef.current;
-      const marker = L.marker([event.latitude, event.longitude], {
-        icon: createMarkerIcon({
-          iconName: event.category.icon,
-          color: event.category.markerColor,
-          severity: event.severity,
-          selected,
-          breaking: event.isBreaking,
-        }),
-        title: event.title,
-        alt: event.title,
-        keyboard: true,
-        riseOnHover: true,
-        zIndexOffset: selected ? 1000 : event.severity === 'critical' ? 400 : 0,
+      const places = [
+        { lat: event.latitude, lng: event.longitude, label: event.title },
+        ...(event.places ?? []).map((p) => ({
+          lat: p.latitude,
+          lng: p.longitude,
+          label: `${event.title} — ${(lang === 'he' ? p.name : p.nameEn) || p.name || p.nameEn}`,
+        })),
+      ];
+      const markers: L.Marker[] = [];
+      places.forEach((place, index) => {
+        const marker = L.marker([place.lat, place.lng], {
+          icon: createMarkerIcon({
+            iconName: event.category.icon,
+            color: event.category.markerColor,
+            severity: event.severity,
+            selected,
+            breaking: event.isBreaking,
+            compact: index > 0,
+          }),
+          title: place.label,
+          alt: place.label,
+          keyboard: true,
+          riseOnHover: true,
+          zIndexOffset: selected ? 1000 : event.severity === 'critical' ? 400 : 0,
+        });
+        if (!compact) {
+          marker.bindPopup(
+            () =>
+              buildPopupContent(
+                event,
+                {
+                  categoryLabel: categoryLabel(event.category.slug, event.category.name),
+                  severityLabel: t(`severity.${event.severity}`),
+                  verified: t('feed.verified'),
+                  breaking: t('feed.breaking'),
+                  viewEvent: t('map.viewEvent'),
+                  openSource: t('map.openSource'),
+                  approximate: t('feed.approximate'),
+                  locale,
+                  dir,
+                },
+                (id) => onViewEventRef.current(id),
+              ),
+            { maxWidth: 320, minWidth: 240, autoPanPadding: [28, 28], className: 'ofm-popup-shell' },
+          );
+        }
+        marker.on('click', () => onMarkerSelectRef.current(event.id));
+        marker.addTo(layer);
+        markers.push(marker);
       });
-      marker.bindPopup(
-        () =>
-          buildPopupContent(
-            event,
-            {
-              categoryLabel: categoryLabel(event.category.slug, event.category.name),
-              severityLabel: t(`severity.${event.severity}`),
-              verified: t('feed.verified'),
-              breaking: t('feed.breaking'),
-              viewEvent: t('map.viewEvent'),
-              openSource: t('map.openSource'),
-              approximate: t('feed.approximate'),
-              locale,
-              dir,
-            },
-            (id) => onViewEventRef.current(id),
-          ),
-        { maxWidth: 320, minWidth: 240, autoPanPadding: [28, 28], className: 'ofm-popup-shell' },
-      );
-      marker.on('click', () => onMarkerSelectRef.current(event.id));
-      marker.addTo(layer);
-      markersRef.current.set(event.id, { marker, event });
+      markersRef.current.set(event.id, { markers, event });
     }
     setMarkersVersion((v) => v + 1);
-  }, [events, t, dir, locale, categoryLabel]);
+  }, [events, t, dir, locale, lang, categoryLabel, compact]);
 
   // 4b. Home Front Command alerts: merged polygon + a pulsing siren pin at its centre.
   useEffect(() => {
@@ -310,21 +349,39 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     }
   }, []);
 
-  // 5. Highlight the selected marker.
+  // 5. Highlight the selected event's pins, and join its places with dashed lines.
   useEffect(() => {
-    markersRef.current.forEach(({ marker, event }, id) => {
+    markersRef.current.forEach(({ markers, event }, id) => {
       const selected = id === selectedId;
-      marker.setIcon(
-        createMarkerIcon({
-          iconName: event.category.icon,
-          color: event.category.markerColor,
-          severity: event.severity,
-          selected,
-          breaking: event.isBreaking,
-        }),
-      );
-      marker.setZIndexOffset(selected ? 1000 : event.severity === 'critical' ? 400 : 0);
+      markers.forEach((marker, index) => {
+        marker.setIcon(
+          createMarkerIcon({
+            iconName: event.category.icon,
+            color: event.category.markerColor,
+            severity: event.severity,
+            selected,
+            breaking: event.isBreaking,
+            compact: index > 0,
+          }),
+        );
+        marker.setZIndexOffset(selected ? 1000 : event.severity === 'critical' ? 400 : 0);
+      });
     });
+    const links = linkLayerRef.current;
+    links?.clearLayers();
+    const entry = selectedId ? markersRef.current.get(selectedId) : undefined;
+    if (links && entry && entry.markers.length > 1) {
+      const [main, ...rest] = eventPoints(entry.event);
+      for (const point of rest) {
+        L.polyline([main, point], {
+          color: entry.event.category.markerColor,
+          weight: 2,
+          opacity: 0.8,
+          dashArray: '6 6',
+          interactive: false,
+        }).addTo(links);
+      }
+    }
   }, [selectedId, markersVersion]);
 
   // 6. Fly to a marker when a card (or the URL) asks for it.
@@ -335,27 +392,39 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     if (!entry) return; // not loaded yet — re-runs when markers change
     handledFocusRef.current = focusRequest.nonce;
 
+    const main = entry.markers[0];
     if (focusRequest.source === 'map' || focusRequest.source === 'popup') {
-      if (!entry.marker.isPopupOpen()) entry.marker.openPopup();
+      if (!compact && !main.isPopupOpen() && !entry.markers.some((m) => m.isPopupOpen())) main.openPopup();
       return;
     }
 
-    const target = entry.marker.getLatLng();
+    const points = eventPoints(entry.event);
     const zoom = Math.max(map.getZoom(), mapConfig.focusZoom);
     let opened = false;
     const open = () => {
       if (opened) return;
       opened = true;
-      entry.marker.openPopup();
+      if (!compact) main.openPopup();
     };
     map.closePopup();
+    // Phones: the card along the bottom covers part of the map, so keep the pins above it.
+    const padBottom = compact ? 220 : 56;
     if (prefersReducedMotion()) {
-      map.setView(target, zoom, { animate: false });
+      if (points.length > 1) map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [56, 56], paddingBottomRight: [56, padBottom], maxZoom: zoom, animate: false });
+      else map.setView(main.getLatLng(), zoom, { animate: false });
       open();
       return;
     }
     map.once('moveend', open);
-    map.flyTo(target, zoom, { duration: 0.9 });
+    if (points.length > 1) {
+      map.flyToBounds(L.latLngBounds(points), { paddingTopLeft: [56, 56], paddingBottomRight: [56, padBottom], maxZoom: zoom, duration: 0.9 });
+    } else if (compact) {
+      // Centre the pin in the part of the map above the card.
+      const targetPoint = map.project(main.getLatLng(), zoom).add([0, padBottom / 2 - 28]);
+      map.flyTo(map.unproject(targetPoint, zoom), zoom, { duration: 0.9 });
+    } else {
+      map.flyTo(main.getLatLng(), zoom, { duration: 0.9 });
+    }
     const fallback = window.setTimeout(open, 1400);
     return () => {
       window.clearTimeout(fallback);
@@ -364,7 +433,7 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
       // let the next run retry this request instead of silently dropping it.
       if (!opened && handledFocusRef.current === focusRequest.nonce) handledFocusRef.current = null;
     };
-  }, [focusRequest, markersVersion]);
+  }, [focusRequest, markersVersion, compact]);
 
   const resetView = useCallback(() => {
     const map = mapRef.current;
@@ -381,7 +450,7 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
   const fitAll = useCallback(() => {
     const map = mapRef.current;
     if (!map || events.length === 0) return;
-    const bounds = L.latLngBounds(events.map((e) => [e.latitude, e.longitude] as [number, number]));
+    const bounds = L.latLngBounds(events.flatMap(eventPoints));
     map.flyToBounds(bounds, { padding: [56, 56], maxZoom: 11, duration: prefersReducedMotion() ? 0 : 0.8 });
   }, [events]);
 
@@ -418,7 +487,31 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
         >
           <Maximize2 className="size-4" aria-hidden />
         </IconButton>
+        {legend ? (
+          <IconButton
+            label={t('map.showLegend')}
+            onClick={() => setLegendOpen((v) => !v)}
+            aria-expanded={legendOpen}
+            className="pointer-events-auto shadow-md xl:hidden"
+            variant="map"
+          >
+            <Layers className="size-4" aria-hidden />
+          </IconButton>
+        ) : null}
       </div>
+      {legend && legendOpen ? (
+        <div className="ofm-scroll absolute start-14 top-3 z-[600] max-h-[min(60vh,420px)] w-56 overflow-y-auto rounded-xl bg-white/95 p-3 shadow-xl ring-1 ring-slate-900/10 backdrop-blur xl:hidden dark:bg-slate-900/95 dark:ring-white/10">
+          <button
+            type="button"
+            onClick={() => setLegendOpen(false)}
+            aria-label={t('common.close')}
+            className="absolute end-1.5 top-1.5 inline-flex size-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+          {legend}
+        </div>
+      ) : null}
     </div>
   );
 }

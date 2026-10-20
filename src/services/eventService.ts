@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { FALLBACK_CATEGORY, safeColor } from '@/data/categoryRegistry';
-import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type EventSource, type LocationPrecision, type PublicEvent, type Severity, type SourceType } from '@/types/event';
+import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type EventPlace, type EventSource, type LocationPrecision, type PublicEvent, type Severity, type SourceType } from '@/types/event';
 import { safeExternalUrl } from '@/utils/url';
 import { cleanReportText } from '@/utils/text';
 import { ServiceError, toServiceError } from './serviceError';
@@ -20,6 +20,7 @@ const PUBLIC_EVENT_COLUMNS = [
   'location_name',
   'location_precision',
   'sources',
+  'locations',
   'country',
   'region',
   'city',
@@ -49,6 +50,7 @@ interface PublishedEventRow {
   location_name: string | null;
   location_precision?: string | null;
   sources?: unknown;
+  locations?: unknown;
   country: string | null;
   region: string | null;
   city: string | null;
@@ -95,6 +97,30 @@ function toSources(v: unknown): EventSource[] {
   });
 }
 
+/** Extra places from the database, minus anything sitting on the main pin (within ~300 m). */
+function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
+  if (!Array.isArray(v)) return [];
+  const out: EventPlace[] = [];
+  for (const p of v) {
+    if (!p || typeof p !== 'object') continue;
+    const o = p as { name?: unknown; name_en?: unknown; lat?: unknown; lng?: unknown; precision?: unknown };
+    const lat = toNumber(typeof o.lat === 'number' || typeof o.lat === 'string' ? o.lat : null);
+    const lng = toNumber(typeof o.lng === 'number' || typeof o.lng === 'string' ? o.lng : null);
+    if (lat === null || lng === null || lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+    if (Math.abs(lat - mainLat) < 0.003 && Math.abs(lng - mainLng) < 0.003) continue;
+    if (out.some((q) => Math.abs(q.latitude - lat) < 0.003 && Math.abs(q.longitude - lng) < 0.003)) continue;
+    out.push({
+      name: typeof o.name === 'string' ? o.name.slice(0, 120) : '',
+      nameEn: typeof o.name_en === 'string' ? o.name_en.slice(0, 120) : '',
+      latitude: lat,
+      longitude: lng,
+      precision: (LOCATION_PRECISIONS as readonly string[]).includes(String(o.precision)) ? (o.precision as LocationPrecision) : null,
+    });
+    if (out.length >= 7) break;
+  }
+  return out;
+}
+
 export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null {
   const latitude = toNumber(row.latitude);
   const longitude = toNumber(row.longitude);
@@ -130,6 +156,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     // Never pass an unvalidated URL to the UI.
     sourceUrl: safeExternalUrl(row.source_url),
     sources: toSources(row.sources),
+    places: toPlaces(row.locations, latitude, longitude),
     sourceType: asSourceType(row.source_type),
     occurredAt: row.occurred_at,
     publishedAt: row.published_at,

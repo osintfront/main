@@ -15,7 +15,7 @@
 // Body (optional): { "agent": "lebanon", "sync": true } to run one agent now.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { editReport, formatDescription, formatWhatsApp, mainPoint, type EditorSource } from "../_shared/editor.ts";
+import { editReport, formatDescription, formatWhatsApp, isTransient, locationsForDb, mainCountry, mainPoint, type EditorSource } from "../_shared/editor.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const API_KEY = (Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("Whatsapp_Key") || "").trim();
@@ -343,7 +343,10 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         severity: r.severity,
         is_breaking: r.is_breaking,
         location_name: (r.location_name || pt?.name || "").slice(0, 200),
-        city: r.city, region: r.region, country: r.country,
+        // No coordinates: the database pins the event on the first named place,
+        // or else on the country it is about (shown as an approximate location).
+        city: r.city, region: r.region, country: mainCountry(r),
+        locations: locationsForDb(r),
         latitude: pt?.lat ?? null, longitude: pt?.lng ?? null,
         location_precision: pt ? "exact" : null,
         source_type: "news_website",
@@ -357,14 +360,23 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         classification_confidence: 0.8,
         ai_suggestions: { source: "intel-crawler", agent, editor_model: r.model, countries: r.countries },
       };
-      const { data: ins, error } = await db.from("events").insert(row).select("id").single();
+      let { data: ins, error } = await db.from("events").insert(row).select("id,status").single();
+      // Still no place at all: keep it as a draft for an editor instead of losing it.
+      if (error?.code === "23514" && /publish_requirements/.test(error.message)) {
+        delete row.published_at;
+        delete row.approved_by;
+        ({ data: ins, error } = await db.from("events").insert({ ...row, status: "draft" }).select("id,status").single());
+      }
       if (error) throw error;
-      result.published = (result.published as number) + 1;
+      const published = ins!.status === "published";
+      if (published) result.published = (result.published as number) + 1;
       await db.from("intel_sources").update({ events_created: item.source.events_created + 1 }).eq("id", item.source.id);
-      await logItem("published", ins.id, "published");
+      await logItem(published ? "published" : "skipped", ins!.id, published ? "published" : "no location found — saved as draft");
     } catch (e) {
       const msg = String((e as Error)?.message ?? e).slice(0, 300);
       errors.push(`${item.source.name}: ${msg}`);
+      // Rate limit / overload: leave the article unseen so the next run retries it.
+      if (isTransient((e as any)?.status)) return;
       await logItem("error", null, msg);
     }
   });
