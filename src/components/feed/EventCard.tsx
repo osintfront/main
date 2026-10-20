@@ -5,6 +5,7 @@ import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
 import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
+import { previewText } from '@/utils/text';
 import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
 
@@ -21,7 +22,8 @@ interface EventCardProps {
 function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDetails }: EventCardProps) {
   const { t, locale, lang } = useI18n();
   const title = event.translations[lang]?.title || event.title;
-  const description = event.translations[lang]?.description || event.description;
+  const fullDescription = event.translations[lang]?.description || event.description;
+  const description = previewText(fullDescription);
   const where = [event.locationName, event.country].filter(Boolean).join(', ');
   const sourceLabel = event.sourceName || (event.sourceUrl ? hostnameOf(event.sourceUrl) : '');
 
@@ -77,7 +79,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
           {description}
         </p>
       ) : null}
-      {onOpenDetails && (description.length > 150 || (description.match(/\n/g)?.length ?? 0) >= 2) ? (
+      {onOpenDetails && (fullDescription.length > 150 || (fullDescription.match(/\n/g)?.length ?? 0) >= 2) ? (
         <button
           type="button"
           onClick={() => onOpenDetails(event.id)}

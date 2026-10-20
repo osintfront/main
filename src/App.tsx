@@ -16,6 +16,7 @@ import { EventEditorPage } from '@/pages/admin/EventEditorPage';
 import { ToastProvider } from '@/components/common/Toast';
 import { AccountPage } from '@/pages/admin/AccountPage';
 import { SettingsPage } from '@/pages/admin/SettingsPage';
+import { NewsAgentsPage } from '@/pages/admin/NewsAgentsPage';
 import { ModulePlaceholderPage } from '@/pages/admin/ModulePlaceholderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
@@ -26,6 +27,7 @@ const IMPLEMENTED: Record<string, ComponentType> = {
   newEvent: EventEditorPage,
   eventDetail: EventEditorPage,
   settings: SettingsPage,
+  newsAgents: NewsAgentsPage,
 };
 
 export function App() {

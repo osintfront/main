@@ -8,6 +8,7 @@
 // description as an "עדכון" (update) — and the source is recorded as well.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { editReport, formatDescription, formatWhatsApp, mainPoint, type EditResult } from "../_shared/editor.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -384,8 +385,62 @@ async function processOne(m: InMsg) {
   const { data: ins, error } = await db.from("events").insert(row).select("id").single();
   if (error) throw error;
   await log(status === "published" ? "event_published" : "event_draft", ins.id);
+  // Editor agent runs in the background so the extension gets its answer quickly;
+  // the event appears at once and is rewritten in the house template seconds later.
+  background.push(applyEditor(ins.id, row, text, m.chat, c.original_source, sentIso));
   const media_saved = await storeMedia(ins.id, key, m.media);
   return { key, status: status === "published" ? "event_published" : "event_draft", event_id: ins.id, title: row.title, media_saved };
+}
+
+const background: Promise<unknown>[] = [];
+
+// Editor agent: Hebrew template, verified names, sources. The raw text stays if it fails.
+async function applyEditor(eventId: string, row: Record<string, unknown>, text: string, chat: string, original: string | undefined, sentIso: string) {
+  const edited = await runEditor(text, chat, original, sentIso);
+  if (!edited) return;
+  const srcName = clip(`WhatsApp – ${chat}${original ? " / " + original : ""}`, 200)!;
+  const url = firstUrl(text);
+  const extra = edited.sources.filter((s) => s.url !== url);
+  const update: Record<string, unknown> = {
+    whatsapp_text: formatWhatsApp(edited, [{ name: srcName, url }, ...extra]),
+    ai_suggestions: { ...(row.ai_suggestions as object), editor_model: edited.model, countries: edited.countries },
+  };
+  if (edited.title) update.title = clip(edited.title, 200);
+  if (edited.summary) update.description = formatDescription(edited);
+  // Keep sources added meanwhile (duplicates of this event) and add the editor's.
+  const { data: cur } = await db.from("events").select("sources,latitude,longitude,location_name").eq("id", eventId).maybeSingle();
+  const current: any[] = Array.isArray(cur?.sources) ? cur!.sources : [];
+  const more = extra.filter((s) => !current.some((c) => (c?.url && s.url ? c.url === s.url : c?.name === s.name)));
+  if (more.length) update.sources = [...current, ...more.map((s) => ({ name: s.name, url: s.url, at: null }))].slice(-MAX_SOURCES);
+  const pt = mainPoint(edited);
+  if (pt && (cur?.latitude == null || cur?.longitude == null)) {
+    update.latitude = pt.lat;
+    update.longitude = pt.lng;
+    update.geocoding_confidence = 0.7;
+    if (!cur?.location_name) update.location_name = clip(pt.name, 200);
+  }
+  const { error } = await db.from("events").update(update).eq("id", eventId);
+  if (error) console.error("editor update failed", error.message);
+}
+
+let editorDomains: string[] | null = null;
+async function runEditor(text: string, chat: string, original: string | undefined, sentAt: string): Promise<EditResult | null> {
+  try {
+    if (!editorDomains) {
+      const { data } = await db.from("intel_sources").select("url").eq("active", true);
+      editorDomains = [...new Set((data ?? []).map((s: any) => new URL(s.url).hostname.replace(/^www\./, "")))];
+    }
+    const work = editReport({
+      text, mode: "whatsapp", allowedDomains: editorDomains,
+      origin: { name: `WhatsApp – ${chat}${original ? " / " + original : ""}`, url: firstUrl(text), sentAt },
+    });
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 120_000));
+    const r = await Promise.race([work, timeout]);
+    return r && r.summary ? r : null;
+  } catch (e) {
+    console.error("editor failed", String((e as Error)?.message ?? e).slice(0, 300));
+    return null;
+  }
 }
 
 async function queueOne(m: InMsg) {
@@ -459,5 +514,7 @@ Deno.serve(async (req) => {
       results.push({ msg_id: m.msg_id, status: "error", error: String((e as Error).message ?? e).slice(0, 300) });
     }
   }
+  // @ts-ignore EdgeRuntime is provided by Supabase
+  if (background.length) EdgeRuntime.waitUntil(Promise.allSettled(background.splice(0)));
   return json({ ok: true, results });
 });

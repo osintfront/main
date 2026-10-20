@@ -9,3 +9,8 @@ export function cleanReportText(text: string): string {
     .replace(/\n{3,}/g, '\n\n')
     .replace(/^[\s\n]+|[\s\n]+$/g, '');
 }
+
+/** Short preview text: lines that are only a web address (e.g. map links) are dropped. */
+export function previewText(text: string): string {
+  return cleanReportText(text.replace(/^[ \t]*https?:\/\/\S+[ \t]*$/gm, ''));
+}

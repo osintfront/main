@@ -29,6 +29,7 @@ import { Button, SelectField, TextAreaField, TextField, ToggleField } from '@/co
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useToast } from '@/components/common/Toast';
 import { LocationPicker } from '@/components/admin/events/LocationPicker';
+import { WhatsAppTextCard } from '@/components/admin/WhatsAppTextCard';
 
 // ── datetime-local helpers (browser local time ⇄ ISO) ──────────────
 function toLocalInput(iso: string): string {
@@ -343,6 +344,7 @@ export function EventEditorPage() {
         className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
       >
         <div className="flex flex-col gap-5">
+          {event?.whatsappText ? <WhatsAppTextCard text={event.whatsappText} /> : null}
           <Section title={t('form.sectionReport')}>
             <TextAreaField
               label={t('form.originalReport')}

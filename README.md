@@ -35,6 +35,8 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261020000011_one_event_per_alert_area.sql
    supabase/migrations/20261020000012_merged_alert_shapes.sql
    supabase/migrations/20261020000013_event_sources_and_text_cleanup.sql
+   supabase/migrations/20261020000014_intel_agents.sql
+   supabase/migrations/20261020000015_intel_crawler_schedule.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.
@@ -153,6 +155,18 @@ Every change that affects the public map (publish, edit while published, expiry 
 - The event window shows a **Sources** section (first report + further sources); cards show "+N sources".
 - Report text is normalised on every write (`normalize_report_text`): trailing spaces/direction marks removed, runs of blank lines collapsed to one. Existing events were cleaned.
 - Deploy the function with `verify_jwt = false` (it checks its own ingest token).
+
+### News agents and the editor agent (migrations 0014–0015, `supabase/functions/intel-crawler`, `supabase/functions/_shared/editor.ts`)
+- **Six country agents** — Lebanon, Yemen, Syria, Iran, International, Research institutes — each with its own list of sites from the Intelligence source list (`intel_sources`, 78 sites).
+- pg_cron calls `intel-crawler` every 5 minutes; the function runs the agent that is due: every 30 minutes from 07:00 to 23:00 Israel time, every 60 minutes at night (`app_settings.intel_crawler`).
+- An agent reads each site's RSS/Atom feed (found automatically) or, without a feed, the headline links on the page. The first visit only records what is already there (`baseline`), so old articles are never published. Articles older than 6 hours are skipped.
+- One quick model call picks the significant Middle East items (max 5 per run); each goes to the **editor agent**, which translates, proofreads and summarises it into the house template (countries, title, one-paragraph summary, coordinates + Google Maps link, religious-text meaning, other implications, sources), checks names via English, adds roles/names, and may search **only the approved source sites**. Hebrew output with Arabic/Latin letters outside parentheses gets one correction round.
+- Same story already on the map (last 12 h) → the article is added to that event's sources instead of a new event. Otherwise the event is published automatically.
+- WhatsApp reports go through the same editor (in the background, a few seconds after the raw report appears).
+- `events.whatsapp_text` holds the WhatsApp-ready version (staff only); the event editor shows it with a **Copy** button.
+- **Admin → News agents** (`/admin/news-agents`): agents' last runs, every source with its state (RSS / page headlines / not reachable), on/off per source, add/remove sources, latest articles, and the master on/off switch.
+- Sites that block automated readers (HTTP 401/403) or need a subscription are listed as "not reachable"; the agent does not try to get around blocks.
+- Manual run (testing): `POST /functions/v1/intel-crawler` with header `x-cron-secret` (from `intel_config`) and body `{"agent":"lebanon","sync":true}`.
 
 ## Next phases
 - **Phase 3:** automatic location extraction from free report text (place-name resolution already exists).

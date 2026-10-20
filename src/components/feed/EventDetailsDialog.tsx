@@ -6,6 +6,7 @@ import { formatDateTime, formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
 import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
+import { LinkifiedText } from '@/components/common/LinkifiedText';
 
 interface EventDetailsDialogProps {
   event: PublicEvent;
@@ -95,7 +96,7 @@ export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDia
           ) : null}
           {description ? (
             <p className="whitespace-pre-line break-words text-[15px] leading-relaxed text-slate-800 dark:text-slate-200" dir="auto">
-              {description}
+              <LinkifiedText text={description} mapsLabel={t('details.openInMaps')} />
             </p>
           ) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">{t('details.noDescription')}</p>

@@ -1,6 +1,7 @@
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { formatDateTime } from '@/utils/time';
 import { hostnameOf, safeExternalUrl } from '@/utils/url';
+import { previewText } from '@/utils/text';
 import { loadEventMedia, toMediaView } from '@/services/eventMediaService';
 
 export interface PopupLabels {
@@ -66,8 +67,9 @@ export function buildPopupContent(
   }
   root.append(sub);
 
-  if (event.description) {
-    const text = event.description.length > 220 ? `${event.description.slice(0, 217).trimEnd()}…` : event.description;
+  const preview = previewText(event.description ?? '');
+  if (preview) {
+    const text = preview.length > 220 ? `${preview.slice(0, 217).trimEnd()}…` : preview;
     const desc = el('p', 'ofm-popup__desc', text);
     desc.dir = 'auto';
     root.append(desc);
