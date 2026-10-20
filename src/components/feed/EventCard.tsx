@@ -1,3 +1,4 @@
+import { EventMedia } from "@/components/EventMedia";
 import { memo, type CSSProperties, type MouseEvent } from 'react';
 import { Crosshair, ExternalLink, MapPin } from 'lucide-react';
 import { useI18n } from '@/i18n';
