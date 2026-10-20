@@ -37,6 +37,7 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261020000013_event_sources_and_text_cleanup.sql
    supabase/migrations/20261020000014_intel_agents.sql
    supabase/migrations/20261020000015_intel_crawler_schedule.sql
+   supabase/migrations/20261020000016_telegram_channels.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.
@@ -167,6 +168,12 @@ Every change that affects the public map (publish, edit while published, expiry 
 - **Admin → News agents** (`/admin/news-agents`): agents' last runs, every source with its state (RSS / page headlines / not reachable), on/off per source, add/remove sources, latest articles, and the master on/off switch.
 - Sites that block automated readers (HTTP 401/403) or need a subscription are listed as "not reachable"; the agent does not try to get around blocks.
 - Manual run (testing): `POST /functions/v1/intel-crawler` with header `x-cron-secret` (from `intel_config`) and body `{"agent":"lebanon","sync":true}`.
+
+### Telegram channels (migration 0016, `supabase/functions/whatsapp-ingest/telegram.ts`)
+- Public channels in `telegram_channels` (first: `@Hadashot_Bitachon`, "חדשות ביטחון בטלגרם") are read every minute from their web preview `https://t.me/s/<name>` — no bot, no login.
+- pg_cron → `whatsapp-ingest` with `x-cron-secret` and `{"telegram_poll":true}` (`{"dry":true}` only parses). New posts take the WhatsApp path: classification, ±30-minute duplicates → sources, editor agent, up to 4 photos. The post's t.me link is the event's source link.
+- The first read only records the newest post number; a per-channel lock stops overlapping polls.
+- Admin → News agents → Telegram channels: add (link or @name), turn on/off, remove. Private groups cannot be read this way.
 
 ## Next phases
 - **Phase 3:** automatic location extraction from free report text (place-name resolution already exists).

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ExternalLink, Plus, RefreshCw, Rss, Trash2 } from 'lucide-react';
 import { Alert, Spinner } from '@/components/common/Feedback';
+import { TelegramChannelsSection } from '@/components/admin/TelegramChannelsSection';
 import { Button, SelectField, TextField, ToggleField } from '@/components/common/Form';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useToast } from '@/components/common/Toast';
@@ -308,6 +309,8 @@ export function NewsAgentsPage() {
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('agents.addHint')}</p>
         </form>
       ) : null}
+
+      <TelegramChannelsSection />
 
       <section className="mt-5 overflow-hidden rounded-xl bg-white ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
         <h2 className="border-b border-slate-100 px-4 py-3 text-base font-semibold text-slate-900 dark:border-slate-800 dark:text-white">

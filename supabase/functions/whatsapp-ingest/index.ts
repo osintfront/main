@@ -9,6 +9,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { editReport, formatDescription, formatWhatsApp, mainPoint, type EditResult } from "../_shared/editor.ts";
+import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -31,7 +32,13 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 type InMedia = { kind?: string; mime?: string; data: string; width?: number; height?: number };
-type InMsg = { msg_id?: string; chat: string; sender?: string; sent_at: string; text: string; media?: InMedia[] };
+type InMsg = {
+  msg_id?: string; chat: string; sender?: string; sent_at: string; text: string; media?: InMedia[];
+  /** "telegram" = a post read from a public channel (msg_id = "<channel>/<n>", url = its t.me link). */
+  platform?: "whatsapp" | "telegram"; url?: string;
+};
+const platformName = (m: InMsg) => (m.platform === "telegram" ? "Telegram" : "WhatsApp");
+const sourceUrl = (m: InMsg, text: string) => m.url ?? firstUrl(text);
 
 // ---- storage budget (FIFO eviction of oldest videos) ----
 const STORAGE_LIMIT = Number(Deno.env.get("MEDIA_STORAGE_LIMIT_BYTES") ?? 1024 ** 3); // free tier: 1 GB
@@ -206,7 +213,7 @@ const CLASSIFY_TOOL = {
 
 async function classify(msg: InMsg, candidates: any[]) {
   const cats = (await categories()).filter((c) => c.slug !== "other");
-  const system = `You triage reports posted in an OSINT WhatsApp group (mostly Hebrew; Israel, Lebanon, Syria, Iran, Yemen, Iraq).
+  const system = `You triage reports posted in an OSINT WhatsApp group or Telegram channel (mostly Hebrew; Israel, Lebanon, Syria, Iran, Yemen, Iraq).
 Allowed category slugs: ${cats.map((c) => `${c.slug} (${c.name})`).join(", ")}.
 Never use 'other'. Use 'uncategorized' only via decision=uncertain.
 Rules:
@@ -275,9 +282,9 @@ async function processOne(m: InMsg) {
   const text = String(m.text ?? "").trim();
   const sentAt = new Date(m.sent_at);
   if (!text || isNaN(sentAt.getTime())) return { status: "invalid" };
-  if (!ALLOWED_CHATS.includes(m.chat)) return { status: "ignored_chat" };
+  if (m.platform !== "telegram" && !ALLOWED_CHATS.includes(m.chat)) return { status: "ignored_chat" };
   const sentIso = sentAt.toISOString();
-  const key = m.msg_id ? `wa:${m.msg_id}` : `h:${await sha(sentIso + "|" + text)}`;
+  const key = m.platform === "telegram" ? `tg:${m.msg_id}` : m.msg_id ? `wa:${m.msg_id}` : `h:${await sha(sentIso + "|" + text)}`;
 
   // already processed? (by id, or by identical time+text)
   const { data: seen } = await db
@@ -322,11 +329,13 @@ async function processOne(m: InMsg) {
     return { key, status: "skipped_not_event", reason: c.reason };
   }
 
-  const srcLabel = [c.original_source, m.sender].filter(Boolean).join(" / ") || "WhatsApp";
+  const srcLabel = m.platform === "telegram"
+    ? [`Telegram – ${m.chat}`, c.original_source].filter(Boolean).join(" / ")
+    : [c.original_source, m.sender].filter(Boolean).join(" / ") || "WhatsApp";
   const dup = c.decision === "duplicate" && (candidates ?? []).find((x) => x.id === c.duplicate_of);
   if (dup) {
     // Same incident: record the source; add text only if it brings new facts.
-    const entry = { name: clip(srcLabel, 200), url: firstUrl(text), at: sentIso };
+    const entry = { name: clip(srcLabel, 200), url: sourceUrl(m, text), at: sentIso };
     const current: any[] = Array.isArray(dup.sources) ? dup.sources : [];
     const known = current.some((s) => (s?.url && entry.url ? s.url === entry.url : s?.name === entry.name));
     const update: Record<string, unknown> = { sources: known ? current : [...current, entry].slice(-MAX_SOURCES) };
@@ -366,12 +375,12 @@ async function processOne(m: InMsg) {
     longitude: num(c.longitude, -180, 180),
     geocoding_confidence: num(c.geocoding_confidence, 0, 1),
     source_type: "social_media",
-    source_name: clip(`WhatsApp – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, 200),
-    source_url: firstUrl(text),
+    source_name: clip(`${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, 200),
+    source_url: sourceUrl(m, text),
     occurred_at: sentIso,
     created_by: BOT_USER_ID,
     classification_confidence: confident ? 0.8 : 0.4,
-    ai_suggestions: { source: "whatsapp-ingest", model: MODEL, reason: c.reason ?? "" },
+    ai_suggestions: { source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "" },
   };
   if (row.latitude == null || row.longitude == null) {
     row.latitude = null;
@@ -387,7 +396,7 @@ async function processOne(m: InMsg) {
   await log(status === "published" ? "event_published" : "event_draft", ins.id);
   // Editor agent runs in the background so the extension gets its answer quickly;
   // the event appears at once and is rewritten in the house template seconds later.
-  background.push(applyEditor(ins.id, row, text, m.chat, c.original_source, sentIso));
+  background.push(applyEditor(ins.id, row, text, `${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, sourceUrl(m, text), sentIso));
   const media_saved = await storeMedia(ins.id, key, m.media);
   return { key, status: status === "published" ? "event_published" : "event_draft", event_id: ins.id, title: row.title, media_saved };
 }
@@ -395,11 +404,10 @@ async function processOne(m: InMsg) {
 const background: Promise<unknown>[] = [];
 
 // Editor agent: Hebrew template, verified names, sources. The raw text stays if it fails.
-async function applyEditor(eventId: string, row: Record<string, unknown>, text: string, chat: string, original: string | undefined, sentIso: string) {
-  const edited = await runEditor(text, chat, original, sentIso);
+async function applyEditor(eventId: string, row: Record<string, unknown>, text: string, srcLabel: string, url: string | null, sentIso: string) {
+  const edited = await runEditor(text, srcLabel, url, sentIso);
   if (!edited) return;
-  const srcName = clip(`WhatsApp – ${chat}${original ? " / " + original : ""}`, 200)!;
-  const url = firstUrl(text);
+  const srcName = clip(srcLabel, 200)!;
   const extra = edited.sources.filter((s) => s.url !== url);
   const update: Record<string, unknown> = {
     whatsapp_text: formatWhatsApp(edited, [{ name: srcName, url }, ...extra]),
@@ -424,7 +432,7 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
 }
 
 let editorDomains: string[] | null = null;
-async function runEditor(text: string, chat: string, original: string | undefined, sentAt: string): Promise<EditResult | null> {
+async function runEditor(text: string, srcLabel: string, url: string | null, sentAt: string): Promise<EditResult | null> {
   try {
     if (!editorDomains) {
       const { data } = await db.from("intel_sources").select("url").eq("active", true);
@@ -432,7 +440,7 @@ async function runEditor(text: string, chat: string, original: string | undefine
     }
     const work = editReport({
       text, mode: "whatsapp", allowedDomains: editorDomains,
-      origin: { name: `WhatsApp – ${chat}${original ? " / " + original : ""}`, url: firstUrl(text), sentAt },
+      origin: { name: srcLabel, url, sentAt },
     });
     const timeout = new Promise<null>((r) => setTimeout(() => r(null), 120_000));
     const r = await Promise.race([work, timeout]);
@@ -441,6 +449,88 @@ async function runEditor(text: string, chat: string, original: string | undefine
     console.error("editor failed", String((e as Error)?.message ?? e).slice(0, 300));
     return null;
   }
+}
+
+// ---- Public Telegram channels (polled every minute by pg_cron) ----
+const TG_MAX_PER_POLL = 10;
+
+async function pollTelegram(dry: boolean) {
+  const { data: channels } = await db.from("telegram_channels").select("*").eq("active", true);
+  const out: Record<string, unknown>[] = [];
+  for (const ch of channels ?? []) {
+    const now = new Date().toISOString();
+    // One poll per channel at a time (a slow poll must not overlap the next minute's).
+    if (!dry) {
+      const { data: claimed } = await db.from("telegram_channels")
+        .update({ locked_until: new Date(Date.now() + 180_000).toISOString() })
+        .eq("username", ch.username).or(`locked_until.is.null,locked_until.lt.${now}`).select("username");
+      if (!claimed?.length) {
+        out.push({ channel: ch.username, skipped: "previous poll still running" });
+        continue;
+      }
+    }
+    try {
+      const name = channelName(ch.username);
+      if (!name) throw new Error("invalid channel name");
+      const { title, posts } = await fetchChannel(name);
+      if (dry) {
+        out.push({ channel: name, title, count: posts.length, last: posts.slice(-3) });
+        continue;
+      }
+      const last = Number(ch.last_post_id ?? 0);
+      const maxId = posts.length ? posts[posts.length - 1].id : last;
+      if (!ch.baseline_done) {
+        // First read: remember where the channel is now; publish only what comes next.
+        await db.from("telegram_channels").update({ title, last_post_id: maxId, baseline_done: true, last_run_at: now, last_ok_at: now, last_error: null, locked_until: null }).eq("username", ch.username);
+        out.push({ channel: name, baseline: posts.length, last_post_id: maxId });
+        continue;
+      }
+      const fresh = posts.filter((p) => p.id > last).slice(0, TG_MAX_PER_POLL);
+      let done = last;
+      const results: unknown[] = [];
+      for (const p of fresh) {
+        if (p.text.trim().length >= 3) {
+          const media: InMedia[] = [];
+          for (const u of p.photos) {
+            const img = await imageAsBase64(u);
+            if (img) media.push({ kind: "image", mime: img.mime, data: img.data });
+          }
+          try {
+            results.push({
+              post: p.post,
+              ...(await processOne({
+                msg_id: p.post, platform: "telegram", url: p.url, chat: title || name,
+                sender: p.forwardedFrom ?? undefined, sent_at: p.date ?? now, text: p.text, media,
+              })),
+            });
+          } catch (e) {
+            results.push({ post: p.post, status: "error", error: String((e as Error)?.message ?? e).slice(0, 300) });
+            break; // retry this post on the next poll
+          }
+        }
+        done = p.id;
+      }
+      await db.from("telegram_channels").update({
+        title, last_post_id: Math.max(done, last), last_run_at: now, last_ok_at: now, last_error: null, locked_until: null,
+        posts_seen: Number(ch.posts_seen ?? 0) + (done - last > 0 ? fresh.filter((p) => p.id <= done).length : 0),
+      }).eq("username", ch.username);
+      out.push({ channel: name, new: fresh.length, results });
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e).slice(0, 300);
+      await db.from("telegram_channels").update({ last_run_at: now, last_error: msg, locked_until: null }).eq("username", ch.username);
+      out.push({ channel: ch.username, error: msg });
+    }
+  }
+  return out;
+}
+
+let cronSecret: string | null = null;
+async function cronAuthorized(given: string) {
+  if (cronSecret === null) {
+    const { data } = await db.from("intel_config").select("value").eq("key", "cron_secret").maybeSingle();
+    cronSecret = data?.value ?? "";
+  }
+  return !!cronSecret && safeEq(given, cronSecret);
 }
 
 async function queueOne(m: InMsg) {
@@ -477,6 +567,17 @@ async function drainPending(limit: number) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
+  const cronHeader = req.headers.get("x-cron-secret") ?? "";
+  if (cronHeader) {
+    if (!(await cronAuthorized(cronHeader))) return json({ error: "unauthorized" }, 401);
+    const b = await req.json().catch(() => ({}));
+    if (!b?.telegram_poll) return json({ error: "unknown job" }, 400);
+    if (!ANTHROPIC_API_KEY && !b.dry) return json({ error: "no Anthropic API key configured" }, 500);
+    const results = await pollTelegram(!!b.dry);
+    // @ts-ignore EdgeRuntime is provided by Supabase
+    if (background.length) EdgeRuntime.waitUntil(Promise.allSettled(background.splice(0)));
+    return json({ ok: true, results });
+  }
   if (!(await authorized(req.headers.get("x-ingest-token") ?? ""))) {
     return json({ error: "unauthorized" }, 401);
   }

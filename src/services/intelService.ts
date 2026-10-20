@@ -169,3 +169,60 @@ export async function setCrawlerEnabled(current: CrawlerSettings, enabled: boole
   if (error) throw toServiceError(error);
   assertChanged(data);
 }
+
+/** Public Telegram channels read every minute (same pipeline as the WhatsApp feed). */
+export interface TelegramChannel {
+  username: string;
+  title: string;
+  active: boolean;
+  baselineDone: boolean;
+  lastPostId: number;
+  postsSeen: number;
+  lastOkAt: string | null;
+  lastError: string | null;
+}
+
+export async function fetchTelegramChannels(): Promise<TelegramChannel[]> {
+  const { data, error } = await client()
+    .from('telegram_channels')
+    .select('username,title,active,baseline_done,last_post_id,posts_seen,last_ok_at,last_error')
+    .order('created_at', { ascending: true });
+  if (error) throw toServiceError(error);
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    username: String(r.username),
+    title: String(r.title ?? ''),
+    active: r.active === true,
+    baselineDone: r.baseline_done === true,
+    lastPostId: Number(r.last_post_id ?? 0),
+    postsSeen: Number(r.posts_seen ?? 0),
+    lastOkAt: (r.last_ok_at as string | null) ?? null,
+    lastError: (r.last_error as string | null) ?? null,
+  }));
+}
+
+/** "https://t.me/name", "t.me/s/name", "@name" or "name" → "name". */
+export function telegramUsername(input: string): string | null {
+  const s = input.trim();
+  const m =
+    s.match(/^(?:https?:\/\/)?(?:t\.me|telegram\.me)\/(?:s\/)?([A-Za-z0-9_]{4,64})\/?$/i) ?? s.match(/^@?([A-Za-z0-9_]{4,64})$/);
+  return m ? m[1] : null;
+}
+
+export async function addTelegramChannel(input: string): Promise<void> {
+  const username = telegramUsername(input);
+  if (!username) throw new ServiceError('validation', 'invalid telegram channel');
+  const { error } = await client().from('telegram_channels').insert({ username });
+  if (error) throw toServiceError(error);
+}
+
+export async function setTelegramChannelActive(username: string, active: boolean): Promise<void> {
+  const { data, error } = await client().from('telegram_channels').update({ active }).eq('username', username).select('username');
+  if (error) throw toServiceError(error);
+  assertChanged(data);
+}
+
+export async function deleteTelegramChannel(username: string): Promise<void> {
+  const { data, error } = await client().from('telegram_channels').delete().eq('username', username).select('username');
+  if (error) throw toServiceError(error);
+  assertChanged(data);
+}
