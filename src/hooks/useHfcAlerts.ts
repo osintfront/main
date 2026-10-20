@@ -13,12 +13,15 @@ interface UseHfcAlerts {
   now: number;
   /** Touching polygons merged for display; null = not available (draw each alert's own polygon). */
   shapes: HfcShape[] | null;
+  /** True once the first load finished (so the page doesn't chime for alerts already active). */
+  ready: boolean;
 }
 
 export function useHfcAlerts(enabled = true): UseHfcAlerts {
   const [all, setAll] = useState<HfcAlert[]>([]);
   const [shapes, setShapes] = useState<HfcShape[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [ready, setReady] = useState(false);
   const inFlight = useRef(false);
   const again = useRef(false);
 
@@ -38,6 +41,7 @@ export function useHfcAlerts(enabled = true): UseHfcAlerts {
       setAll(nextAlerts);
       setShapes(nextShapes);
       setNow(Date.now());
+      setReady(true);
     } catch {
       // Keep what is on screen; the next pulse or poll retries.
     } finally {
@@ -105,5 +109,5 @@ export function useHfcAlerts(enabled = true): UseHfcAlerts {
     return shapes.filter((sh) => sh.alertIds.some((id) => ids.has(id)));
   }, [shapes, alerts]);
 
-  return { alerts, now, shapes: visibleShapes };
+  return { alerts, now, shapes: visibleShapes, ready };
 }

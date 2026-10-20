@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, List, Map as MapIcon } from 'lucide-react';
 import { isValidDay, shiftDay, toDayString, useArchivedEvents } from '@/hooks/useArchivedEvents';
 import { useI18n } from '@/i18n';
@@ -13,6 +13,7 @@ import { EventFeed } from '@/components/feed/EventFeed';
 import { MapView } from '@/components/map/MapView';
 import { CategoryLegend } from '@/components/map/CategoryLegend';
 import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
+import { playChime, unlockAudio } from '@/lib/notifySound';
 
 type MobilePane = 'map' | 'feed';
 
@@ -95,7 +96,37 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim());
   const [mobilePane, setMobilePane] = useState<MobilePane>('map');
-  const { alerts, now: alertsNow, shapes: alertShapes } = useHfcAlerts(!isArchive);
+  const { alerts, now: alertsNow, shapes: alertShapes, ready: alertsReady } = useHfcAlerts(!isArchive);
+
+  // Sound: browsers allow audio only after an interaction, so unlock on the first one.
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
+  // Chime when a new event arrives by push (not on the first load).
+  const heardEvents = useRef(new Set<string>());
+  useEffect(() => {
+    if (isArchive) return;
+    const fresh = [...newIds].filter((id) => !heardEvents.current.has(id));
+    fresh.forEach((id) => heardEvents.current.add(id));
+    if (fresh.length) playChime('event');
+  }, [newIds, isArchive]);
+
+  // Chime when a red alert starts or repeats (not for alerts already active when the page opened).
+  const heardAlerts = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    if (isArchive || !alertsReady) return;
+    const seen = heardAlerts.current;
+    const next = new Map(alerts.map((a) => [a.id, a.lastAlertAt]));
+    if (seen && alerts.some((a) => seen.get(a.id) !== a.lastAlertAt)) playChime('alert');
+    heardAlerts.current = next;
+  }, [alerts, alertsReady, isArchive]);
   const [alertFocus, setAlertFocus] = useState<{ id: string; nonce: number } | null>(null);
   const handleLocateAlert = useCallback((id: string) => {
     setMobilePane('map');

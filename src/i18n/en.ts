@@ -35,6 +35,8 @@ export const en = {
   'details.noDescription': 'No further details for this event.',
   'feed.new': 'New',
   'nav.archive': 'Archive',
+  'nav.soundOn': 'Mute notification sounds',
+  'nav.soundOff': 'Turn notification sounds on',
   'nav.viewSwitch': 'Live map or archive',
   'archive.title': 'Archive',
   'archive.empty': 'No archived events on this day.',

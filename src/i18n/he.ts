@@ -37,6 +37,8 @@ export const he: Record<TranslationKey, string> = {
   'details.noDescription': 'אין פרטים נוספים לאירוע הזה.',
   'feed.new': 'חדש',
   'nav.archive': 'ארכיון',
+  'nav.soundOn': 'השתק צלילי התראה',
+  'nav.soundOff': 'הפעל צלילי התראה',
   'nav.viewSwitch': 'מפה חיה או ארכיון',
   'archive.title': 'ארכיון',
   'archive.empty': 'אין אירועים בארכיון ביום הזה.',
