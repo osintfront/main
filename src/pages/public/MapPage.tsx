@@ -1,5 +1,6 @@
-import { useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { List, Map as MapIcon } from 'lucide-react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, List, Map as MapIcon } from 'lucide-react';
+import { isValidDay, shiftDay, toDayString, useArchivedEvents } from '@/hooks/useArchivedEvents';
 import { useI18n } from '@/i18n';
 import { usePublicEvents } from '@/hooks/useEvents';
 import { useMapSelection } from '@/hooks/useMapSelection';
@@ -26,14 +27,72 @@ function matchesQuery(event: PublicEvent, needle: string, categoryName: string):
     .every((word) => haystack.includes(word));
 }
 
-export function MapPage() {
+function initialDay(): string {
+  const fromUrl = new URLSearchParams(window.location.search).get('date');
+  return isValidDay(fromUrl) ? fromUrl : toDayString(new Date());
+}
+
+/** Day picker for the archive: ‹ previous · date · next › */
+function ArchiveDayPicker({ day, onChange }: { day: string; onChange: (day: string) => void }) {
+  const { t, dir } = useI18n();
+  const today = toDayString(new Date());
+  const Prev = dir === 'rtl' ? ChevronRight : ChevronLeft;
+  const Next = dir === 'rtl' ? ChevronLeft : ChevronRight;
+  const btn =
+    'inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent focus-visible:outline-2 focus-visible:outline-sky-500 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900';
+  return (
+    <div className="flex items-center gap-2">
+      <button type="button" className={btn} onClick={() => onChange(shiftDay(day, -1))} aria-label={t('archive.prevDay')}>
+        <Prev className="size-4" aria-hidden />
+      </button>
+      <label className="min-w-0 flex-1">
+        <span className="sr-only">{t('archive.day')}</span>
+        <input
+          type="date"
+          value={day}
+          max={today}
+          onChange={(e) => isValidDay(e.target.value) && onChange(e.target.value)}
+          className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:[color-scheme:dark]"
+        />
+      </label>
+      <button type="button" className={btn} onClick={() => onChange(shiftDay(day, 1))} disabled={day >= today} aria-label={t('archive.nextDay')}>
+        <Next className="size-4" aria-hidden />
+      </button>
+      {day !== today ? (
+        <button
+          type="button"
+          onClick={() => onChange(today)}
+          className="h-8 shrink-0 rounded-lg px-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
+        >
+          {t('archive.today')}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const { t, categoryLabel } = useI18n();
-  const { events, status, error, isDemo, lastUpdated, reload } = usePublicEvents();
+  const isArchive = mode === 'archive';
+  const live = usePublicEvents(!isArchive);
+  const [day, setDay] = useState(initialDay);
+  const archive = useArchivedEvents(day, isArchive);
+  const { events, status, error, isDemo, lastUpdated, reload } = isArchive
+    ? { ...archive, isDemo: false, lastUpdated: null }
+    : live;
+
+  // Keep the chosen day in the URL so an archive view can be shared.
+  useEffect(() => {
+    if (!isArchive) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('date', day);
+    window.history.replaceState(window.history.state, '', url);
+  }, [day, isArchive]);
   const { selectedId, focusRequest, select } = useMapSelection();
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim());
   const [mobilePane, setMobilePane] = useState<MobilePane>('map');
-  const { alerts, now: alertsNow } = useHfcAlerts();
+  const { alerts, now: alertsNow } = useHfcAlerts(!isArchive);
   const [alertFocus, setAlertFocus] = useState<{ id: string; nonce: number } | null>(null);
   const handleLocateAlert = useCallback((id: string) => {
     setMobilePane('map');
@@ -77,7 +136,7 @@ export function MapPage() {
       >
         {t('common.skipToContent')}
       </a>
-      <TopNav query={query} onQueryChange={setQuery} />
+      <TopNav query={query} onQueryChange={setQuery} mode={mode} />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(340px,380px)_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)_196px]">
         {/* Column 1 — live feed (inline-start: left in English, right in Hebrew) */}
@@ -102,6 +161,10 @@ export function MapPage() {
             alerts={alerts}
             alertsNow={alertsNow}
             onLocateAlert={handleLocateAlert}
+            title={isArchive ? t('archive.title') : undefined}
+            live={!isArchive}
+            toolbar={isArchive ? <ArchiveDayPicker day={day} onChange={setDay} /> : undefined}
+            emptyText={isArchive ? t('archive.empty') : undefined}
             footer={
               <div className="hidden border-t border-slate-200 p-3 lg:block [@media(max-height:720px)]:hidden dark:border-slate-800">
                 <AdSlot variant="square" slotId="feed-rectangle" />

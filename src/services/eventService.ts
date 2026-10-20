@@ -135,3 +135,22 @@ export async function fetchPublishedEvents(limit = 500): Promise<PublicEvent[]> 
     .map(mapPublishedEventRow)
     .filter((e): e is PublicEvent => e !== null);
 }
+
+/**
+ * Events that left the live map after their 24-hour lifetime (the public
+ * `archived_events` view), for one time window.
+ */
+export async function fetchArchivedEvents(fromIso: string, toIso: string, limit = 1000): Promise<PublicEvent[]> {
+  if (!supabase) throw new ServiceError('not_configured', 'Supabase is not configured.');
+  const { data, error } = await supabase
+    .from('archived_events')
+    .select(PUBLIC_EVENT_COLUMNS)
+    .gte('occurred_at', fromIso)
+    .lt('occurred_at', toIso)
+    .order('occurred_at', { ascending: false })
+    .limit(limit);
+  if (error) throw toServiceError(error);
+  return ((data ?? []) as unknown as PublishedEventRow[])
+    .map(mapPublishedEventRow)
+    .filter((e): e is PublicEvent => e !== null);
+}

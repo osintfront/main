@@ -37,6 +37,7 @@ export function App() {
           <BrowserRouter>
             <Routes>
               {/* Public — no login required */}
+              <Route path="/archive" element={<MapPage mode="archive" />} />
               <Route path="/" element={<MapPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, LogIn, Search, X } from 'lucide-react';
+import { History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
+import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useI18n } from '@/i18n';
@@ -9,9 +10,10 @@ import { LanguageToggle, ThemeToggle } from '@/components/common/Toggles';
 interface TopNavProps {
   query: string;
   onQueryChange: (value: string) => void;
+  mode?: 'live' | 'archive';
 }
 
-export function TopNav({ query, onQueryChange }: TopNavProps) {
+export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
   const { t } = useI18n();
   const { status } = useAuth();
   const { can } = usePermissions();
@@ -20,10 +22,30 @@ export function TopNav({ query, onQueryChange }: TopNavProps) {
   return (
     <header className="relative z-[1000] flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white/90 px-3 backdrop-blur sm:px-4 dark:border-slate-800 dark:bg-slate-950/90">
       <Logo />
-      <span className="hidden items-center gap-1.5 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-red-600 md:inline-flex dark:text-red-400">
-        <span className="size-1.5 rounded-full bg-red-500" aria-hidden />
-        {t('nav.live')}
-      </span>
+      <nav aria-label={t('nav.viewSwitch')} className="hidden shrink-0 items-center rounded-full bg-slate-100 p-0.5 md:inline-flex dark:bg-slate-900">
+        <Link
+          to="/"
+          aria-current={mode === 'live' ? 'page' : undefined}
+          className={cn(
+            'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold uppercase tracking-wider',
+            mode === 'live' ? 'bg-red-500/15 text-red-600 dark:text-red-400' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white',
+          )}
+        >
+          <span className={cn('size-1.5 rounded-full', mode === 'live' ? 'bg-red-500' : 'bg-slate-400')} aria-hidden />
+          {t('nav.live')}
+        </Link>
+        <Link
+          to="/archive"
+          aria-current={mode === 'archive' ? 'page' : undefined}
+          className={cn(
+            'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold uppercase tracking-wider',
+            mode === 'archive' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white',
+          )}
+        >
+          <History className="size-3" aria-hidden />
+          {t('nav.archive')}
+        </Link>
+      </nav>
 
       <form role="search" className="mx-auto w-full max-w-md min-w-0 flex-1" onSubmit={(e) => e.preventDefault()}>
         <label htmlFor="global-search" className="sr-only">
@@ -55,6 +77,14 @@ export function TopNav({ query, onQueryChange }: TopNavProps) {
       </form>
 
       <nav className="flex shrink-0 items-center gap-0.5" aria-label="Site">
+        <Link
+          to={mode === 'live' ? '/archive' : '/'}
+          aria-label={mode === 'live' ? t('nav.archive') : t('nav.live')}
+          title={mode === 'live' ? t('nav.archive') : t('nav.live')}
+          className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-500 md:hidden dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+        >
+          {mode === 'live' ? <History className="size-4" aria-hidden /> : <Radio className="size-4 text-red-500" aria-hidden />}
+        </Link>
         <LanguageToggle />
         <ThemeToggle />
         {showAdmin ? (

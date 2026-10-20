@@ -4,7 +4,7 @@ import { useI18n } from '@/i18n';
 import { alertNames, formatCountdown, HFC_CATEGORY, threatInfo, zoneHeadline } from '@/config/hfcThreats';
 import type { HfcAlert } from '@/types/hfcAlert';
 import { formatEventTime, formatRelative } from '@/utils/time';
-import { CategoryBadge } from '@/components/common/Badges';
+import { BreakingBadge, CategoryBadge } from '@/components/common/Badges';
 
 interface AlertCardProps {
   alert: HfcAlert;
@@ -40,6 +40,7 @@ function AlertCardImpl({ alert, now, onLocate }: AlertCardProps) {
           </span>
           {formatRelative(alert.startedAt, locale, t('time.justNow'), now)}
         </time>
+        <BreakingBadge />
         <span className="ms-auto inline-flex items-center gap-1 rounded-md bg-white/70 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-red-700 tabular-nums ring-1 ring-red-200 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-500/30">
           <Timer className="size-3" aria-hidden />
           <span title={t('hfc.clearsHint')}>{t('hfc.clearsIn', { time: formatCountdown(remaining) })}</span>

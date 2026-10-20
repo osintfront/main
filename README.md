@@ -29,6 +29,7 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261019000005_location_resolution.sql
    supabase/migrations/20261019000006_location_refinement.sql
    supabase/migrations/20261020000007_home_front_alerts.sql
+   supabase/migrations/20261020000008_event_lifecycle_and_manual_alerts.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.
@@ -132,6 +133,11 @@ Everything provider-specific is in `src/config/map.ts` and `src/components/map/b
 - **Merging:** an alert joins a live cluster of the **same threat type** when it is in an area already in the cluster or within **15 km** of it, and within the cluster's timer. Each alert restarts the timer; the cluster disappears **10 minutes after its last alert**. An alert that touches two live clusters merges them. Settings live in `app_settings.hfc_alerts` (`ttl_minutes`, `merge_km`, `include_drills`, `enabled`).
 - **Public site:** reads the `active_hfc_alerts` view; a Realtime "pulse" (`hfc_pulse`) triggers an immediate refresh, with a 15 s poll as fallback. Alerts show as pulsing polygons coloured by threat with a siren pin, a "Red alert" banner on the map, cards with a countdown pinned at the top of the feed, and a "Home Front Command Alerts" category in the legend.
 - **Admin → Settings:** turn the feature on/off and see when the feed was last checked successfully.
+
+### Event lifetime, archive and manual red alerts (migration 0008)
+- **24-hour live map:** a pg_cron job (every minute, `expire_events()`) moves published events to `archived` 24 hours after their event time (`app_settings.event_lifetime.hours`) and stamps `expired_at`. Red-alert events expire 10 minutes after publication.
+- **Public archive** at `/archive?date=YYYY-MM-DD` (Live | Archive switch in the top bar): the `archived_events` view lists only events that expired automatically — never ones staff archived by hand.
+- **Manual red alerts:** an event in the *Home Front Command Alerts* category is matched to alert areas by name (Hebrew/English/Arabic/Russian, with Hebrew prefix letters, cities split into sub-areas, gazetteer aliases such as Akko → Acre) or, failing that, by its pin. On publish it feeds the same clusters as the live feed (threat guessed from the text), so it shows as the official polygon instead of a pin. Red-alert events are always breaking.
 
 ## Next phases
 - **Phase 3:** automatic location extraction from free report text (place-name resolution already exists).

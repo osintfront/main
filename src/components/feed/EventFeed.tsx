@@ -26,6 +26,11 @@ interface EventFeedProps {
   alerts?: HfcAlert[];
   alertsNow?: number;
   onLocateAlert?: (id: string) => void;
+  /** Archive mode: different heading, no live indicator, a toolbar (day picker). */
+  title?: string;
+  live?: boolean;
+  toolbar?: ReactNode;
+  emptyText?: string;
   /** Docked under the list on desktop. */
   footer?: ReactNode;
   /** Shown between cards on phones/tablets instead of the docked footer. */
@@ -78,6 +83,10 @@ export function EventFeed({
   alerts = [],
   alertsNow,
   onLocateAlert,
+  title,
+  live = true,
+  toolbar,
+  emptyText,
 }: EventFeedProps) {
   const { t, locale } = useI18n();
   const now = useNow();
@@ -94,12 +103,14 @@ export function EventFeed({
   return (
     <section aria-labelledby="feed-heading" className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-        <span className="relative flex size-2.5" aria-hidden>
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" />
-          <span className="relative inline-flex size-2.5 rounded-full bg-red-500" />
-        </span>
+        {live ? (
+          <span className="relative flex size-2.5" aria-hidden>
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-red-500" />
+          </span>
+        ) : null}
         <h2 id="feed-heading" className="text-sm font-bold uppercase tracking-wide text-slate-900 dark:text-white">
-          {t('feed.title')}
+          {title ?? t('feed.title')}
         </h2>
         <span className="text-xs font-medium text-slate-500 dark:text-slate-400" aria-live="polite">
           {status === 'ready' ? t('feed.count', { count: events.length }) : ''}
@@ -111,13 +122,14 @@ export function EventFeed({
           >
             {t('feed.demoBadge')}
           </span>
-        ) : lastUpdated ? (
+        ) : live && lastUpdated ? (
           <span className="ms-auto text-[11px] text-slate-400 dark:text-slate-500">
             {t('feed.updated', { time: formatRelative(lastUpdated.toISOString(), locale, t('time.justNow'), now) })}
           </span>
         ) : null}
       </div>
 
+      {toolbar ? <div className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">{toolbar}</div> : null}
       <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {alerts.length > 0 ? (
           <section aria-labelledby="hfc-heading" className="mb-4">
@@ -157,7 +169,7 @@ export function EventFeed({
             <div>
               <p className="text-sm font-semibold text-slate-900 dark:text-white">{t('feed.emptyTitle')}</p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {query ? t('feed.emptySearch', { query }) : t('feed.emptyNone')}
+                {query ? t('feed.emptySearch', { query }) : (emptyText ?? t('feed.emptyNone'))}
               </p>
             </div>
             {query ? (

@@ -13,7 +13,7 @@ interface UseHfcAlerts {
   now: number;
 }
 
-export function useHfcAlerts(): UseHfcAlerts {
+export function useHfcAlerts(enabled = true): UseHfcAlerts {
   const [all, setAll] = useState<HfcAlert[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const inFlight = useRef(false);
@@ -41,7 +41,10 @@ export function useHfcAlerts(): UseHfcAlerts {
   }, []);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured || !enabled) {
+      setAll([]);
+      return;
+    }
     void load();
     const unsubscribe = subscribeHfcPulse(() => void load());
     const timer = window.setInterval(() => {
@@ -56,7 +59,7 @@ export function useHfcAlerts(): UseHfcAlerts {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [load]);
+  }, [load, enabled]);
 
   // Second-by-second clock only while something is on the map.
   useEffect(() => {

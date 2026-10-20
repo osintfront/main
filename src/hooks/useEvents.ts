@@ -19,7 +19,7 @@ interface UsePublicEvents {
   reload: () => void;
 }
 
-export function usePublicEvents(): UsePublicEvents {
+export function usePublicEvents(enabled = true): UsePublicEvents {
   const isDemo = !isSupabaseConfigured;
   const [events, setEvents] = useState<PublicEvent[]>(() => (isDemo ? buildDemoEvents() : []));
   const [status, setStatus] = useState<LoadStatus>(isDemo ? 'ready' : 'loading');
@@ -54,6 +54,7 @@ export function usePublicEvents(): UsePublicEvents {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     void load(false);
     if (isDemo) return;
     const timer = window.setInterval(() => {
@@ -67,7 +68,7 @@ export function usePublicEvents(): UsePublicEvents {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [isDemo, load]);
+  }, [isDemo, load, enabled]);
 
   const reload = useCallback(() => void load(false), [load]);
 
