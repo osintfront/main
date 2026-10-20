@@ -12,9 +12,10 @@ interface EventCardProps {
   selected: boolean;
   now: number;
   onLocate: (id: string) => void;
+  isNew?: boolean;
 }
 
-function EventCardImpl({ event, selected, now, onLocate }: EventCardProps) {
+function EventCardImpl({ event, selected, now, onLocate, isNew = false }: EventCardProps) {
   const { t, locale, lang } = useI18n();
   const title = event.translations[lang]?.title || event.title;
   const description = event.translations[lang]?.description || event.description;
@@ -34,6 +35,7 @@ function EventCardImpl({ event, selected, now, onLocate }: EventCardProps) {
       onClick={handleCardClick}
       style={{ '--card-accent': event.category.color } as CSSProperties}
       className={cn(
+        isNew && 'ofm-card--new',
         'ofm-card group relative cursor-pointer rounded-xl border bg-white p-3.5 transition-[background-color,border-color,box-shadow] duration-150',
         'dark:bg-slate-900/70',
         selected
@@ -53,6 +55,9 @@ function EventCardImpl({ event, selected, now, onLocate }: EventCardProps) {
           </span>
           {formatRelative(event.occurredAt, locale, t('time.justNow'), now)}
         </time>
+        {isNew ? (
+          <span className="rounded-md bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{t('feed.new')}</span>
+        ) : null}
         {event.isBreaking ? <BreakingBadge /> : null}
       </header>
 

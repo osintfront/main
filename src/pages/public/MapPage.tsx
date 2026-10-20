@@ -27,6 +27,8 @@ function matchesQuery(event: PublicEvent, needle: string, categoryName: string):
     .every((word) => haystack.includes(word));
 }
 
+const NO_IDS: ReadonlySet<string> = new Set();
+
 function initialDay(): string {
   const fromUrl = new URLSearchParams(window.location.search).get('date');
   return isValidDay(fromUrl) ? fromUrl : toDayString(new Date());
@@ -77,8 +79,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const live = usePublicEvents(!isArchive);
   const [day, setDay] = useState(initialDay);
   const archive = useArchivedEvents(day, isArchive);
-  const { events, status, error, isDemo, lastUpdated, reload } = isArchive
-    ? { ...archive, isDemo: false, lastUpdated: null }
+  const { events, status, error, isDemo, lastUpdated, reload, newIds } = isArchive
+    ? { ...archive, isDemo: false, lastUpdated: null, newIds: NO_IDS }
     : live;
 
   // Keep the chosen day in the URL so an archive view can be shared.
@@ -158,6 +160,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             onRetry={reload}
             onClearQuery={() => setQuery('')}
             onLocate={handleLocate}
+            newIds={newIds}
             alerts={alerts}
             alertsNow={alertsNow}
             onLocateAlert={handleLocateAlert}

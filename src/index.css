@@ -393,3 +393,22 @@
 .dark .ofm-popup__hfc-clear {
   color: var(--color-red-400);
 }
+
+/* Event that just arrived by push: a short glow, then a calm outline. */
+.ofm-card--new {
+  border-color: var(--color-sky-400);
+  animation: ofm-new-glow 2.4s ease-out 2;
+}
+@keyframes ofm-new-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgb(14 165 233 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgb(14 165 233 / 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ofm-card--new {
+    animation: none;
+  }
+}

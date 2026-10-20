@@ -30,6 +30,7 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261019000006_location_refinement.sql
    supabase/migrations/20261020000007_home_front_alerts.sql
    supabase/migrations/20261020000008_event_lifecycle_and_manual_alerts.sql
+   supabase/migrations/20261020000009_events_realtime_pulse.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.
@@ -138,6 +139,9 @@ Everything provider-specific is in `src/config/map.ts` and `src/components/map/b
 - **24-hour live map:** a pg_cron job (every minute, `expire_events()`) moves published events to `archived` 24 hours after their event time (`app_settings.event_lifetime.hours`) and stamps `expired_at`. Red-alert events expire 10 minutes after publication.
 - **Public archive** at `/archive?date=YYYY-MM-DD` (Live | Archive switch in the top bar): the `archived_events` view lists only events that expired automatically — never ones staff archived by hand.
 - **Manual red alerts:** an event in the *Home Front Command Alerts* category is matched to alert areas by name (Hebrew/English/Arabic/Russian, with Hebrew prefix letters, cities split into sub-areas, gazetteer aliases such as Akko → Acre) or, failing that, by its pin. On publish it feeds the same clusters as the live feed (threat guessed from the text), so it shows as the official polygon instead of a pin. Red-alert events are always breaking.
+
+### Push updates (migration 0009)
+Every change that affects the public map (publish, edit while published, expiry to the archive, delete) bumps the one-row `events_pulse` table; red alerts bump `hfc_pulse`. The site listens to both over Supabase Realtime and refetches immediately, so visitors never need to refresh. Newly arrived events are highlighted with a "New" badge for 90 seconds. A 60-second poll remains as a safety net.
 
 ## Next phases
 - **Phase 3:** automatic location extraction from free report text (place-name resolution already exists).

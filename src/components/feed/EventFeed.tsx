@@ -22,6 +22,8 @@ interface EventFeedProps {
   onRetry: () => void;
   onClearQuery: () => void;
   onLocate: (id: string) => void;
+  /** Events that just arrived by push — briefly highlighted. */
+  newIds?: ReadonlySet<string>;
   /** Active Home Front Command alerts, pinned above the events. */
   alerts?: HfcAlert[];
   alertsNow?: number;
@@ -78,6 +80,7 @@ export function EventFeed({
   onRetry,
   onClearQuery,
   onLocate,
+  newIds,
   footer,
   inlineAd,
   alerts = [],
@@ -183,7 +186,7 @@ export function EventFeed({
             {events.map((event, index) => (
               <Fragment key={event.id}>
                 <li>
-                  <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} />
+                  <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} />
                 </li>
                 {inlineAd && index === Math.min(1, events.length - 1) ? <li className="lg:hidden">{inlineAd}</li> : null}
               </Fragment>

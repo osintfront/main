@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { AlertGeometry, HfcAlert } from '@/types/hfcAlert';
 import { ServiceError, toServiceError } from './serviceError';
+import { subscribeToPulse } from './realtime';
 
 /** Columns of the public `active_hfc_alerts` view (only clusters still on their 10-minute timer). */
 const COLUMNS =
@@ -75,18 +76,7 @@ export async function fetchActiveHfcAlerts(): Promise<HfcAlert[]> {
   return ((data ?? []) as unknown as Row[]).map(mapRow);
 }
 
-/**
- * Calls `onChange` whenever the server records a new alert (Realtime on the
- * one-row `hfc_pulse` table). Returns an unsubscribe function.
- */
+/** Calls `onChange` whenever the server records a new alert. Returns an unsubscribe function. */
 export function subscribeHfcPulse(onChange: () => void): () => void {
-  const client = supabase;
-  if (!client) return () => {};
-  const channel = client
-    .channel('hfc-pulse')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'hfc_pulse' }, () => onChange())
-    .subscribe();
-  return () => {
-    void client.removeChannel(channel);
-  };
+  return subscribeToPulse('hfc_pulse', onChange, 150);
 }
