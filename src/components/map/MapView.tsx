@@ -6,7 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useI18n } from '@/i18n';
 import type { FocusRequest } from '@/hooks/useMapSelection';
 import type { PublicEvent } from '@/types/event';
-import type { HfcAlert } from '@/types/hfcAlert';
+import type { HfcAlert, HfcShape } from '@/types/hfcAlert';
 import { alertNames, HFC_CATEGORY, threatInfo, zoneHeadline } from '@/config/hfcThreats';
 import { formatEventTime } from '@/utils/time';
 import { buildHfcPopup } from './hfcPopup';
@@ -24,6 +24,8 @@ interface MapViewProps {
   /** Active Home Front Command alerts, drawn as polygons under the event pins. */
   alerts?: HfcAlert[];
   alertFocus?: { id: string; nonce: number } | null;
+  /** Neighbouring alert polygons merged for display (null: draw each alert's own). */
+  alertShapes?: HfcShape[] | null;
 }
 
 interface AlertEntry {
@@ -46,7 +48,7 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
-export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onViewEvent, alerts = NO_ALERTS, alertFocus = null }: MapViewProps) {
+export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onViewEvent, alerts = NO_ALERTS, alertFocus = null, alertShapes = null }: MapViewProps) {
   const { theme } = useTheme();
   const { t, dir, locale, lang, categoryLabel } = useI18n();
 
@@ -219,10 +221,12 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
             className: 'ofm-hfc-area',
           },
         });
-        shape.bindTooltip(`${threatLabel} · ${zoneHeadline(zones, areas, 2)}`, { sticky: true, direction: 'top', className: 'ofm-hfc-tooltip' });
-        shape.bindPopup(popup, popupOptions);
-        shape.addTo(layer);
         bounds = shape.getBounds();
+        if (!alertShapes) {
+          shape.bindTooltip(`${threatLabel} · ${zoneHeadline(zones, areas, 2)}`, { sticky: true, direction: 'top', className: 'ofm-hfc-tooltip' });
+          shape.bindPopup(popup, popupOptions);
+          shape.addTo(layer);
+        }
       }
 
       // A siren pin on every alerted place (the polygon shows their combined area).
@@ -249,8 +253,28 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
       if (!bounds && points.length) bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
       alertEntriesRef.current.set(alert.id, { marker, bounds });
     }
+
+    // Merged shapes: one continuous polygon over touching areas of the same threat.
+    if (alertShapes) {
+      const byId = new Map(alerts.map((a) => [a.id, a]));
+      for (const sh of alertShapes) {
+        const threat = threatInfo(sh.threat);
+        const names = sh.alertIds
+          .map((id) => byId.get(id))
+          .filter((a): a is HfcAlert => !!a)
+          .map((a) => zoneHeadline(alertNames(a, lang).zones, alertNames(a, lang).areas, 1));
+        const poly = L.geoJSON(sh.geometry, {
+          style: { color: threat.color, weight: 2, opacity: 0.95, fillColor: threat.color, fillOpacity: 0.28, className: 'ofm-hfc-area' },
+        });
+        poly.bindTooltip(`${t(`hfc.threat.${threat.key}`)} · ${names.join(', ')}`, { sticky: true, direction: 'top', className: 'ofm-hfc-tooltip' });
+        // Clicking the shape opens the popup of the alert closest to the top of the list.
+        const first = sh.alertIds.map((id) => alertEntriesRef.current.get(id)?.marker).find(Boolean);
+        if (first) poly.on('click', () => first.openPopup());
+        poly.addTo(layer);
+      }
+    }
     setAlertsVersion((v) => v + 1);
-  }, [alerts, t, dir, locale, lang, categoryLabel]);
+  }, [alerts, alertShapes, t, dir, locale, lang, categoryLabel]);
 
   // 4c. Alert card "Locate": fit the polygon and open its popup.
   useEffect(() => {

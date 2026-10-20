@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isSupabaseConfigured } from '@/integrations/supabase/client';
-import { fetchActiveHfcAlerts, subscribeHfcPulse } from '@/services/hfcAlertService';
-import type { HfcAlert } from '@/types/hfcAlert';
+import { fetchActiveHfcAlerts, fetchActiveHfcShapes, subscribeHfcPulse } from '@/services/hfcAlertService';
+import type { HfcAlert, HfcShape } from '@/types/hfcAlert';
 
 /** Fallback poll; new alerts normally arrive through Realtime within a second or two. */
 const POLL_MS = 15_000;
@@ -11,10 +11,13 @@ interface UseHfcAlerts {
   alerts: HfcAlert[];
   /** Ticks every second while alerts are active (for countdowns). */
   now: number;
+  /** Touching polygons merged for display; null = not available (draw each alert's own polygon). */
+  shapes: HfcShape[] | null;
 }
 
 export function useHfcAlerts(enabled = true): UseHfcAlerts {
   const [all, setAll] = useState<HfcAlert[]>([]);
+  const [shapes, setShapes] = useState<HfcShape[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const inFlight = useRef(false);
   const again = useRef(false);
@@ -27,7 +30,13 @@ export function useHfcAlerts(enabled = true): UseHfcAlerts {
     }
     inFlight.current = true;
     try {
-      setAll(await fetchActiveHfcAlerts());
+      const [nextAlerts, nextShapes] = await Promise.all([
+        fetchActiveHfcAlerts(),
+        // Shapes are cosmetic: if they fail, each alert draws its own polygon.
+        fetchActiveHfcShapes().catch(() => null),
+      ]);
+      setAll(nextAlerts);
+      setShapes(nextShapes);
       setNow(Date.now());
     } catch {
       // Keep what is on screen; the next pulse or poll retries.
@@ -43,6 +52,7 @@ export function useHfcAlerts(enabled = true): UseHfcAlerts {
   useEffect(() => {
     if (!isSupabaseConfigured || !enabled) {
       setAll([]);
+      setShapes(null);
       return;
     }
     void load();
@@ -80,5 +90,20 @@ export function useHfcAlerts(enabled = true): UseHfcAlerts {
     [activeKey],
   );
 
-  return { alerts, now };
+  // When an area's timer runs out, refetch so merged shapes shrink with it.
+  const activeCount = alerts.length;
+  const prevCount = useRef(activeCount);
+  useEffect(() => {
+    if (activeCount < prevCount.current) void load();
+    prevCount.current = activeCount;
+  }, [activeCount, load]);
+
+  // Only shapes that still contain an active alert.
+  const visibleShapes = useMemo(() => {
+    if (!shapes) return null;
+    const ids = new Set(alerts.map((a) => a.id));
+    return shapes.filter((sh) => sh.alertIds.some((id) => ids.has(id)));
+  }, [shapes, alerts]);
+
+  return { alerts, now, shapes: visibleShapes };
 }

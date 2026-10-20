@@ -33,6 +33,7 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261020000009_events_realtime_pulse.sql
    supabase/migrations/20261020000010_alert_area_pins_and_manual_timer.sql
    supabase/migrations/20261020000011_one_event_per_alert_area.sql
+   supabase/migrations/20261020000012_merged_alert_shapes.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.
@@ -134,6 +135,7 @@ Everything provider-specific is in `src/config/map.ts` and `src/components/map/b
 - **Polling:** pg_cron calls `hfc_ingest('live')` every 5 s and `hfc_ingest('history')` every 20 s (safety net). Every alert is stored once in `hfc_alerts` (unique per area + threat + time).
 - **Polygons:** `hfc_areas` holds all ≈1,450 alert areas with their official polygons (refreshed weekly by `hfc_sync_areas()`), in PostGIS.
 - **One event per alert area** (migration 0011): every alert area is its own event with its own polygon, pin, card and timer. A new alert of the same threat in the same area restarts that area's timer; the event disappears **10 minutes after its last alert**. Neighbouring areas are not merged (`app_settings.hfc_alerts.merge_km = 0`; a value above 0 turns spatial merging back on). Other settings: `ttl_minutes`, `include_drills`, `enabled`.
+- **Merged shapes (display only, migration 0012):** the `active_hfc_shapes()` function unions the polygons of active alerts of the same threat that border each other, so neighbouring areas are drawn as one continuous polygon while their events, pins, cards and timers stay separate. When an area expires it drops out of the shape.
 - **Public site:** reads the `active_hfc_alerts` view; a Realtime "pulse" (`hfc_pulse`) triggers an immediate refresh, with a 15 s poll as fallback. Alerts show as pulsing polygons coloured by threat with a siren pin, a "Red alert" banner on the map, cards with a countdown pinned at the top of the feed, and a "Home Front Command Alerts" category in the legend.
 - **Admin → Settings:** turn the feature on/off and see when the feed was last checked successfully.
 

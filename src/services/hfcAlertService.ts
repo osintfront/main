@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { AlertGeometry, HfcAlert } from '@/types/hfcAlert';
+import type { AlertGeometry, HfcAlert, HfcShape } from '@/types/hfcAlert';
 import { ServiceError, toServiceError } from './serviceError';
 import { subscribeToPulse } from './realtime';
 
@@ -89,6 +89,19 @@ export async function fetchActiveHfcAlerts(): Promise<HfcAlert[]> {
     .limit(100);
   if (error) throw toServiceError(error);
   return ((data ?? []) as unknown as Row[]).map(mapRow);
+}
+
+/** Merged polygons of neighbouring active alerts (display only). */
+export async function fetchActiveHfcShapes(): Promise<HfcShape[]> {
+  if (!supabase) throw new ServiceError('not_configured', 'Supabase is not configured.');
+  const { data, error } = await supabase.rpc('active_hfc_shapes');
+  if (error) throw toServiceError(error);
+  if (!Array.isArray(data)) return [];
+  return (data as { threat?: unknown; geojson?: unknown; alert_ids?: unknown }[]).flatMap((r) => {
+    const geometry = toGeometry(r.geojson);
+    if (!geometry) return [];
+    return [{ threat: typeof r.threat === 'number' ? r.threat : 8, geometry, alertIds: strings(r.alert_ids) }];
+  });
 }
 
 /** Calls `onChange` whenever the server records a new alert. Returns an unsubscribe function. */

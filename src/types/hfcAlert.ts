@@ -26,3 +26,13 @@ export interface HfcAlert {
   /** One point per alerted place, so each place gets its own pin. */
   areaPoints: { name: string; nameEn: string | null; lat: number; lng: number }[];
 }
+
+/**
+ * Display-only union of touching alert polygons of the same threat. The
+ * alerts inside stay separate events (own card, pin and timer).
+ */
+export interface HfcShape {
+  threat: number;
+  geometry: AlertGeometry;
+  alertIds: string[];
+}

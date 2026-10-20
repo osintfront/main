@@ -94,7 +94,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim());
   const [mobilePane, setMobilePane] = useState<MobilePane>('map');
-  const { alerts, now: alertsNow } = useHfcAlerts(!isArchive);
+  const { alerts, now: alertsNow, shapes: alertShapes } = useHfcAlerts(!isArchive);
   const [alertFocus, setAlertFocus] = useState<{ id: string; nonce: number } | null>(null);
   const handleLocateAlert = useCallback((id: string) => {
     setMobilePane('map');
@@ -194,6 +194,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               onViewEvent={handleViewEvent}
               alerts={alerts}
               alertFocus={alertFocus}
+              alertShapes={alertShapes}
             />
           </div>
         </main>
