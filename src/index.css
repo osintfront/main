@@ -412,3 +412,21 @@
     animation: none;
   }
 }
+
+
+/* Event photo / video inside the map popup */
+.ofm-popup__media:empty {
+  display: none;
+}
+.ofm-popup__media {
+  margin: 6px 0 2px;
+}
+.ofm-popup__image,
+.ofm-popup__video {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #000;
+}
