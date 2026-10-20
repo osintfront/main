@@ -12,6 +12,7 @@ import { TopNav } from '@/components/layout/TopNav';
 import { EventFeed } from '@/components/feed/EventFeed';
 import { MapView } from '@/components/map/MapView';
 import { CategoryLegend } from '@/components/map/CategoryLegend';
+import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
 
 type MobilePane = 'map' | 'feed';
 
@@ -122,10 +123,22 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const handleMarkerSelect = useCallback((id: string) => select(id, 'map'), [select]);
 
   // Popup "View event": show the full card (switches to the feed on phones).
+  // Popup "Event details" / card "Read more": open the full event window.
+  const [detailsId, setDetailsId] = useState<string | null>(null);
   const handleViewEvent = useCallback(
     (id: string) => {
-      setMobilePane('feed');
       select(id, 'popup');
+      setDetailsId(id);
+    },
+    [select],
+  );
+  const detailsEvent = detailsId ? events.find((e) => e.id === detailsId) ?? null : null;
+  const closeDetails = useCallback(() => setDetailsId(null), []);
+  const locateFromDetails = useCallback(
+    (id: string) => {
+      setDetailsId(null);
+      setMobilePane('map');
+      select(id, 'feed');
     },
     [select],
   );
@@ -161,6 +174,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             onClearQuery={() => setQuery('')}
             onLocate={handleLocate}
             newIds={newIds}
+            onOpenDetails={handleViewEvent}
             alerts={alerts}
             alertsNow={alertsNow}
             onLocateAlert={handleLocateAlert}
@@ -234,6 +248,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           ))}
         </div>
       </nav>
+      {detailsEvent ? <EventDetailsDialog event={detailsEvent} onClose={closeDetails} onLocate={locateFromDetails} /> : null}
     </div>
   );
 }

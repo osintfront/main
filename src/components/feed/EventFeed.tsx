@@ -24,6 +24,7 @@ interface EventFeedProps {
   onLocate: (id: string) => void;
   /** Events that just arrived by push — briefly highlighted. */
   newIds?: ReadonlySet<string>;
+  onOpenDetails?: (id: string) => void;
   /** Active Home Front Command alerts, pinned above the events. */
   alerts?: HfcAlert[];
   alertsNow?: number;
@@ -81,6 +82,7 @@ export function EventFeed({
   onClearQuery,
   onLocate,
   newIds,
+  onOpenDetails,
   footer,
   inlineAd,
   alerts = [],
@@ -186,7 +188,7 @@ export function EventFeed({
             {events.map((event, index) => (
               <Fragment key={event.id}>
                 <li>
-                  <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} />
+                  <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} onOpenDetails={onOpenDetails} />
                 </li>
                 {inlineAd && index === Math.min(1, events.length - 1) ? <li className="lg:hidden">{inlineAd}</li> : null}
               </Fragment>

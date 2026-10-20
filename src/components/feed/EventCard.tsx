@@ -14,9 +14,11 @@ interface EventCardProps {
   now: number;
   onLocate: (id: string) => void;
   isNew?: boolean;
+  /** Opens the full event window (shown when the text is clamped). */
+  onOpenDetails?: (id: string) => void;
 }
 
-function EventCardImpl({ event, selected, now, onLocate, isNew = false }: EventCardProps) {
+function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDetails }: EventCardProps) {
   const { t, locale, lang } = useI18n();
   const title = event.translations[lang]?.title || event.title;
   const description = event.translations[lang]?.description || event.description;
@@ -74,6 +76,15 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false }: EventC
         <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300" dir="auto">
           {description}
         </p>
+      ) : null}
+      {onOpenDetails && (description.length > 150 || (description.match(/\n/g)?.length ?? 0) >= 2) ? (
+        <button
+          type="button"
+          onClick={() => onOpenDetails(event.id)}
+          className="mt-1 text-xs font-semibold text-sky-700 hover:underline focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-sky-400"
+        >
+          {t('details.readMore')}
+        </button>
       ) : null}
 
       <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
