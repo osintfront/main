@@ -34,6 +34,7 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261020000010_alert_area_pins_and_manual_timer.sql
    supabase/migrations/20261020000011_one_event_per_alert_area.sql
    supabase/migrations/20261020000012_merged_alert_shapes.sql
+   supabase/migrations/20261020000013_event_sources_and_text_cleanup.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.
@@ -146,6 +147,12 @@ Everything provider-specific is in `src/config/map.ts` and `src/components/map/b
 
 ### Push updates (migration 0009)
 Every change that affects the public map (publish, edit while published, expiry to the archive, delete) bumps the one-row `events_pulse` table; red alerts bump `hfc_pulse`. The site listens to both over Supabase Realtime and refetches immediately, so visitors never need to refresh. Newly arrived events are highlighted with a "New" badge for 90 seconds. A 60-second poll remains as a safety net.
+
+### WhatsApp ingest, duplicate reports and sources (migration 0013, `supabase/functions/whatsapp-ingest`)
+- The `whatsapp-ingest` Edge Function (fed by the Chrome extension) classifies messages with Claude. A report of the **same incident within ±30 minutes** is not a new event: if it adds nothing concrete, only its source is added to the event's `sources` list (link when the message has one, otherwise the source name); if it adds concrete facts, only those facts are appended as "עדכון (HH:MM): …".
+- The event window shows a **Sources** section (first report + further sources); cards show "+N sources".
+- Report text is normalised on every write (`normalize_report_text`): trailing spaces/direction marks removed, runs of blank lines collapsed to one. Existing events were cleaned.
+- Deploy the function with `verify_jwt = false` (it checks its own ingest token).
 
 ## Next phases
 - **Phase 3:** automatic location extraction from free report text (place-name resolution already exists).

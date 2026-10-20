@@ -29,6 +29,13 @@ export function isApproximateLocation(p: LocationPrecision | null | undefined): 
   return p === 'region' || p === 'country';
 }
 
+/** A further outlet/channel that reported the same event (link when known, else just the name). */
+export interface EventSource {
+  name: string;
+  url: string | null;
+  at: string | null;
+}
+
 /** Optional per-language overrides, prepared for future translated titles/summaries. */
 export type EventTranslations = Partial<Record<string, { title?: string; description?: string }>>;
 
@@ -50,6 +57,8 @@ export interface PublicEvent {
   city: string;
   sourceName: string | null;
   sourceUrl: string | null;
+  /** Additional sources for the same event. */
+  sources?: EventSource[];
   sourceType: SourceType;
   occurredAt: string;
   publishedAt: string | null;

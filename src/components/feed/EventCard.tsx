@@ -127,6 +127,16 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
             </span>
           )
         ) : null}
+        {event.sources && event.sources.length ? (
+          <button
+            type="button"
+            onClick={() => onOpenDetails?.(event.id)}
+            className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            title={t('details.moreSourcesHint')}
+          >
+            {t('details.moreSources', { count: event.sources.length })}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => onLocate(event.id)}

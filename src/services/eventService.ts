@@ -1,7 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import { FALLBACK_CATEGORY, safeColor } from '@/data/categoryRegistry';
-import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type LocationPrecision, type PublicEvent, type Severity, type SourceType } from '@/types/event';
+import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type EventSource, type LocationPrecision, type PublicEvent, type Severity, type SourceType } from '@/types/event';
 import { safeExternalUrl } from '@/utils/url';
+import { cleanReportText } from '@/utils/text';
 import { ServiceError, toServiceError } from './serviceError';
 
 /**
@@ -18,6 +19,7 @@ const PUBLIC_EVENT_COLUMNS = [
   'longitude',
   'location_name',
   'location_precision',
+  'sources',
   'country',
   'region',
   'city',
@@ -46,6 +48,7 @@ interface PublishedEventRow {
   longitude: number | string | null;
   location_name: string | null;
   location_precision?: string | null;
+  sources?: unknown;
   country: string | null;
   region: string | null;
   city: string | null;
@@ -79,6 +82,19 @@ function asSourceType(value: string | null): SourceType {
   return (SOURCE_TYPES as readonly string[]).includes(value ?? '') ? (value as SourceType) : 'other';
 }
 
+/** Validate the sources list from the database; only http(s) links pass. */
+function toSources(v: unknown): EventSource[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((s) => {
+    if (!s || typeof s !== 'object') return [];
+    const o = s as { name?: unknown; url?: unknown; at?: unknown };
+    const name = typeof o.name === 'string' ? o.name.trim().slice(0, 200) : '';
+    const url = typeof o.url === 'string' ? safeExternalUrl(o.url) : null;
+    if (!name && !url) return [];
+    return [{ name, url, at: typeof o.at === 'string' ? o.at : null }];
+  });
+}
+
 export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null {
   const latitude = toNumber(row.latitude);
   const longitude = toNumber(row.longitude);
@@ -99,7 +115,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
   return {
     id: row.id,
     title: row.title ?? '',
-    description: row.description ?? '',
+    description: cleanReportText(row.description ?? ''),
     severity: asSeverity(row.severity),
     latitude,
     longitude,
@@ -113,6 +129,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     sourceName: row.source_name,
     // Never pass an unvalidated URL to the UI.
     sourceUrl: safeExternalUrl(row.source_url),
+    sources: toSources(row.sources),
     sourceType: asSourceType(row.source_type),
     occurredAt: row.occurred_at,
     publishedAt: row.published_at,

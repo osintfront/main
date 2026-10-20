@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Bell, BellOff, History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
-import { useSoundSetting } from '@/hooks/useSoundSetting';
+import { useAudioReady, useSoundSetting } from '@/hooks/useSoundSetting';
 import { playChime, unlockAudio } from '@/lib/notifySound';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,8 +21,15 @@ export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
   const { can } = usePermissions();
   const showAdmin = status === 'signed_in' && can('dashboard.view');
   const sound = useSoundSetting();
+  const audioReady = useAudioReady();
+  const needsClick = !sound.muted && !audioReady;
   const toggleSound = () => {
     unlockAudio();
+    // Sound is on but the browser hasn't allowed it yet: this click enables it.
+    if (needsClick) {
+      window.setTimeout(() => playChime('event', { force: true }), 60);
+      return;
+    }
     const turningOn = sound.muted;
     sound.toggle();
     if (turningOn) window.setTimeout(() => playChime('event', { force: true }), 60); // preview
@@ -99,11 +106,12 @@ export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
             type="button"
             onClick={toggleSound}
             aria-pressed={sound.muted}
-            aria-label={sound.muted ? t('nav.soundOff') : t('nav.soundOn')}
-            title={sound.muted ? t('nav.soundOff') : t('nav.soundOn')}
-            className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+            aria-label={needsClick ? t('nav.soundEnable') : sound.muted ? t('nav.soundOff') : t('nav.soundOn')}
+            title={needsClick ? t('nav.soundEnable') : sound.muted ? t('nav.soundOff') : t('nav.soundOn')}
+            className="relative inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
           >
             {sound.muted ? <BellOff className="size-4" aria-hidden /> : <Bell className="size-4" aria-hidden />}
+            {needsClick ? <span className="absolute end-1.5 top-1.5 size-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-950" aria-hidden /> : null}
           </button>
         ) : null}
         <LanguageToggle />

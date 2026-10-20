@@ -38,3 +38,15 @@ export function useSoundSetting(): { muted: boolean; toggle: () => void } {
   const toggle = useCallback(() => setMuted(!isSoundMuted()), []);
   return { muted: value, toggle };
 }
+
+/** Whether the browser currently allows the chime to be heard. */
+export function useAudioReady(): boolean {
+  // Imported lazily to avoid a circular import at module load.
+  return useSyncExternalStore(audioSubscribe, audioSnapshot, () => false);
+}
+let audioSubscribe: (l: () => void) => () => void = () => () => undefined;
+let audioSnapshot: () => boolean = () => false;
+export function bindAudioState(subscribe: typeof audioSubscribe, snapshot: typeof audioSnapshot) {
+  audioSubscribe = subscribe;
+  audioSnapshot = snapshot;
+}

@@ -13,7 +13,7 @@ import { EventFeed } from '@/components/feed/EventFeed';
 import { MapView } from '@/components/map/MapView';
 import { CategoryLegend } from '@/components/map/CategoryLegend';
 import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
-import { playChime, unlockAudio } from '@/lib/notifySound';
+import { installAudioUnlock, playChime } from '@/lib/notifySound';
 
 type MobilePane = 'map' | 'feed';
 
@@ -99,15 +99,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const { alerts, now: alertsNow, shapes: alertShapes, ready: alertsReady } = useHfcAlerts(!isArchive);
 
   // Sound: browsers allow audio only after an interaction, so unlock on the first one.
-  useEffect(() => {
-    const unlock = () => unlockAudio();
-    window.addEventListener('pointerdown', unlock, { once: true });
-    window.addEventListener('keydown', unlock, { once: true });
-    return () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-    };
-  }, []);
+  useEffect(() => installAudioUnlock(), []);
 
   // Chime when a new event arrives by push (not on the first load).
   const heardEvents = useRef(new Set<string>());

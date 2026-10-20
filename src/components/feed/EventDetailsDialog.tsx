@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Crosshair, ExternalLink, MapPin, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
-import { formatDateTime, formatRelative } from '@/utils/time';
+import { formatDateTime, formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
 import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
@@ -101,6 +101,42 @@ export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDia
             <p className="text-sm text-slate-500 dark:text-slate-400">{t('details.noDescription')}</p>
           )}
           <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
+          {event.sources && event.sources.length ? (
+            <section aria-labelledby="event-sources-title" className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
+              <h3 id="event-sources-title" className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t('details.sources', { count: event.sources.length + (sourceLabel ? 1 : 0) })}
+              </h3>
+              <ul className="space-y-1.5 text-sm">
+                {sourceLabel ? (
+                  <li className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                    <span className="size-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
+                    {event.sourceUrl ? (
+                      <a href={event.sourceUrl} target="_blank" rel="noopener noreferrer nofollow" className="min-w-0 truncate text-sky-700 hover:underline dark:text-sky-400">
+                        <bdi>{sourceLabel}</bdi>
+                      </a>
+                    ) : (
+                      <bdi className="min-w-0 truncate">{sourceLabel}</bdi>
+                    )}
+                    <span className="shrink-0 text-xs text-slate-400">{t('details.firstReport')}</span>
+                  </li>
+                ) : null}
+                {event.sources.map((s, i) => (
+                  <li key={`${s.url ?? s.name}-${i}`} className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                    <span className="size-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
+                    {s.url ? (
+                      <a href={s.url} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex min-w-0 items-center gap-1 text-sky-700 hover:underline dark:text-sky-400">
+                        <bdi className="truncate">{s.name || hostnameOf(s.url)}</bdi>
+                        <ExternalLink className="size-3 shrink-0" aria-hidden />
+                      </a>
+                    ) : (
+                      <bdi className="min-w-0 truncate">{s.name}</bdi>
+                    )}
+                    {s.at ? <span className="shrink-0 font-mono text-xs text-slate-400 tabular-nums">{formatEventTime(s.at, locale)}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
 
         <footer className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-5 py-3 pb-[max(env(safe-area-inset-bottom),12px)] dark:border-slate-800">
