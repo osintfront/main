@@ -247,3 +247,6 @@ where e.status = 'archived'
   and e.latitude is not null
   and e.longitude is not null;
 grant select on public.archived_events to anon, authenticated;
+
+-- Visitors read events through the security-invoker views, which need column grants.
+grant select (locations) on public.events to anon;
