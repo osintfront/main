@@ -106,6 +106,8 @@ begin
 end;
 $$;
 
+revoke execute on function public.hfc_match_areas(text, text, numeric, numeric, text) from public, anon, authenticated;
+
 -- Threat type from the report text (defaults to rockets/missiles).
 create or replace function public.hfc_guess_threat(p_text text)
 returns integer
@@ -122,6 +124,8 @@ language sql immutable set search_path = '' as $$
   end
   from (select coalesce(p_text, '') as t) x;
 $$;
+
+revoke execute on function public.hfc_guess_threat(text) from public, anon, authenticated;
 
 -- ─── Lifecycle trigger (after location resolution, before the guards) ──
 create or replace function public.events_lifecycle()
