@@ -1,6 +1,7 @@
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { formatDateTime } from '@/utils/time';
 import { hostnameOf, safeExternalUrl } from '@/utils/url';
+import { loadEventMedia, toMediaView } from '@/services/eventMediaService';
 
 export interface PopupLabels {
   categoryLabel: string;
@@ -71,6 +72,38 @@ export function buildPopupContent(
     desc.dir = 'auto';
     root.append(desc);
   }
+
+  // Photo / video (filled in once loaded; most events have none).
+  const media = el('div', 'ofm-popup__media');
+  root.append(media);
+  void loadEventMedia(event.id).then((items) => {
+    if (!items.length) return;
+    const view = toMediaView(items);
+    const first = view.videos[0];
+    if (first) {
+      const v = el('video', 'ofm-popup__video');
+      v.src = first.video.url;
+      if (first.poster) v.poster = first.poster;
+      v.controls = true;
+      v.preload = 'none';
+      v.playsInline = true;
+      media.append(v);
+      return;
+    }
+    const still = view.images[0] ?? view.stills[0];
+    if (still) {
+      const a = el('a', 'ofm-popup__image-link');
+      a.href = still.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      const img = el('img', 'ofm-popup__image');
+      img.src = still.url;
+      img.alt = '';
+      img.loading = 'lazy';
+      a.append(img);
+      media.append(a);
+    }
+  });
 
   const footer = el('div', 'ofm-popup__footer');
   if (event.isVerified) footer.append(el('span', 'ofm-popup__verified', `✓ ${labels.verified}`));
