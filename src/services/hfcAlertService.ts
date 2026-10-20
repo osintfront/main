@@ -5,7 +5,7 @@ import { subscribeToPulse } from './realtime';
 
 /** Columns of the public `active_hfc_alerts` view (only clusters still on their 10-minute timer). */
 const COLUMNS =
-  'id,threat,started_at,last_alert_at,expires_at,areas,areas_en,zones_he,zones_en,alert_count,geojson,center_lat,center_lng';
+  'id,threat,started_at,last_alert_at,expires_at,areas,areas_en,zones_he,zones_en,alert_count,geojson,center_lat,center_lng,area_points';
 
 interface Row {
   id: string;
@@ -21,6 +21,7 @@ interface Row {
   geojson: unknown;
   center_lat: number | string | null;
   center_lng: number | string | null;
+  area_points?: unknown;
 }
 
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
@@ -46,6 +47,19 @@ function toGeometry(v: unknown): AlertGeometry | null {
   return null;
 }
 
+function toPoints(v: unknown): HfcAlert['areaPoints'] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((p) => {
+    if (!p || typeof p !== 'object') return [];
+    const o = p as { name?: unknown; name_en?: unknown; lat?: unknown; lng?: unknown };
+    const lat = Number(o.lat);
+    const lng = Number(o.lng);
+    if (typeof o.name !== 'string' || !Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return [];
+    return [{ name: o.name, nameEn: typeof o.name_en === 'string' ? o.name_en : null, lat, lng }];
+  });
+}
+
 function mapRow(r: Row): HfcAlert {
   const lat = num(r.center_lat);
   const lng = num(r.center_lng);
@@ -62,6 +76,7 @@ function mapRow(r: Row): HfcAlert {
     alertCount: r.alert_count ?? 0,
     geometry: toGeometry(r.geojson),
     center: lat !== null && lng !== null ? [lat, lng] : null,
+    areaPoints: toPoints(r.area_points),
   };
 }
 

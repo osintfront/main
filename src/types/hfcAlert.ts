@@ -23,4 +23,6 @@ export interface HfcAlert {
   alertCount: number;
   geometry: AlertGeometry | null;
   center: [number, number] | null;
+  /** One point per alerted place, so each place gets its own pin. */
+  areaPoints: { name: string; nameEn: string | null; lat: number; lng: number }[];
 }

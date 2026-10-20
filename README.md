@@ -31,6 +31,7 @@ With no `.env.local`, the public map runs on **five bundled demo events** (label
    supabase/migrations/20261020000007_home_front_alerts.sql
    supabase/migrations/20261020000008_event_lifecycle_and_manual_alerts.sql
    supabase/migrations/20261020000009_events_realtime_pulse.sql
+   supabase/migrations/20261020000010_alert_area_pins_and_manual_timer.sql
    ```
 4. **Lock down sign-ups:** Authentication → Sign In / Providers → turn off "Allow new users to sign up".
    Even if left on, an uninvited user gets an auth account with **no profile and no permissions**.

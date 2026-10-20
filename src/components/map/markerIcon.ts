@@ -25,6 +25,8 @@ interface MarkerIconOptions {
   severity: Severity;
   selected: boolean;
   breaking: boolean;
+  /** Smaller pin, for many alert places at once. */
+  compact?: boolean;
 }
 
 const iconCache = new Map<string, L.DivIcon>();
@@ -36,11 +38,11 @@ const iconCache = new Map<string, L.DivIcon>();
  */
 export function createMarkerIcon(opts: MarkerIconOptions): L.DivIcon {
   const color = safeColor(opts.color);
-  const key = `${opts.iconName}|${color}|${opts.severity}|${opts.selected ? 1 : 0}|${opts.breaking ? 1 : 0}`;
+  const key = `${opts.iconName}|${color}|${opts.severity}|${opts.selected ? 1 : 0}|${opts.breaking ? 1 : 0}|${opts.compact ? 1 : 0}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
 
-  const size = opts.selected ? 42 : 34;
+  const size = opts.compact ? 26 : opts.selected ? 42 : 34;
   const classes = [
     'ofm-pin',
     `ofm-pin--${opts.severity}`,
@@ -52,7 +54,7 @@ export function createMarkerIcon(opts: MarkerIconOptions): L.DivIcon {
 
   const icon = L.divIcon({
     className: 'ofm-pin-wrap',
-    html: `<div class="${classes}" style="--pin-color:${color};--pin-size:${size}px"><span class="ofm-pin__body"><span class="ofm-pin__glyph">${iconSvg(opts.iconName, opts.selected ? 18 : 15)}</span></span></div>`,
+    html: `<div class="${classes}" style="--pin-color:${color};--pin-size:${size}px"><span class="ofm-pin__body"><span class="ofm-pin__glyph">${iconSvg(opts.iconName, opts.compact ? 12 : opts.selected ? 18 : 15)}</span></span></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size],
     popupAnchor: [0, -size + 2],

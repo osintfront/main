@@ -27,9 +27,13 @@ interface MapViewProps {
 }
 
 interface AlertEntry {
+  /** Pin of the first alerted place — its popup opens when the card asks. */
   marker: L.Marker | null;
   bounds: L.LatLngBounds | null;
 }
+
+/** Above this many places, alert pins switch to the compact size. */
+const COMPACT_ALERT_PINS = 25;
 
 const NO_ALERTS: HfcAlert[] = [];
 
@@ -221,19 +225,28 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
         bounds = shape.getBounds();
       }
 
+      // A siren pin on every alerted place (the polygon shows their combined area).
+      const points = alert.areaPoints.length
+        ? alert.areaPoints
+        : alert.center
+          ? [{ name: zoneHeadline(zones, areas, 2), nameEn: null, lat: alert.center[0], lng: alert.center[1] }]
+          : [];
+      const compact = points.length > COMPACT_ALERT_PINS;
       let marker: L.Marker | null = null;
-      if (alert.center) {
-        marker = L.marker(alert.center, {
-          icon: createMarkerIcon({ iconName: 'Siren', color: threat.color, severity: 'critical', selected: false, breaking: true }),
-          title: `${threatLabel} — ${zoneHeadline(zones, areas, 2)}`,
-          alt: threatLabel,
+      for (const point of points) {
+        const placeName = lang === 'he' ? point.name : point.nameEn || point.name;
+        const pin = L.marker([point.lat, point.lng], {
+          icon: createMarkerIcon({ iconName: 'Siren', color: threat.color, severity: 'critical', selected: false, breaking: true, compact }),
+          title: `${threatLabel} — ${placeName}`,
+          alt: `${threatLabel} — ${placeName}`,
           keyboard: true,
           zIndexOffset: 800,
         });
-        marker.bindPopup(popup, popupOptions);
-        marker.addTo(layer);
-        if (!bounds) bounds = L.latLngBounds([alert.center]);
+        pin.bindPopup(popup, popupOptions);
+        pin.addTo(layer);
+        if (!marker) marker = pin;
       }
+      if (!bounds && points.length) bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
       alertEntriesRef.current.set(alert.id, { marker, bounds });
     }
     setAlertsVersion((v) => v + 1);
