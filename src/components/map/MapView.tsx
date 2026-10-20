@@ -398,7 +398,11 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
       return;
     }
 
-    const points = eventPoints(entry.event);
+    // Phones switch from the feed to the map in the same tap: Leaflet still has the
+    // hidden (0×0) size cached, and fitting bounds to it gives NaN. Re-measure first.
+    map.invalidateSize({ pan: false });
+    const size = map.getSize();
+    const points = size.x > 0 && size.y > 0 ? eventPoints(entry.event) : eventPoints(entry.event).slice(0, 1);
     const zoom = Math.max(map.getZoom(), mapConfig.focusZoom);
     let opened = false;
     const open = () => {
@@ -417,7 +421,12 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     }
     map.once('moveend', open);
     if (points.length > 1) {
-      map.flyToBounds(L.latLngBounds(points), { paddingTopLeft: [56, 56], paddingBottomRight: [56, padBottom], maxZoom: zoom, duration: 0.9 });
+      try {
+        map.flyToBounds(L.latLngBounds(points), { paddingTopLeft: [56, 56], paddingBottomRight: [56, padBottom], maxZoom: zoom, duration: 0.9 });
+      } catch {
+        map.setView(main.getLatLng(), zoom, { animate: false }); // never let a map animation break the page
+        open();
+      }
     } else if (compact) {
       // Centre the pin in the part of the map above the card.
       const targetPoint = map.project(main.getLatLng(), zoom).add([0, padBottom / 2 - 28]);
