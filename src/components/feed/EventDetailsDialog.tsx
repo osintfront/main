@@ -5,6 +5,7 @@ import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { formatDateTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
 import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
+import { EventMedia } from './EventMedia';
 
 interface EventDetailsDialogProps {
   event: PublicEvent;
@@ -99,6 +100,7 @@ export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDia
           ) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">{t('details.noDescription')}</p>
           )}
+          <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
         </div>
 
         <footer className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-5 py-3 pb-[max(env(safe-area-inset-bottom),12px)] dark:border-slate-800">
