@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Bell, BellOff, History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
-import { useAudioReady, useSoundSetting } from '@/hooks/useSoundSetting';
-import { playChime, unlockAudio } from '@/lib/notifySound';
+import { History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
+import { SoundMenu } from './SoundMenu';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -20,21 +19,6 @@ export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
   const { status } = useAuth();
   const { can } = usePermissions();
   const showAdmin = status === 'signed_in' && can('dashboard.view');
-  const sound = useSoundSetting();
-  const audioReady = useAudioReady();
-  const needsClick = !sound.muted && !audioReady;
-  const toggleSound = () => {
-    unlockAudio();
-    // Sound is on but the browser hasn't allowed it yet: this click enables it.
-    if (needsClick) {
-      window.setTimeout(() => playChime('event', { force: true }), 60);
-      return;
-    }
-    const turningOn = sound.muted;
-    sound.toggle();
-    if (turningOn) window.setTimeout(() => playChime('event', { force: true }), 60); // preview
-  };
-
   return (
     <header className="relative z-[1000] flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white/90 px-3 backdrop-blur sm:px-4 dark:border-slate-800 dark:bg-slate-950/90">
       <Logo />
@@ -101,19 +85,7 @@ export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
         >
           {mode === 'live' ? <History className="size-4" aria-hidden /> : <Radio className="size-4 text-red-500" aria-hidden />}
         </Link>
-        {mode === 'live' ? (
-          <button
-            type="button"
-            onClick={toggleSound}
-            aria-pressed={sound.muted}
-            aria-label={needsClick ? t('nav.soundEnable') : sound.muted ? t('nav.soundOff') : t('nav.soundOn')}
-            title={needsClick ? t('nav.soundEnable') : sound.muted ? t('nav.soundOff') : t('nav.soundOn')}
-            className="relative inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
-          >
-            {sound.muted ? <BellOff className="size-4" aria-hidden /> : <Bell className="size-4" aria-hidden />}
-            {needsClick ? <span className="absolute end-1.5 top-1.5 size-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-950" aria-hidden /> : null}
-          </button>
-        ) : null}
+        {mode === 'live' ? <SoundMenu /> : null}
         <LanguageToggle />
         <ThemeToggle />
         {showAdmin ? (

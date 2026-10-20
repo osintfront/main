@@ -14,6 +14,8 @@ import { MapView } from '@/components/map/MapView';
 import { CategoryLegend } from '@/components/map/CategoryLegend';
 import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
 import { installAudioUnlock, playChime } from '@/lib/notifySound';
+import { isCategoryAudible } from '@/hooks/useSoundSetting';
+import { HFC_CATEGORY } from '@/config/hfcThreats';
 
 type MobilePane = 'map' | 'feed';
 
@@ -107,8 +109,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     if (isArchive) return;
     const fresh = [...newIds].filter((id) => !heardEvents.current.has(id));
     fresh.forEach((id) => heardEvents.current.add(id));
-    if (fresh.length) playChime('event');
-  }, [newIds, isArchive]);
+    // Only if at least one new event is in a category the visitor wants to hear.
+    const audible = events.some((e) => fresh.includes(e.id) && isCategoryAudible(e.category.slug));
+    if (audible) playChime('event');
+  }, [newIds, isArchive, events]);
 
   // Chime when a red alert starts or repeats (not for alerts already active when the page opened).
   const heardAlerts = useRef<Map<string, string> | null>(null);
@@ -116,7 +120,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     if (isArchive || !alertsReady) return;
     const seen = heardAlerts.current;
     const next = new Map(alerts.map((a) => [a.id, a.lastAlertAt]));
-    if (seen && alerts.some((a) => seen.get(a.id) !== a.lastAlertAt)) playChime('alert');
+    if (seen && alerts.some((a) => seen.get(a.id) !== a.lastAlertAt) && isCategoryAudible(HFC_CATEGORY.slug)) playChime('alert');
     heardAlerts.current = next;
   }, [alerts, alertsReady, isArchive]);
   const [alertFocus, setAlertFocus] = useState<{ id: string; nonce: number } | null>(null);
