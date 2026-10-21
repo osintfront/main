@@ -62,6 +62,8 @@ def load_env() -> dict[str, str]:
 ENV = load_env()
 WANTED_FOLDERS = {f.strip() for f in ENV.get("FOLDERS", "").split("|") if f.strip()}
 INCLUDE_GROUPS = ENV.get("INCLUDE_GROUPS", "0") == "1"
+# Only the channels pinned at the top of each tab (default on: fewer channels = lower API cost).
+PINNED_ONLY = ENV.get("PINNED_ONLY", "1") != "0"
 CATCH_UP_HOURS = float(ENV.get("CATCH_UP_HOURS", "2") or 2)
 # Claude API use per channel type: full = classify + Sonnet editor (translation, places),
 # light = classify only (cheap; used only for Hebrew posts — other languages still get the editor),
@@ -146,13 +148,15 @@ async def load_folders(client: TelegramClient) -> list[dict]:
             log.info("Skipping tab '%s' (an 'unread' rule tab, not a topic)", name)
             continue
         ids: list[int] = []
-        for p in list(getattr(f, "pinned_peers", []) or []) + list(getattr(f, "include_peers", []) or []):
+        pinned = list(getattr(f, "pinned_peers", []) or [])
+        peers = pinned if PINNED_ONLY else pinned + list(getattr(f, "include_peers", []) or [])
+        for p in peers:
             if isinstance(p, types.InputPeerChannel):
                 ids.append(p.channel_id)
-        # Folder rules like "all channels" / "all groups".
-        if getattr(f, "broadcasts", False):
+        # Folder rules like "all channels" / "all groups" (not with PINNED_ONLY).
+        if not PINNED_ONLY and getattr(f, "broadcasts", False):
             ids += [cid for cid, e in known.items() if e.broadcast]
-        if getattr(f, "groups", False):
+        if not PINNED_ONLY and getattr(f, "groups", False):
             ids += [cid for cid, e in known.items() if e.megagroup]
         excluded = {p.channel_id for p in (getattr(f, "exclude_peers", []) or []) if isinstance(p, types.InputPeerChannel)}
         chans = []
