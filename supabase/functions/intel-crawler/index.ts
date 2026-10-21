@@ -159,19 +159,45 @@ async function readSource(src: Source): Promise<{ items: Omit<Item, "source">[];
   return { items: headlinesFromHtml(page.text, page.finalUrl), feed, checked };
 }
 
-// Article body for the editor.
-async function articleText(item: Item): Promise<string> {
+// When was the article published? Feeds give a date; scraped headline links don't,
+// so read it from the page itself (meta tags, JSON-LD, <time>, or a date in the URL).
+const DATE_META = /<meta\b[^>]*(?:property|name|itemprop)=["'](?:article:published_time|og:published_time|og:article:published_time|datePublished|pubdate|publishdate|publish-date|publication_date|date|dc\.date|dc\.date\.issued|parsely-pub-date|sailthru\.date)["'][^>]*>/gi;
+function validDate(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const d = new Date(decode(v).trim());
+  const t = d.getTime();
+  return !isNaN(t) && t > Date.UTC(2000, 0, 1) && t < Date.now() + 86400_000 ? d.toISOString() : null;
+}
+export function pageDate(html: string, url: string): string | null {
+  for (const m of html.matchAll(DATE_META)) {
+    const d = validDate((m[0].match(/content=["']([^"']+)["']/i) ?? [])[1]);
+    if (d) return d;
+  }
+  for (const m of html.matchAll(/"datePublished"\s*:\s*"([^"]+)"/g)) {
+    const d = validDate(m[1]);
+    if (d) return d;
+  }
+  const article = (html.match(/<article\b[\s\S]*?<\/article>/i) ?? [html])[0];
+  const t = validDate((article.match(/<time\b[^>]*datetime=["']([^"']+)["']/i) ?? [])[1]);
+  if (t) return t;
+  const u = url.match(/\/(20\d{2})[\/-](\d{1,2})[\/-](\d{1,2})(?:\/|$|[^\d])/);
+  return u ? validDate(`${u[1]}-${u[2].padStart(2, "0")}-${u[3].padStart(2, "0")}T12:00:00Z`) : null;
+}
+
+// Article body (and its publish date) for the editor.
+async function articleText(item: Item): Promise<{ text: string; date: string | null }> {
   try {
     const r = await fetchText(item.url, 12_000);
     if (r.status >= 400) throw new Error(String(r.status));
     const html = r.text;
+    const date = pageDate(html, item.url);
     const metaDesc = decode((html.match(/<meta[^>]+(?:property|name)=["'](?:og:description|description)["'][^>]+content=["']([^"']+)["']/i) ?? [])[1] ?? "");
     const article = (html.match(/<article\b[\s\S]*?<\/article>/i) ?? [html])[0];
     const paras = [...article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => stripTags(m[1])).filter((p) => p.length > 40);
     const body = paras.join("\n\n").slice(0, 7000);
-    return [item.title, metaDesc, body || item.summary].filter(Boolean).join("\n\n").slice(0, 8000);
+    return { text: [item.title, metaDesc, body || item.summary].filter(Boolean).join("\n\n").slice(0, 8000), date };
   } catch {
-    return [item.title, item.summary].filter(Boolean).join("\n\n");
+    return { text: [item.title, item.summary].filter(Boolean).join("\n\n"), date: null };
   }
 }
 
@@ -234,6 +260,9 @@ async function runAgent(agent: string, settings: Record<string, any>) {
 
   // 1. Read all sites (parallel).
   const maxAge = Number(settings.max_age_hours ?? 6) * 3600_000;
+  // Page dates are often day-only (e.g. from the URL), so an article counts as old
+  // only after a full day (or the configured age, if longer).
+  const maxAgeHours = Math.max(24, Number(settings.max_age_hours ?? 6));
   const fresh: Item[] = [];
   await pool(sources, 6, async (src) => {
     const now = new Date().toISOString();
@@ -308,14 +337,33 @@ async function runAgent(agent: string, settings: Record<string, any>) {
       db.from("intel_items").upsert({ source_id: item.source.id, agent, url: item.url, title: item.title, published_at: item.published_at, status, event_id, reason: reason.slice(0, 500) }, { onConflict: "url" });
     if (Date.now() - started > TIME_BUDGET_MS) return; // stays unseen → next run
     try {
-      const text = await articleText(item);
+      const { text, date: foundDate } = await articleText(item);
+      // Feed date first, else the date printed on the page.
+      const articleDate = item.published_at ?? foundDate;
+      const ageHours = articleDate ? (Date.now() - new Date(articleDate).getTime()) / 3600_000 : null;
+      const tooOld = ageHours !== null && ageHours > maxAgeHours;
       const since = new Date(Date.now() - 12 * 3600_000).toISOString();
       const { data: candidates } = await db.from("events").select("id,title,occurred_at,description,sources,source_url")
         .is("deleted_at", null).in("status", ["published"]).gte("occurred_at", since).order("occurred_at", { ascending: false }).limit(40);
       const r = await editReport({
         text, mode: "crawler", categories, candidates: candidates ?? [], allowedDomains,
-        origin: { name: item.source.name, url: item.url, sentAt: item.published_at ?? undefined },
+        origin: { name: item.source.name, url: item.url, sentAt: articleDate ?? undefined },
+        contextOnly: tooOld,
       });
+      // Old article, or one that only gives background: it may enrich an event that is
+      // already on the map, but it never becomes an event (or the main source) itself.
+      const contextOnly = tooOld || r.is_current === false;
+      if (contextOnly) {
+        const ev = r.duplicate_of ? (candidates ?? []).find((c: any) => c.id === r.duplicate_of) as any : null;
+        const current: any[] = Array.isArray(ev?.sources) ? ev.sources : [];
+        if (ev && r.relevant && ev.source_url !== item.url && !current.some((s) => s?.url === item.url)) {
+          await db.from("events").update({
+            sources: [...current, { name: item.source.name, url: item.url, at: articleDate, kind: "context" }].slice(-30),
+          }).eq("id", ev.id);
+          return void (await logItem("duplicate", ev.id, `context only (${tooOld ? `article from ${articleDate?.slice(0, 10)}` : "background, not new"})`));
+        }
+        return void (await logItem("old", null, tooOld ? `article from ${articleDate?.slice(0, 10)}` : "background, not new"));
+      }
       if (!r.relevant || !r.title || !r.summary) {
         result.irrelevant = (result.irrelevant as number) + 1;
         return void (await logItem("irrelevant", null, "editor: not relevant"));
@@ -353,7 +401,7 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         source_name: item.source.name.slice(0, 200),
         source_url: item.url,
         sources: extra.map((s) => ({ name: s.name, url: s.url, at: null })),
-        occurred_at: item.published_at && new Date(item.published_at).getTime() <= Date.now() ? item.published_at : new Date().toISOString(),
+        occurred_at: articleDate && new Date(articleDate).getTime() <= Date.now() ? articleDate : new Date().toISOString(),
         published_at: new Date().toISOString(),
         created_by: BOT_USER_ID,
         approved_by: BOT_USER_ID,
@@ -381,6 +429,38 @@ async function runAgent(agent: string, settings: Record<string, any>) {
     }
   });
   return finish(agent, result);
+}
+
+// One-off / admin job: re-read the date of crawler events already on the map (or in
+// the archive). Articles older than a day were published as "today" by mistake: take
+// them off the map (back to draft, true date kept) so they can't be a main source.
+async function recheckDates(limit: number, dry: boolean) {
+  const { data: rows } = await db.from("events").select("id,title,status,source_url,occurred_at,ai_suggestions")
+    .eq("ai_suggestions->>source", "intel-crawler").is("deleted_at", null).in("status", ["published", "archived"])
+    .not("source_url", "is", null).order("occurred_at", { ascending: false }).limit(limit);
+  const out: Record<string, unknown>[] = [];
+  await pool(rows ?? [], 6, async (ev: any) => {
+    if (ev.ai_suggestions?.date_checked) return;
+    let date: string | null = null;
+    try {
+      const r = await fetchText(ev.source_url, 12_000);
+      if (r.status < 400) date = pageDate(r.text, ev.source_url);
+    } catch { /* unreachable page: leave the event alone */ }
+    const ageH = date ? (new Date(ev.occurred_at).getTime() - new Date(date).getTime()) / 3600_000 : null;
+    const old = ageH !== null && ageH > 24;
+    out.push({ id: ev.id, title: String(ev.title).slice(0, 80), shown_as: ev.occurred_at, article_date: date, demote: old });
+    if (dry) return;
+    const ai = { ...(ev.ai_suggestions ?? {}), date_checked: new Date().toISOString(), article_date: date };
+    if (old) {
+      await db.from("events").update({
+        status: "draft", occurred_at: date, expired_at: null,
+        ai_suggestions: { ...ai, demoted: "old article published as new (date re-checked)" },
+      }).eq("id", ev.id);
+    } else {
+      await db.from("events").update({ ai_suggestions: ai }).eq("id", ev.id);
+    }
+  });
+  return { checked: out.length, demoted: out.filter((o) => o.demote).length, items: out };
 }
 
 async function finish(agent: string, result: Record<string, unknown>) {
@@ -412,6 +492,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const { data: s } = await db.from("app_settings").select("value").eq("key", "intel_crawler").maybeSingle();
   const settings = (s?.value ?? {}) as Record<string, any>;
+  if (body?.recheck_dates) return json({ ok: true, ...(await recheckDates(Math.min(300, Number(body.limit ?? 80)), !!body.dry)) });
   if (!settings.enabled && !body?.agent) return json({ ok: true, skipped: "disabled" });
 
   const agent = typeof body?.agent === "string" ? body.agent : await dueAgent(settings);

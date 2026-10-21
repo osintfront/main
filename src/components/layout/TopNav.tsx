@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
+import { ArrowLeft, SlidersHorizontal, History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
 import { SoundMenu } from './SoundMenu';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
@@ -13,9 +13,13 @@ interface TopNavProps {
   query: string;
   onQueryChange: (value: string) => void;
   mode?: 'live' | 'archive';
+  /** Filters button (map pages). */
+  filterCount?: number;
+  filtersOpen?: boolean;
+  onToggleFilters?: () => void;
 }
 
-export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
+export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, filtersOpen = false, onToggleFilters }: TopNavProps) {
   const { t } = useI18n();
   const { status } = useAuth();
   const { can } = usePermissions();
@@ -114,6 +118,28 @@ export function TopNav({ query, onQueryChange, mode = 'live' }: TopNavProps) {
           <Search className="size-5" aria-hidden />
           {query ? <span className="absolute end-2 top-2 size-2 rounded-full bg-sky-500" aria-hidden /> : null}
         </button>
+        {onToggleFilters ? (
+          <button
+            type="button"
+            onClick={onToggleFilters}
+            aria-expanded={filtersOpen}
+            aria-label={filterCount ? t('filters.active', { count: filterCount }) : t('filters.button')}
+            className={cn(
+              iconBtn,
+              'relative lg:w-auto lg:gap-1.5 lg:px-2.5 lg:text-sm lg:font-medium',
+              filterCount ? 'text-sky-700 dark:text-sky-400' : '',
+              filtersOpen ? 'bg-slate-900/5 dark:bg-white/10' : '',
+            )}
+          >
+            <SlidersHorizontal className="size-5 lg:size-4" aria-hidden />
+            <span className="hidden lg:inline">{t('filters.button')}</span>
+            {filterCount ? (
+              <span className="absolute end-0.5 top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-sky-600 px-1 text-[10px] font-bold leading-4 text-white lg:static lg:ms-0.5">
+                {filterCount}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
         <Link
           to={mode === 'live' ? '/archive' : '/'}
           aria-label={mode === 'live' ? t('nav.archive') : t('nav.live')}

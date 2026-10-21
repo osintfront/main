@@ -34,6 +34,8 @@ export interface EventSource {
   name: string;
   url: string | null;
   at: string | null;
+  /** 'context' = an older article that adds background; never the main source. */
+  kind?: 'context' | null;
 }
 
 /** A further place the report names; each gets its own pin on the map. */

@@ -89,11 +89,11 @@ function toSources(v: unknown): EventSource[] {
   if (!Array.isArray(v)) return [];
   return v.flatMap((s) => {
     if (!s || typeof s !== 'object') return [];
-    const o = s as { name?: unknown; url?: unknown; at?: unknown };
+    const o = s as { name?: unknown; url?: unknown; at?: unknown; kind?: unknown };
     const name = typeof o.name === 'string' ? o.name.trim().slice(0, 200) : '';
     const url = typeof o.url === 'string' ? safeExternalUrl(o.url) : null;
     if (!name && !url) return [];
-    return [{ name, url, at: typeof o.at === 'string' ? o.at : null }];
+    return [{ name, url, at: typeof o.at === 'string' ? o.at : null, kind: o.kind === 'context' ? ('context' as const) : null }];
   });
 }
 

@@ -39,6 +39,8 @@ export interface EditResult {
   city: string;
   region: string;
   country: string; // English
+  /** crawler: false when the article is background / old news rather than a new development. */
+  is_current: boolean | null;
   model: string;
 }
 
@@ -52,6 +54,8 @@ export interface EditInput {
   candidates?: { id: string; title: string; occurred_at: string; description: string | null }[];
   /** Domains of the approved Intelligence source list (web search is limited to these). */
   allowedDomains?: string[];
+  /** The article is old: it may only enrich an existing event (duplicate_of), never be one. */
+  contextOnly?: boolean;
 }
 
 const API_KEY = (Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("Whatsapp_Key") || "").trim();
@@ -123,6 +127,7 @@ const SYSTEM_CRAWLER = `
 מצב סוכן מדינה (crawler):
 - relevant=true רק אם הידיעה קשורה למזרח התיכון והיא חדשותית ומשמעותית: ביטחון, צבא, טרור, מדיניות, דיפלומטיה, כלכלה הקשורה לעימות, הצהרות של בכירים. ידיעות ספורט, תרבות, רכילות, מזג אוויר שגרתי, פרסומות או דפי ניווט — relevant=false.
 - duplicate_of: מזהה של אחד ה-CANDIDATES אם הוא מתאר בדיוק את אותו אירוע; אחרת ריק.
+- is_current: true רק אם הידיעה מדווחת על התפתחות חדשה מהיממה-יומיים האחרונים ביחס לתאריך היום. false אם זו כתבת רקע, ניתוח, סקירה, ראיון או דיווח על אירועים ישנים (גם אם פורסמה עכשיו). ידיעה עם is_current=false לעולם לא תהפוך לאירוע — היא רק עשויה להתווסף כמקור רקע לאירוע קיים.
 - category_slug: אחד מהקטגוריות המותרות.`;
 
 function tool(mode: EditInput["mode"], categories: { slug: string; name: string }[]) {
@@ -162,8 +167,9 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
   if (mode === "crawler") {
     props.relevant = { type: "boolean" };
     props.duplicate_of = { type: "string", description: "Candidate id when it is the same event; empty otherwise" };
+    props.is_current = { type: "boolean", description: "true = a new development from the last day or two (relative to today's date); false = background, analysis, or old events" };
     props.category_slug = { type: "string", enum: categories.map((c) => c.slug) };
-    required.push("relevant", "category_slug");
+    required.push("relevant", "category_slug", "is_current");
   }
   return {
     name: "edited_report",
@@ -275,6 +281,7 @@ function normalise(raw: Record<string, any>, model: string, mode: EditInput["mod
     city: clean(raw.city, 100),
     region: clean(raw.region, 100),
     country: clean(raw.country, 100),
+    is_current: mode === "crawler" ? raw.is_current !== false : null,
     model,
   };
 }
@@ -289,7 +296,9 @@ export async function editReport(input: EditInput): Promise<EditResult> {
   // Strip site-name boilerplate ("| Lebanon News") before judging how much text there is.
   const substance = input.text.replace(/\|\s*[^\n|]{0,40}$/gm, "").replace(/\s+/g, " ").trim();
   const thin = substance.length < 300;
-  const user = `מקור: ${input.origin.name}${input.origin.url ? ` (${input.origin.url})` : ""}${input.origin.sentAt ? `, ${input.origin.sentAt}` : ""}
+  const today = new Date().toISOString().slice(0, 10);
+  const user = `תאריך היום: ${today}
+${input.contextOnly ? "שים לב: הידיעה ישנה. היא יכולה לשמש רק מקור רקע לאירוע קיים — קבע duplicate_of אם היא נוגעת לאחד ה-CANDIDATES, ו-is_current=false.\n" : ""}מקור: ${input.origin.name}${input.origin.url ? ` (${input.origin.url})` : ""}${input.origin.sentAt ? `, ${input.origin.sentAt}` : ""}
 ${thin ? "שים לב: הידיעה קצרה מאוד (כותרת או משפט בודד). כתוב תוכן של משפט או שניים שמבוסס רק על מה שכתוב בה, בלי שום פרט נוסף.\n" : ""}הידיעה:
 """${input.text.slice(0, 9000)}"""
 ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשעות האחרונות):\n${

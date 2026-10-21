@@ -14,6 +14,11 @@ import { MapView } from '@/components/map/MapView';
 import { CategoryLegend } from '@/components/map/CategoryLegend';
 import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
 import { MobileEventSheet } from '@/components/map/MobileEventSheet';
+import { FilterPanel } from '@/components/filters/FilterPanel';
+import type { DrawMode } from '@/components/map/MapView';
+import { useArchiveRange } from '@/hooks/useArchiveRange';
+import { EMPTY_FILTERS, activeFilterCount, matchesFilters, needsArchive, type EventFilters, type LatLng } from '@/lib/eventFilters';
+import { SlidersHorizontal } from 'lucide-react';
 import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 import { installAudioUnlock, playChime } from '@/lib/notifySound';
 import { isCategoryAudible } from '@/hooks/useSoundSetting';
@@ -132,12 +137,38 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     setAlertFocus({ id, nonce: Date.now() });
   }, []);
 
+  // Filters (time, areas, types, … and a drawn area). A time range reaching past the
+  // live 24 hours also loads those archived events.
+  const [filters, setFilters] = useState<EventFilters>(EMPTY_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [drawMode, setDrawMode] = useState<DrawMode | null>(null);
+  const effectiveFilters = useMemo(() => (isArchive ? { ...filters, preset: 'live' as const } : filters), [filters, isArchive]);
+  const archiveRange = useMemo(() => (isArchive ? null : needsArchive(filters)), [filters, isArchive]);
+  const older = useArchiveRange(archiveRange);
+  const allEvents = useMemo(() => {
+    if (!older.events.length) return events;
+    const ids = new Set(events.map((e) => e.id));
+    return [...events, ...older.events.filter((e) => !ids.has(e.id))];
+  }, [events, older.events]);
+  const filterCount = activeFilterCount(effectiveFilters);
+  const startDrawing = useCallback(() => {
+    setFiltersOpen(false);
+    setMobilePane('map');
+    setDrawMode('polygon');
+  }, []);
+  const handleAreaDrawn = useCallback((points: LatLng[]) => {
+    setFilters((f) => ({ ...f, polygon: points }));
+    setDrawMode(null);
+  }, []);
+  const clearArea = useCallback(() => setFilters((f) => ({ ...f, polygon: null })), []);
+
   const visibleEvents = useMemo(
     () =>
-      events
+      allEvents
         .filter((e) => matchesQuery(e, deferredQuery, categoryLabel(e.category.slug, e.category.name)))
+        .filter((e) => matchesFilters(e, effectiveFilters))
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()),
-    [events, deferredQuery, categoryLabel],
+    [allEvents, deferredQuery, categoryLabel, effectiveFilters],
   );
 
   // Card → map: fly to marker. On phones, switch to the map pane first.
@@ -162,11 +193,11 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     },
     [select],
   );
-  const detailsEvent = detailsId ? events.find((e) => e.id === detailsId) ?? null : null;
+  const detailsEvent = detailsId ? allEvents.find((e) => e.id === detailsId) ?? null : null;
   const closeDetails = useCallback(() => setDetailsId(null), []);
   // Phones: the selected event shows as a card along the bottom of the map.
   const sheetEvent =
-    isPhone && mobilePane === 'map' && selectedId && !detailsId ? visibleEvents.find((e) => e.id === selectedId) ?? null : null;
+    isPhone && mobilePane === 'map' && selectedId && !detailsId && !drawMode ? visibleEvents.find((e) => e.id === selectedId) ?? null : null;
   const openDetailsFromSheet = useCallback((id: string) => setDetailsId(id), []);
   const locateFromDetails = useCallback(
     (id: string) => {
@@ -178,14 +209,33 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   );
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <a
         href="#main-map"
         className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-[2000] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow"
       >
         {t('common.skipToContent')}
       </a>
-      <TopNav query={query} onQueryChange={setQuery} mode={mode} />
+      <TopNav
+        query={query}
+        onQueryChange={setQuery}
+        mode={mode}
+        filterCount={filterCount}
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((v) => !v)}
+      />
+      {filtersOpen ? (
+        <FilterPanel
+          filters={effectiveFilters}
+          onChange={setFilters}
+          onClose={() => setFiltersOpen(false)}
+          events={allEvents}
+          resultCount={visibleEvents.length}
+          onDrawArea={startDrawing}
+          hideTime={isArchive}
+          loadingArchive={older.loading}
+        />
+      ) : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(340px,380px)_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)_196px]">
         {/* Column 1 — live feed (inline-start: left in English, right in Hebrew) */}
@@ -214,8 +264,36 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             onLocateAlert={handleLocateAlert}
             title={isArchive ? t('archive.title') : undefined}
             live={!isArchive}
-            toolbar={isArchive ? <ArchiveDayPicker day={day} onChange={setDay} /> : undefined}
-            emptyText={isArchive ? t('archive.empty') : undefined}
+            toolbar={
+              isArchive || filterCount ? (
+                <div className="space-y-2">
+                  {isArchive ? <ArchiveDayPicker day={day} onChange={setDay} /> : null}
+                  {filterCount ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFiltersOpen(true)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-sky-600 px-3 text-xs font-semibold text-white hover:bg-sky-500"
+                      >
+                        <SlidersHorizontal className="size-3.5" aria-hidden />
+                        {t('filters.active', { count: filterCount })}
+                      </button>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {t('feed.count', { count: visibleEvents.length })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setFilters(EMPTY_FILTERS)}
+                        className="ms-auto h-8 rounded-lg px-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
+                      >
+                        {t('filters.clearAll')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : undefined
+            }
+            emptyText={filterCount ? t('filters.none') : isArchive ? t('archive.empty') : undefined}
             footer={
               <div className="hidden border-t border-slate-200 p-3 lg:block [@media(max-height:720px)]:hidden dark:border-slate-800">
                 <AdSlot variant="square" slotId="feed-rectangle" />
@@ -246,6 +324,11 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               compact={isPhone}
               legend={<CategoryLegend events={visibleEvents} alertCount={alerts.length} />}
               onBackgroundClick={isPhone ? clearSelection : undefined}
+              area={filters.polygon}
+              drawMode={drawMode}
+              onDrawModeChange={setDrawMode}
+              onAreaDrawn={handleAreaDrawn}
+              onClearArea={clearArea}
             />
           </div>
         </main>

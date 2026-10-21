@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
-import { Globe2, Layers, LocateFixed, Maximize2, Siren, X } from 'lucide-react';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import { Check, Globe2, Layers, LocateFixed, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
+import { octagon, type LatLng } from '@/lib/eventFilters';
+import type { Severity } from '@/types/event';
 import { mapConfig } from '@/config/map';
 import { useTheme } from '@/context/ThemeContext';
 import { useI18n } from '@/i18n';
@@ -35,6 +39,37 @@ interface MapViewProps {
   legend?: ReactNode;
   /** A tap on the map itself (not on a pin) — phones use it to close the event card. */
   onBackgroundClick?: () => void;
+  /** Drawn-area filter: the applied area (outlined on the map). */
+  area?: LatLng[] | null;
+  /** Drawing an area right now ('polygon' = free shape, 'octagon' = centre + edge). */
+  drawMode?: DrawMode | null;
+  onDrawModeChange?: (mode: DrawMode | null) => void;
+  onAreaDrawn?: (points: LatLng[]) => void;
+  onClearArea?: () => void;
+}
+
+export type DrawMode = 'polygon' | 'octagon';
+
+const SEVERITY_RANK: Record<Severity, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+
+/** One round icon with a count for pins that would overlap; ring colour = the most common category. */
+function clusterIcon(cluster: L.MarkerCluster): L.DivIcon {
+  const children = cluster.getAllChildMarkers();
+  const count = cluster.getChildCount();
+  const colors = new Map<string, number>();
+  let worst = 0;
+  for (const m of children) {
+    const o = m.options as { ofmColor?: string; ofmSeverity?: Severity };
+    if (o.ofmColor) colors.set(o.ofmColor, (colors.get(o.ofmColor) ?? 0) + 1);
+    if (o.ofmSeverity) worst = Math.max(worst, SEVERITY_RANK[o.ofmSeverity]);
+  }
+  const color = [...colors.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '#334155';
+  const size = count < 10 ? 36 : count < 50 ? 42 : 48;
+  return L.divIcon({
+    html: `<div class="ofm-cluster${worst >= 3 ? ' ofm-cluster--critical' : ''}" style="--cluster-color:${color};--cluster-size:${size}px"><span>${count}</span></div>`,
+    className: 'ofm-cluster-wrap',
+    iconSize: [size, size],
+  });
 }
 
 interface AlertEntry {
@@ -63,13 +98,32 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
-export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onViewEvent, alerts = NO_ALERTS, alertFocus = null, alertShapes = null, compact = false, legend, onBackgroundClick }: MapViewProps) {
+export function MapView({
+  events,
+  selectedId,
+  focusRequest,
+  onMarkerSelect,
+  onViewEvent,
+  alerts = NO_ALERTS,
+  alertFocus = null,
+  alertShapes = null,
+  compact = false,
+  legend,
+  onBackgroundClick,
+  area = null,
+  drawMode = null,
+  onDrawModeChange,
+  onAreaDrawn,
+  onClearArea,
+}: MapViewProps) {
   const { theme } = useTheme();
   const { t, dir, locale, lang, categoryLabel } = useI18n();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const markerLayerRef = useRef<L.MarkerClusterGroup | null>(null);
+  const drawLayerRef = useRef<L.LayerGroup | null>(null);
+  const [draft, setDraft] = useState<LatLng[]>([]);
   const linkLayerRef = useRef<L.LayerGroup | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const alertLayerRef = useRef<L.LayerGroup | null>(null);
@@ -91,6 +145,8 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
   onViewEventRef.current = onViewEvent;
   const onBackgroundClickRef = useRef(onBackgroundClick);
   onBackgroundClickRef.current = onBackgroundClick;
+  // While drawing, a tap on the map adds a corner instead of closing things.
+  const drawClickRef = useRef<((p: LatLng) => void) | null>(null);
 
   // 1. Create the map once.
   useEffect(() => {
@@ -106,9 +162,21 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     });
     alertLayerRef.current = L.layerGroup().addTo(map);
     linkLayerRef.current = L.layerGroup().addTo(map);
-    markerLayerRef.current = L.layerGroup().addTo(map);
+    drawLayerRef.current = L.layerGroup().addTo(map);
+    markerLayerRef.current = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      zoomToBoundsOnClick: true, // a tap on a cluster zooms in until its pins separate
+      maxClusterRadius: (zoom: number) => (zoom >= 11 ? 32 : 48),
+      disableClusteringAtZoom: 16,
+      chunkedLoading: true,
+      iconCreateFunction: clusterIcon,
+    }).addTo(map);
     mapRef.current = map;
-    map.on('click', () => onBackgroundClickRef.current?.());
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      if (drawClickRef.current) drawClickRef.current([e.latlng.lat, e.latlng.lng]);
+      else onBackgroundClickRef.current?.();
+    });
 
     // Keeps tiles correct when the column is resized or shown on mobile.
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
@@ -120,6 +188,7 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
       mapRef.current = null;
       markerLayerRef.current = null;
       linkLayerRef.current = null;
+      drawLayerRef.current = null;
       alertLayerRef.current = null;
       alertEntriesRef.current.clear();
       handledAlertFocusRef.current = null;
@@ -162,6 +231,7 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     if (!layer) return;
     layer.clearLayers();
     markersRef.current.clear();
+    const all: L.Marker[] = [];
 
     for (const event of events) {
       const selected = event.id === selectedRef.current;
@@ -190,6 +260,7 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
           riseOnHover: true,
           zIndexOffset: selected ? 1000 : event.severity === 'critical' ? 400 : 0,
         });
+        Object.assign(marker.options, { ofmColor: event.category.markerColor, ofmSeverity: event.severity });
         if (!compact) {
           marker.bindPopup(
             () =>
@@ -212,11 +283,12 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
           );
         }
         marker.on('click', () => onMarkerSelectRef.current(event.id));
-        marker.addTo(layer);
+        all.push(marker);
         markers.push(marker);
       });
       markersRef.current.set(event.id, { markers, event });
     }
+    layer.addLayers(all);
     setMarkersVersion((v) => v + 1);
   }, [events, t, dir, locale, lang, categoryLabel, compact]);
 
@@ -384,6 +456,69 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     }
   }, [selectedId, markersVersion]);
 
+  // 7. Drawn-area filter. Drawing: each tap adds a corner (free shape), or centre then
+  //    edge (octagon). The applied area stays outlined while the filter is on.
+  const draftRef = useRef<LatLng[]>([]);
+  const onAreaDrawnRef = useRef(onAreaDrawn);
+  onAreaDrawnRef.current = onAreaDrawn;
+  const setDraftBoth = useCallback((next: LatLng[]) => {
+    draftRef.current = next;
+    setDraft(next);
+  }, []);
+  const finishDrawing = useCallback(
+    (points: LatLng[]) => {
+      setDraftBoth([]);
+      if (points.length >= 3) onAreaDrawnRef.current?.(points);
+    },
+    [setDraftBoth],
+  );
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    setDraftBoth([]);
+    if (!drawMode) return;
+    map.closePopup();
+    map.doubleClickZoom.disable();
+    const container = map.getContainer();
+    container.classList.add('ofm-drawing');
+    drawClickRef.current = (p) => {
+      const d = draftRef.current;
+      if (drawMode === 'octagon') {
+        if (d.length === 1) finishDrawing(octagon(d[0], p));
+        else setDraftBoth([p]);
+        return;
+      }
+      setDraftBoth([...d, p]);
+    };
+    return () => {
+      drawClickRef.current = null;
+      map.doubleClickZoom.enable();
+      container.classList.remove('ofm-drawing');
+    };
+  }, [drawMode, finishDrawing, setDraftBoth]);
+
+  useEffect(() => {
+    const layer = drawLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    const style = { color: '#0284c7', weight: 2, dashArray: '6 4', fillColor: '#0ea5e9', fillOpacity: 0.08, interactive: false };
+    if (area && area.length >= 3 && !drawMode) L.polygon(area, style).addTo(layer);
+    if (drawMode && draft.length) {
+      if (draft.length >= 3) L.polygon(draft, style).addTo(layer);
+      else if (draft.length === 2) L.polyline(draft, style).addTo(layer);
+      for (const p of draft) {
+        L.circleMarker(p, { radius: 6, color: '#0284c7', weight: 2, fillColor: '#ffffff', fillOpacity: 1, interactive: false }).addTo(layer);
+      }
+    }
+  }, [area, draft, drawMode]);
+
+  // Show the whole area once it is applied.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !area || area.length < 3) return;
+    map.flyToBounds(L.latLngBounds(area), { padding: [48, 48], maxZoom: 13, duration: prefersReducedMotion() ? 0 : 0.8 });
+  }, [area]);
+
   // 6. Fly to a marker when a card (or the URL) asks for it.
   useEffect(() => {
     const map = mapRef.current;
@@ -408,7 +543,13 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
     const open = () => {
       if (opened) return;
       opened = true;
-      if (!compact) main.openPopup();
+      // Still inside a cluster at this zoom? Zoom in until the pin stands on its own.
+      const group = markerLayerRef.current;
+      if (group && group.hasLayer(main) && group.getVisibleParent(main) !== main) {
+        group.zoomToShowLayer(main, () => {
+          if (!compact) main.openPopup();
+        });
+      } else if (!compact) main.openPopup();
     };
     map.closePopup();
     // Phones: the card along the bottom covers part of the map, so keep the pins above it.
@@ -508,6 +649,88 @@ export function MapView({ events, selectedId, focusRequest, onMarkerSelect, onVi
           </IconButton>
         ) : null}
       </div>
+      {drawMode ? (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-[700] flex justify-center px-3">
+          <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1.5 rounded-2xl bg-white/95 p-2 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10">
+            <p className="w-full px-1 pb-1 text-center text-xs font-medium text-slate-700 dark:text-slate-200">
+              {drawMode === 'octagon' ? t('draw.octagonHint') : t('draw.polygonHint')}
+            </p>
+            <div className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800" role="group">
+              {(
+                [
+                  ['polygon', PenLine, t('draw.free')],
+                  ['octagon', Octagon, t('draw.octagon')],
+                ] as const
+              ).map(([mode, Icon, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={drawMode === mode}
+                  onClick={() => onDrawModeChange?.(mode)}
+                  className={
+                    'inline-flex h-9 items-center gap-1 rounded-md px-2.5 text-xs font-semibold ' +
+                    (drawMode === mode ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-600 dark:text-slate-300')
+                  }
+                >
+                  <Icon className="size-3.5" aria-hidden />
+                  {label}
+                </button>
+              ))}
+            </div>
+            {drawMode === 'polygon' ? (
+              <button
+                type="button"
+                onClick={() => setDraftBoth(draftRef.current.slice(0, -1))}
+                disabled={draft.length === 0}
+                className="inline-flex h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Undo2 className="size-3.5 rtl:-scale-x-100" aria-hidden />
+                {t('draw.undo')}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onDrawModeChange?.(null)}
+              className="inline-flex h-9 items-center rounded-lg px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              {t('draw.cancel')}
+            </button>
+            {drawMode === 'polygon' ? (
+              <button
+                type="button"
+                onClick={() => finishDrawing(draftRef.current)}
+                disabled={draft.length < 3}
+                className="inline-flex h-9 items-center gap-1 rounded-lg bg-sky-600 px-3 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-40"
+              >
+                <Check className="size-3.5" aria-hidden />
+                {t('draw.apply')}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : area && area.length >= 3 ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-8 z-[600] flex justify-center px-3">
+          <div className="pointer-events-auto inline-flex items-center gap-1 rounded-full bg-sky-600 py-1 ps-3 pe-1 text-xs font-semibold text-white shadow-lg">
+            <Octagon className="size-3.5" aria-hidden />
+            {t('filters.areaActive')}
+            <button
+              type="button"
+              onClick={() => onDrawModeChange?.('polygon')}
+              className="ms-1 rounded-full px-2 py-1 hover:bg-white/15"
+            >
+              {t('filters.redrawArea')}
+            </button>
+            <button
+              type="button"
+              onClick={onClearArea}
+              aria-label={t('filters.clearArea')}
+              className="inline-flex size-7 items-center justify-center rounded-full hover:bg-white/15"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+        </div>
+      ) : null}
       {legend && legendOpen ? (
         <div className="ofm-scroll absolute start-14 top-3 z-[600] max-h-[min(60vh,420px)] w-56 overflow-y-auto rounded-xl bg-white/95 p-3 shadow-xl ring-1 ring-slate-900/10 backdrop-blur xl:hidden dark:bg-slate-900/95 dark:ring-white/10">
           <button

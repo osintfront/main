@@ -145,7 +145,12 @@ export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDia
                     ) : (
                       <bdi className="min-w-0 truncate">{s.name}</bdi>
                     )}
-                    {s.at ? <span className="shrink-0 font-mono text-xs text-slate-400 tabular-nums">{formatEventTime(s.at, locale)}</span> : null}
+                    {s.kind === 'context' ? (
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-px text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {t('details.background')}
+                      </span>
+                    ) : null}
+                    {s.at ? <span className="shrink-0 font-mono text-xs text-slate-400 tabular-nums">{s.kind === 'context' ? new Date(s.at).toLocaleDateString(locale) : formatEventTime(s.at, locale)}</span> : null}
                   </li>
                 ))}
               </ul>
