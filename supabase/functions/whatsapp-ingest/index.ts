@@ -436,6 +436,7 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   if (pt && (cur?.latitude == null || cur?.longitude == null)) {
     update.latitude = pt.lat;
     update.longitude = pt.lng;
+    update.location_precision = pt.precision;
     update.geocoding_confidence = 0.7;
     if (!cur?.location_name) update.location_name = clip(pt.name, 200);
   }

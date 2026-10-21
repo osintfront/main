@@ -20,7 +20,7 @@
 //  - Foreign-letter check now catches any non-Hebrew script (not only Arabic/Latin).
 
 export interface EditorSource { name: string; url: string | null }
-export interface EditorLocation { name: string; name_en: string; country: string; lat: number | null; lng: number | null }
+export interface EditorLocation { name: string; name_en: string; country: string; lat: number | null; lng: number | null; precision?: "exact" | "region" }
 
 export interface EditResult {
   relevant: boolean;
@@ -454,6 +454,8 @@ async function verifyLocations(r: EditResult): Promise<void> {
     if (l.lat === null || l.lng === null || km(l.lat, l.lng, hit.lat, hit.lng) > 25) {
       l.lat = Math.round(hit.lat * 1e5) / 1e5;
       l.lng = Math.round(hit.lng * 1e5) / 1e5;
+      // A province / district / sea is pinned at its middle: show it as approximate.
+      if (/^(state|province|region|county|state_district|district|governorate|sea|strait|bay|mountain_range)$/.test(hit.kind)) l.precision = "region";
     }
   }
 }
@@ -494,8 +496,8 @@ export function formatDescription(r: EditResult): string {
 }
 
 /** Places for events.locations (the database looks up the ones without coordinates). */
-export function locationsForDb(r: EditResult): { name: string; name_en: string; lat: number | null; lng: number | null }[] {
-  return r.locations.slice(0, 6).map((l) => ({ name: l.name, name_en: l.name_en, lat: l.lat, lng: l.lng }));
+export function locationsForDb(r: EditResult): { name: string; name_en: string; lat: number | null; lng: number | null; precision?: string }[] {
+  return r.locations.slice(0, 6).map((l) => ({ name: l.name, name_en: l.name_en, lat: l.lat, lng: l.lng, ...(l.precision ? { precision: l.precision } : {}) }));
 }
 
 /** Main country in English for the events.country column (falls back to the Hebrew list). */
@@ -504,7 +506,7 @@ export function mainCountry(r: EditResult): string {
 }
 
 /** Main coordinates for the map pin (first confident location). */
-export function mainPoint(r: EditResult): { lat: number; lng: number; name: string } | null {
+export function mainPoint(r: EditResult): { lat: number; lng: number; name: string; precision: "exact" | "region" } | null {
   const l = r.locations.find((x) => x.lat !== null && x.lng !== null);
-  return l ? { lat: l.lat!, lng: l.lng!, name: l.name } : null;
+  return l ? { lat: l.lat!, lng: l.lng!, name: l.name, precision: l.precision ?? "exact" } : null;
 }

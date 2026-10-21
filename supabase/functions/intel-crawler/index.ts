@@ -396,7 +396,7 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         city: r.city, region: r.region, country: mainCountry(r),
         locations: locationsForDb(r),
         latitude: pt?.lat ?? null, longitude: pt?.lng ?? null,
-        location_precision: pt ? "exact" : null,
+        location_precision: pt ? pt.precision : null,
         source_type: "news_website",
         source_name: item.source.name.slice(0, 200),
         source_url: item.url,
