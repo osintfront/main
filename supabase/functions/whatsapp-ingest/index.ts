@@ -38,6 +38,8 @@ type InMsg = {
   platform?: "whatsapp" | "telegram"; url?: string;
   /** Telegram worker: the folder (tab) the channel is in = the agent that collected it. */
   agent?: string;
+  /** Telegram worker, cheap mode: classify only (Haiku) — skip the Sonnet editor. */
+  light?: boolean;
 };
 const platformName = (m: InMsg) => (m.platform === "telegram" ? "Telegram" : "WhatsApp");
 const sourceUrl = (m: InMsg, text: string) => m.url ?? firstUrl(text);
@@ -409,7 +411,7 @@ async function processOne(m: InMsg) {
     occurred_at: sentIso,
     created_by: BOT_USER_ID,
     classification_confidence: confident ? 0.8 : 0.4,
-    ai_suggestions: { source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}) },
+    ai_suggestions: { source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}), ...(m.light ? { light: true } : {}) },
   };
   if (row.latitude == null || row.longitude == null) {
     row.latitude = null;
@@ -434,7 +436,7 @@ async function processOne(m: InMsg) {
   await log(finalStatus === "published" ? "event_published" : "event_draft", ins!.id);
   // Editor agent runs in the background so the extension gets its answer quickly;
   // the event appears at once and is rewritten in the house template seconds later.
-  background.push(applyEditor(ins!.id, row, text, `${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, sourceUrl(m, text), sentIso, waitingForPlace));
+  if (!m.light) background.push(applyEditor(ins!.id, row, text, `${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, sourceUrl(m, text), sentIso, waitingForPlace));
   const media_saved = await storeMedia(ins!.id, key, m.media);
   return { key, status: finalStatus === "published" ? "event_published" : "event_draft", event_id: ins!.id, title: row.title, media_saved };
 }

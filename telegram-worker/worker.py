@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
+import re
 import logging
 import os
 import sys
@@ -61,6 +63,12 @@ ENV = load_env()
 WANTED_FOLDERS = {f.strip() for f in ENV.get("FOLDERS", "").split("|") if f.strip()}
 INCLUDE_GROUPS = ENV.get("INCLUDE_GROUPS", "0") == "1"
 CATCH_UP_HOURS = float(ENV.get("CATCH_UP_HOURS", "2") or 2)
+# Claude API use per channel type: full = classify + Sonnet editor (translation, places),
+# light = classify only (cheap; used only for Hebrew posts — other languages still get the editor),
+# off = ignore that type.
+PUBLIC_MODE = (ENV.get("PUBLIC_MODE", "light") or "light").lower()
+PRIVATE_MODE = (ENV.get("PRIVATE_MODE", "full") or "full").lower()
+MIN_TEXT = int(ENV.get("MIN_TEXT", "25") or 25)
 FOLDER_REFRESH_SEC = 600
 BATCH = 10
 MAX_IMAGE = 1_900_000
@@ -171,6 +179,41 @@ async def sync_folders(client: TelegramClient) -> None:
 QUEUE: asyncio.Queue = asyncio.Queue()
 
 
+# ─── Free filters (no API) ───────────────────────────────────────────────
+SEEN_TEXT: dict[str, float] = {}  # normalised text hash -> time first sent
+DEDUPE_SEC = 3 * 3600
+_URL = re.compile(r"https?://\S+|t\.me/\S+|@\w+")
+_NONWORD = re.compile(r"[^\w\u0590-\u05FF\u0600-\u06FF]+")
+_HEBREW = re.compile(r"[\u0590-\u05FF]")
+_LETTER = re.compile(r"[^\W\d_]")
+
+
+def text_key(text: str) -> str:
+    """Same post forwarded/copied by several channels -> same key."""
+    t = _NONWORD.sub(" ", _URL.sub(" ", text.lower())).split()
+    return hashlib.sha1(" ".join(t)[:400].encode("utf-8")).hexdigest()
+
+
+def is_hebrew(text: str) -> bool:
+    letters = _LETTER.findall(text)
+    return bool(letters) and len(_HEBREW.findall(text)) / len(letters) >= 0.6
+
+
+def worth_sending(text: str) -> bool:
+    core = _URL.sub(" ", text).strip()
+    if len(core) < MIN_TEXT:
+        return False  # bare link, emoji, "📌", channel promo line…
+    now = time.time()
+    for k, t in list(SEEN_TEXT.items()):
+        if now - t > DEDUPE_SEC:
+            del SEEN_TEXT[k]
+    key = text_key(core)
+    if key in SEEN_TEXT:
+        return False  # the same text already went out from another channel
+    SEEN_TEXT[key] = now
+    return True
+
+
 def post_text(msg: types.Message) -> str:
     text = msg.message or ""
     # Hidden links (text with a link behind it): add the address so sources keep their URL.
@@ -184,8 +227,12 @@ def post_text(msg: types.Message) -> str:
 async def to_payload(client: TelegramClient, msg: types.Message, cid: int) -> dict | None:
     ch = CHANNELS.by_id.get(cid)
     text = post_text(msg)
-    if not ch or len(text) < 3:
+    if not ch:
         return None
+    mode = PUBLIC_MODE if ch["username"] else PRIVATE_MODE
+    if mode == "off" or not worth_sending(text):
+        return None
+    light = mode == "light" and is_hebrew(text)
     username = ch["username"]
     media = []
     if msg.photo or msg.video:
@@ -204,6 +251,7 @@ async def to_payload(client: TelegramClient, msg: types.Message, cid: int) -> di
         "sent_at": msg.date.astimezone(timezone.utc).isoformat(),
         "text": text[:8000],
         "media": media,
+        "light": light,
         "_cid": cid,
         "_id": msg.id,
     }
