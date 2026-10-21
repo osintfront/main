@@ -141,6 +141,10 @@ async def load_folders(client: TelegramClient) -> list[dict]:
         name = _title(f.title).strip()
         if not name or (WANTED_FOLDERS and name not in WANTED_FOLDERS):
             continue
+        # Rule-only tabs like "Unread" (all unread chats) are not a topic: skip unless named in FOLDERS.
+        if getattr(f, "exclude_read", False) and name not in WANTED_FOLDERS:
+            log.info("Skipping tab '%s' (an 'unread' rule tab, not a topic)", name)
+            continue
         ids: list[int] = []
         for p in list(getattr(f, "pinned_peers", []) or []) + list(getattr(f, "include_peers", []) or []):
             if isinstance(p, types.InputPeerChannel):
