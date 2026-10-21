@@ -20,7 +20,7 @@
 //  - Foreign-letter check now catches any non-Hebrew script (not only Arabic/Latin).
 
 export interface EditorSource { name: string; url: string | null }
-export interface EditorLocation { name: string; name_en: string; lat: number | null; lng: number | null }
+export interface EditorLocation { name: string; name_en: string; country: string; lat: number | null; lng: number | null }
 
 export interface EditResult {
   relevant: boolean;
@@ -143,6 +143,7 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
         properties: {
           name: { type: "string", description: "שם המקום בעברית, בדיוק כפי שהוא כתוב בתוכן" },
           name_en: { type: "string", description: "Place name in English (common international spelling)" },
+          country: { type: "string", description: "Country the place is in, in English" },
           lat: { type: ["number", "null"] },
           lng: { type: ["number", "null"] },
         },
@@ -255,6 +256,7 @@ function normalise(raw: Record<string, any>, model: string, mode: EditInput["mod
   const locations = (Array.isArray(raw.locations) ? raw.locations : []).slice(0, 6).map((l: any) => ({
     name: clean(l?.name, 120),
     name_en: clean(l?.name_en, 120),
+    country: clean(l?.country, 60),
     lat: num(l?.lat, -90, 90),
     lng: num(l?.lng, -180, 180),
   })).filter((l: EditorLocation) => l.name);
@@ -358,6 +360,7 @@ ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשע
             console.warn("editor fix round failed", String((e as Error)?.message ?? e).slice(0, 200));
           }
         }
+        await verifyLocations(result);
         return result;
       } catch (e: any) {
         lastErr = e;
@@ -394,6 +397,65 @@ ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשע
     console.warn(`editor: giving up on ${model}`);
   }
   throw lastErr ?? new Error("editor failed");
+}
+
+// ─── Geocoding check ───────────────────────────────────────────────
+// The model names places well but recalls coordinates badly (a mountain in
+// Iran pinned at Tehran, a Yemen story at Riyadh). Every named place is looked
+// up in OpenStreetMap (Nominatim); a real hit replaces the model's guess when
+// the guess is missing or more than 25 km off. Nominatim allows ~1 request/s.
+const GEO_UA = "Osintfront/1.0 (+https://main-drab-chi.vercel.app)";
+const GEO_CACHE = new Map<string, { lat: number; lng: number; kind: string } | null>();
+let lastGeo = 0;
+let geoChain: Promise<void> = Promise.resolve();
+
+function km(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const r = Math.PI / 180;
+  const x = (bLng - aLng) * r * Math.cos(((aLat + bLat) / 2) * r);
+  const y = (bLat - aLat) * r;
+  return Math.sqrt(x * x + y * y) * 6371;
+}
+
+async function geocode(query: string): Promise<{ lat: number; lng: number; kind: string } | null> {
+  const key = query.toLowerCase();
+  if (GEO_CACHE.has(key)) return GEO_CACHE.get(key)!;
+  // One request at a time across parallel editor calls, ≥1.1 s apart.
+  geoChain = geoChain.then(async () => {
+    const wait = lastGeo + 1100 - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastGeo = Date.now();
+  });
+  await geoChain;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers: { "User-Agent": GEO_UA }, signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return null; // not cached: may work next time
+    const [hit] = await res.json();
+    const out = hit ? { lat: Number(hit.lat), lng: Number(hit.lon), kind: String(hit.addresstype ?? hit.type ?? "") } : null;
+    GEO_CACHE.set(key, out);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyLocations(r: EditResult): Promise<void> {
+  const main = r.country.split("/")[0]?.trim() ?? "";
+  for (const l of r.locations.slice(0, 4)) {
+    const name = (l.name_en || l.name).trim();
+    const country = l.country || main;
+    if (!name) continue;
+    const sameAsCountry = country && name.toLowerCase() === country.toLowerCase();
+    if (sameAsCountry) continue; // a country is pinned by the database, not here
+    // Always qualify with the country, so "Tyre" is not found in some other country.
+    const hit = await geocode(country && !name.toLowerCase().includes(country.toLowerCase()) ? `${name}, ${country}` : name);
+    if (!hit || !isFinite(hit.lat) || !isFinite(hit.lng)) continue;
+    if (hit.kind === "country") continue; // query fell back to the whole country: no better than the model
+    if (l.lat === null || l.lng === null || km(l.lat, l.lng, hit.lat, hit.lng) > 25) {
+      l.lat = Math.round(hit.lat * 1e5) / 1e5;
+      l.lng = Math.round(hit.lng * 1e5) / 1e5;
+    }
+  }
 }
 
 const mapsLink = (lat: number, lng: number) => `https://www.google.com/maps?q=${lat.toFixed(5)},${lng.toFixed(5)}`;
