@@ -229,6 +229,7 @@ const CLASSIFY_TOOL = {
       severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
       is_breaking: { type: "boolean" },
       location_name: { type: "string", description: "Most specific place named, in the message's language; empty if none" },
+      location_name_en: { type: "string", description: "The same place in English (common international spelling, e.g. Yater, Bint Jbeil, Khan Younis); empty if none" },
       city: { type: "string" },
       region: { type: "string" },
       country: { type: "string", description: "Main country the report is about, in English, e.g. Lebanon, Syria, Israel, Iran, Yemen, United States. Fill it whenever the country is clear, even if no specific place is named." },
@@ -411,7 +412,7 @@ async function processOne(m: InMsg) {
     occurred_at: sentIso,
     created_by: BOT_USER_ID,
     classification_confidence: confident ? 0.8 : 0.4,
-    ai_suggestions: { source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}), ...(m.light ? { light: true } : {}) },
+    ai_suggestions: { source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}), ...(m.light ? { light: true } : {}), ...(c.location_name_en ? { place_en: clip(c.location_name_en, 120) } : {}) },
   };
   if (row.latitude == null || row.longitude == null) {
     row.latitude = null;
