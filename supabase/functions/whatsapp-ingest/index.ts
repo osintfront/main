@@ -193,6 +193,17 @@ async function countAgentMessages(results: { agent?: string; status?: string }[]
 }
 
 let categoryCache: { id: string; slug: string; name: string }[] | null = null;
+// Categories not published for now (saves Claude API tokens). Set in app_settings key
+// "skip_categories" as a JSON array of slugs; [] turns it off. Default: political events.
+let skipCache: { at: number; slugs: Set<string> } | null = null;
+async function skipCategories(): Promise<Set<string>> {
+  if (skipCache && Date.now() - skipCache.at < 60_000) return skipCache.slugs;
+  const { data } = await db.from("app_settings").select("value").eq("key", "skip_categories").maybeSingle();
+  const list = Array.isArray(data?.value) ? data!.value : ["political-event"];
+  skipCache = { at: Date.now(), slugs: new Set(list.map(String)) };
+  return skipCache.slugs;
+}
+
 async function categories() {
   if (!categoryCache) {
     const { data, error } = await db.from("event_categories").select("id,slug,name").eq("is_active", true);
@@ -356,6 +367,11 @@ async function processOne(m: InMsg) {
       { msg_key: key, chat_name: m.chat, sender: clip(m.sender, 200), sent_at: sentIso, message_text: text, decision, event_id, reason: clip(c.reason, 500) },
       { onConflict: "msg_key", ignoreDuplicates: true },
     );
+
+  if (c.decision !== "duplicate" && c.category_slug && (await skipCategories()).has(c.category_slug)) {
+    await log("skipped_category", null);
+    return { key, status: "skipped_category", reason: c.category_slug };
+  }
 
   if (c.decision === "not_event") {
     await log("skipped_not_event", null);
