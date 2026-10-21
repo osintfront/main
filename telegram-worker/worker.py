@@ -273,13 +273,26 @@ async def sender() -> None:
             try:
                 body = {"messages": [{k: v for k, v in m.items() if not k.startswith("_")} for m in batch]}
                 res = await post(body)
+                failed_ids = set()
                 for r in res.get("results", []):
-                    log.info("[%s] %s → %s", r.get("agent"), r.get("msg_id"), r.get("status"))
+                    status = r.get("status")
+                    if status == "error":
+                        failed_ids.add(r.get("msg_id"))
+                        log.warning("[%s] %s → error: %s", r.get("agent"), r.get("msg_id"), str(r.get("error", ""))[:160])
+                    else:
+                        log.info("[%s] %s → %s", r.get("agent"), r.get("msg_id"), status)
                 for m in batch:
+                    if m["msg_id"] in failed_ids:
+                        continue
                     key = str(m["_cid"])
                     STATE["last_id"][key] = max(int(STATE["last_id"].get(key, 0)), m["_id"])
                 save_state(STATE)
-                break
+                # Server-side failure (e.g. Claude API out of credit or overloaded): keep the
+                # failed posts and try them again later instead of losing them.
+                batch = [m for m in batch if m["msg_id"] in failed_ids]
+                if not batch:
+                    break
+                log.warning("%d post(s) failed on the site, retry in %ss", len(batch), delay)
             except urllib.error.HTTPError as e:
                 if e.code in (400, 401, 403):
                     log.error("Site refused the posts (%s): %s — check INGEST_TOKEN. Skipping this batch.", e.code, e.read()[:200])
