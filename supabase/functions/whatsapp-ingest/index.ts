@@ -36,6 +36,8 @@ type InMsg = {
   msg_id?: string; chat: string; sender?: string; sent_at: string; text: string; media?: InMedia[];
   /** "telegram" = a post read from a public channel (msg_id = "<channel>/<n>", url = its t.me link). */
   platform?: "whatsapp" | "telegram"; url?: string;
+  /** Telegram worker: the folder (tab) the channel is in = the agent that collected it. */
+  agent?: string;
 };
 const platformName = (m: InMsg) => (m.platform === "telegram" ? "Telegram" : "WhatsApp");
 const sourceUrl = (m: InMsg, text: string) => m.url ?? firstUrl(text);
@@ -146,19 +148,46 @@ async function sha(s: string) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
-// Token check: INGEST_TOKEN secret, or SHA-256 hash stored in public.ingest_config.
-let tokenHash: string | null = null;
-async function authorized(given: string) {
-  if (!given) return false;
-  if (INGEST_TOKEN && safeEq(given, INGEST_TOKEN)) return true;
-  if (tokenHash === null) {
-    const { data } = await db.from("ingest_config").select("value").eq("key", "ingest_token_sha256").maybeSingle();
-    tokenHash = data?.value ?? "";
+// Token check: INGEST_TOKEN secret, or SHA-256 hashes stored in public.ingest_config —
+// one for the Chrome extension, one for the local Telegram worker.
+let tokenHashes: { extension: string; worker: string } | null = null;
+async function authorized(given: string): Promise<"extension" | "worker" | null> {
+  if (!given) return null;
+  if (INGEST_TOKEN && safeEq(given, INGEST_TOKEN)) return "extension";
+  if (tokenHashes === null) {
+    const { data } = await db.from("ingest_config").select("key,value").in("key", ["ingest_token_sha256", "telegram_worker_token_sha256"]);
+    const get = (k: string) => (data ?? []).find((r: any) => r.key === k)?.value ?? "";
+    tokenHashes = { extension: get("ingest_token_sha256"), worker: get("telegram_worker_token_sha256") };
   }
-  if (!tokenHash) return false;
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(given));
   const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return safeEq(hex, tokenHash);
+  if (tokenHashes.extension && safeEq(hex, tokenHashes.extension)) return "extension";
+  if (tokenHashes.worker && safeEq(hex, tokenHashes.worker)) return "worker";
+  return null;
+}
+
+// Local Telegram worker: its folders (tabs) = agents, each with a list of channels.
+async function syncTelegramFolders(folders: any[]) {
+  const now = new Date().toISOString();
+  const rows = (Array.isArray(folders) ? folders : []).slice(0, 50).map((f) => {
+    const channels = (Array.isArray(f?.channels) ? f.channels : []).slice(0, 500).map((c: any) => ({
+      id: String(c?.id ?? "").slice(0, 40), title: clip(c?.title, 200), username: clip(c?.username, 64),
+    }));
+    return { folder: String(f?.name ?? "").trim().slice(0, 100), channels, channel_count: channels.length, last_sync_at: now };
+  }).filter((r) => r.folder);
+  if (!rows.length) return { synced: 0 };
+  const { error } = await db.from("telegram_agents").upsert(rows, { onConflict: "folder" });
+  if (error) throw error;
+  return { synced: rows.length };
+}
+
+async function countAgentMessages(results: { agent?: string; status?: string }[]) {
+  const per = new Map<string, number>();
+  for (const r of results) if (r.agent && r.status && !["already_processed", "invalid", "error"].includes(r.status)) per.set(r.agent, (per.get(r.agent) ?? 0) + 1);
+  for (const [folder, n] of per) {
+    const { data } = await db.from("telegram_agents").select("messages").eq("folder", folder).maybeSingle();
+    if (data) await db.from("telegram_agents").update({ messages: Number(data.messages ?? 0) + n, last_message_at: new Date().toISOString() }).eq("folder", folder);
+  }
 }
 
 let categoryCache: { id: string; slug: string; name: string }[] | null = null;
@@ -380,7 +409,7 @@ async function processOne(m: InMsg) {
     occurred_at: sentIso,
     created_by: BOT_USER_ID,
     classification_confidence: confident ? 0.8 : 0.4,
-    ai_suggestions: { source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "" },
+    ai_suggestions: { source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}) },
   };
   if (row.latitude == null || row.longitude == null) {
     row.latitude = null;
@@ -600,16 +629,35 @@ Deno.serve(async (req) => {
     if (background.length) EdgeRuntime.waitUntil(Promise.allSettled(background.splice(0)));
     return json({ ok: true, results });
   }
-  if (!(await authorized(req.headers.get("x-ingest-token") ?? ""))) {
-    return json({ error: "unauthorized" }, 401);
-  }
+  const who = await authorized(req.headers.get("x-ingest-token") ?? "");
+  if (!who) return json({ error: "unauthorized" }, 401);
   let body: any;
   try {
     body = await req.json();
   } catch {
     return json({ error: "invalid json" }, 400);
   }
-  if (body?.ping) return json({ ok: true, ai_configured: !!ANTHROPIC_API_KEY, model: MODEL });
+  if (body?.ping) return json({ ok: true, ai_configured: !!ANTHROPIC_API_KEY, model: MODEL, client: who });
+  if (who === "worker") {
+    // The Telegram worker may only report folders and send Telegram posts.
+    if (body?.telegram_folders) return json({ ok: true, ...(await syncTelegramFolders(body.telegram_folders)) });
+    if (!ANTHROPIC_API_KEY) return json({ error: "no Anthropic API key configured" }, 503);
+    const tgMsgs: InMsg[] = (Array.isArray(body?.messages) ? body.messages.slice(0, 20) : [])
+      .map((m: InMsg) => ({ ...m, platform: "telegram" as const }));
+    tgMsgs.sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at)));
+    const results: Record<string, unknown>[] = [];
+    for (const m of tgMsgs) {
+      try {
+        results.push({ msg_id: m.msg_id, agent: m.agent, ...(await processOne(m)) });
+      } catch (e) {
+        results.push({ msg_id: m.msg_id, agent: m.agent, status: "error", error: String((e as Error).message ?? e).slice(0, 300) });
+      }
+    }
+    await countAgentMessages(results as any);
+    // @ts-ignore EdgeRuntime is provided by Supabase
+    if (background.length) EdgeRuntime.waitUntil(Promise.allSettled(background.splice(0)));
+    return json({ ok: true, results });
+  }
   if (body?.video_request) return await videoRequest(body.video_request);
   if (body?.video_done) {
     const path = String(body.video_done.path ?? "");
