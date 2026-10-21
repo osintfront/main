@@ -226,14 +226,33 @@ export function MapView({
   }, [dir, t, compact]);
 
   // 4. One marker per place: the event's main pin plus a pin for every further place it names.
+  //    Only events that are new or changed get new markers; the rest stay as they are, so a busy
+  //    feed doesn't rebuild hundreds of pins (and close open popups) on every update.
+  const builtWithRef = useRef<unknown[]>([]);
   useEffect(() => {
     const layer = markerLayerRef.current;
     if (!layer) return;
-    layer.clearLayers();
-    markersRef.current.clear();
+    const deps = [t, dir, locale, lang, categoryLabel, compact];
+    const sameDeps = builtWithRef.current.length === deps.length && deps.every((d, i) => d === builtWithRef.current[i]);
+    builtWithRef.current = deps;
+    const wanted = new Map(events.map((e) => [e.id, e]));
+    const gone: L.Marker[] = [];
+    if (!sameDeps) {
+      layer.clearLayers();
+      markersRef.current.clear();
+    } else {
+      markersRef.current.forEach((entry, id) => {
+        if (wanted.get(id) !== entry.event) {
+          gone.push(...entry.markers);
+          markersRef.current.delete(id);
+        }
+      });
+      if (gone.length) layer.removeLayers(gone);
+    }
     const all: L.Marker[] = [];
 
     for (const event of events) {
+      if (markersRef.current.has(event.id)) continue; // unchanged: keep its pins
       const selected = event.id === selectedRef.current;
       const places = [
         { lat: event.latitude, lng: event.longitude, label: event.title },
@@ -288,8 +307,8 @@ export function MapView({
       });
       markersRef.current.set(event.id, { markers, event });
     }
-    layer.addLayers(all);
-    setMarkersVersion((v) => v + 1);
+    if (all.length) layer.addLayers(all);
+    if (all.length || gone.length || !sameDeps) setMarkersVersion((v) => v + 1);
   }, [events, t, dir, locale, lang, categoryLabel, compact]);
 
   // 4b. Home Front Command alerts: merged polygon + a pulsing siren pin at its centre.
@@ -422,8 +441,16 @@ export function MapView({
   }, []);
 
   // 5. Highlight the selected event's pins, and join its places with dashed lines.
+  //    Only the previously and the newly selected events need new icons (new pins are built
+  //    with the right one already).
+  const lastSelectedRef = useRef<string | null>(null);
   useEffect(() => {
-    markersRef.current.forEach(({ markers, event }, id) => {
+    const touched = new Set([lastSelectedRef.current, selectedId].filter(Boolean) as string[]);
+    lastSelectedRef.current = selectedId ?? null;
+    touched.forEach((id) => {
+      const entry = markersRef.current.get(id);
+      if (!entry) return;
+      const { markers, event } = entry;
       const selected = id === selectedId;
       markers.forEach((marker, index) => {
         marker.setIcon(

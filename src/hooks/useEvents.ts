@@ -12,6 +12,8 @@ export type LoadStatus = 'loading' | 'ready' | 'error';
 const REFRESH_INTERVAL_MS = 60_000;
 /** How long a newly arrived event stays highlighted. */
 const NEW_HIGHLIGHT_MS = 90_000;
+/** Busy feeds push many changes a minute: refetch at most this often. */
+const MIN_REFETCH_GAP_MS = 6_000;
 
 interface UsePublicEvents {
   events: PublicEvent[];
@@ -34,6 +36,11 @@ export function usePublicEvents(enabled = true): UsePublicEvents {
   const again = useRef(false);
   const hasData = useRef(false);
   const knownIds = useRef<Set<string> | null>(null);
+  /** Last version of each event (and its fingerprint): unchanged events keep the same object,
+   *  so the map and the feed only redraw what actually changed. */
+  const previous = useRef<Map<string, { event: PublicEvent; sig: string }>>(new Map());
+  const lastLoadAt = useRef(0);
+  const pending = useRef<number | undefined>(undefined);
   const [newIds, setNewIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const load = useCallback(
@@ -44,9 +51,22 @@ export function usePublicEvents(enabled = true): UsePublicEvents {
         return;
       }
       inFlight.current = true;
+      lastLoadAt.current = Date.now();
       if (!background) setStatus('loading');
       try {
-        const next = await fetchPublishedEvents();
+        const fetched = await fetchPublishedEvents();
+        const prevMap = previous.current;
+        const nextMap = new Map<string, { event: PublicEvent; sig: string }>();
+        let changed = fetched.length !== prevMap.size;
+        const next = fetched.map((e) => {
+          const sig = JSON.stringify(e);
+          const old = prevMap.get(e.id);
+          const keep = old && old.sig === sig ? old.event : e;
+          if (keep !== old?.event) changed = true;
+          nextMap.set(e.id, { event: keep, sig });
+          return keep;
+        });
+        previous.current = nextMap;
         // Highlight events that were not there before (not on the first load).
         if (knownIds.current) {
           const known = knownIds.current;
@@ -63,7 +83,7 @@ export function usePublicEvents(enabled = true): UsePublicEvents {
           }
         }
         knownIds.current = new Set(next.map((e) => e.id));
-        setEvents(next);
+        if (changed || !hasData.current) setEvents(next);
         hasData.current = true;
         setStatus('ready');
         setError(null);
@@ -96,9 +116,17 @@ export function usePublicEvents(enabled = true): UsePublicEvents {
       if (document.visibilityState === 'visible') void load(true);
     };
     document.addEventListener('visibilitychange', onVisible);
-    const unsubscribe = subscribeToPulse('events_pulse', () => void load(true));
+    // Pushes come in bursts (new event, then the editor's rewrite, then extra sources):
+    // coalesce them into one refetch at most every MIN_REFETCH_GAP_MS.
+    const onPulse = () => {
+      window.clearTimeout(pending.current);
+      const wait = Math.max(400, lastLoadAt.current + MIN_REFETCH_GAP_MS - Date.now());
+      pending.current = window.setTimeout(() => void load(true), wait);
+    };
+    const unsubscribe = subscribeToPulse('events_pulse', onPulse);
     return () => {
       unsubscribe();
+      window.clearTimeout(pending.current);
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
