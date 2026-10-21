@@ -307,9 +307,12 @@ ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשע
     (input.candidates ?? []).map((c) => `- id=${c.id} | ${c.occurred_at} | ${c.title} | ${String(c.description ?? "").slice(0, 200)}`).join("\n") || "(none)"
   }` : ""}`;
 
+  // The long system prompt + tools are the same on every call: cache them (cache reads cost
+  // ~10% of normal input). The cache breakpoint on the system block covers the tools too.
+  const systemBlocks = [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
   const editorTool = tool(input.mode, categories);
   const webSearch = input.allowedDomains?.length
-    ? { type: "web_search_20250305", name: "web_search", max_uses: 2, allowed_domains: input.allowedDomains.filter((d) => !BLOCKED_SEARCH_DOMAINS.has(d)).slice(0, 100) }
+    ? { type: "web_search_20250305", name: "web_search", max_uses: 1, allowed_domains: input.allowedDomains.filter((d) => !BLOCKED_SEARCH_DOMAINS.has(d)).slice(0, 100) }
     : null;
 
   let lastErr: unknown = null;
@@ -320,7 +323,7 @@ ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשע
         const messages: any[] = [{ role: "user", content: user }];
         const body: Record<string, unknown> = {
           max_tokens: 3000,
-          system,
+          system: systemBlocks,
           messages,
           tools: useSearch ? [webSearch, editorTool] : [editorTool],
           tool_choice: useSearch ? { type: "auto" } : { type: "tool", name: "edited_report" },
@@ -338,7 +341,7 @@ ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשע
           try {
             const fix = await call(model, {
               max_tokens: 3000,
-              system,
+              system: systemBlocks,
               tools: [editorTool],
               tool_choice: { type: "tool", name: "edited_report" },
               messages: [
