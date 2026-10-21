@@ -316,6 +316,10 @@ async def main() -> None:
     client = TelegramClient(SESSION, int(ENV["API_ID"]), ENV["API_HASH"], flood_sleep_threshold=120)
     await client.start()  # first time: asks for phone, code and 2-step password in this window
     me = await client.get_me()
+    if getattr(me, "bot", False):
+        # A bot token was typed at the phone prompt. Bots can't read your tabs or other channels.
+        await client.log_out()  # removes the bot session file
+        sys.exit("This logged in as a BOT. Run start.bat again and type your PHONE NUMBER (+972...), not a bot token.")
     log.info("Logged in as %s", me.first_name)
 
     try:
