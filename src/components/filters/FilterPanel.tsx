@@ -11,6 +11,8 @@ import {
   activeFilterCount,
   eventAreas,
   sourceKind,
+  placeKind,
+  type PlaceKind,
   type EventFilters,
   type SourceKind,
   type TimePreset,
@@ -100,14 +102,16 @@ export function FilterPanel({ filters, onChange, onClose, events, resultCount, o
     const cat = new Map<string, number>();
     const sev = new Map<string, number>();
     const src = new Map<string, number>();
+    const place = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
     for (const e of events) {
       eventAreas(e).forEach((a) => bump(area, a));
       bump(cat, e.category.slug);
       bump(sev, e.severity);
       bump(src, sourceKind(e));
+      bump(place, placeKind(e));
     }
-    return { area, cat, sev, src };
+    return { area, cat, sev, src, place };
   }, [events]);
 
   const categories = useMemo(() => {
@@ -273,6 +277,18 @@ export function FilterPanel({ filters, onChange, onClose, events, resultCount, o
             </div>
           </Section>
 
+          <Section title={t('filters.location')}>
+            <div className="flex flex-wrap gap-1.5">
+              {(['place', 'country', 'none'] as PlaceKind[]).map((k) => (
+                <Chip key={k} on={filters.placeKinds.includes(k)} onClick={() => set({ placeKinds: toggle(filters.placeKinds, k) })}>
+                  {t(`filters.location.${k}`)}
+                  <Count n={counts.place.get(k) ?? 0} />
+                </Chip>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{t('filters.location.hint')}</p>
+          </Section>
+
           <Section title={t('filters.more')}>
             <div className="flex flex-wrap gap-1.5">
               <Chip on={filters.breakingOnly} onClick={() => set({ breakingOnly: !filters.breakingOnly })}>
@@ -280,9 +296,6 @@ export function FilterPanel({ filters, onChange, onClose, events, resultCount, o
               </Chip>
               <Chip on={filters.verifiedOnly} onClick={() => set({ verifiedOnly: !filters.verifiedOnly })}>
                 {t('filters.verifiedOnly')}
-              </Chip>
-              <Chip on={filters.exactOnly} onClick={() => set({ exactOnly: !filters.exactOnly })}>
-                {t('filters.exactOnly')}
               </Chip>
             </div>
           </Section>

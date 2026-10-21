@@ -1,8 +1,9 @@
 import { memo, type CSSProperties, type MouseEvent } from 'react';
-import { Crosshair, ExternalLink, MapPin } from 'lucide-react';
+import { Crosshair, ExternalLink, MapPin, MapPinOff } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
+import { isOnMap } from '@/lib/eventFilters';
 import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
 import { previewText } from '@/utils/text';
@@ -26,6 +27,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
   const description = previewText(fullDescription);
   const where = [event.locationName, event.country].filter(Boolean).join(', ');
   const placeCount = (event.places?.length ?? 0) + 1;
+  const onMap = isOnMap(event);
   const sourceLabel = event.sourceName || (event.sourceUrl ? hostnameOf(event.sourceUrl) : '');
 
   const handleCardClick = (e: MouseEvent<HTMLElement>) => {
@@ -147,6 +149,12 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
             {t('details.moreSources', { count: event.sources.length })}
           </button>
         ) : null}
+        {!onMap ? (
+          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            <MapPinOff className="size-3.5" aria-hidden />
+            {t('feed.notOnMap')}
+          </span>
+        ) : (
         <button
           type="button"
           onClick={() => onLocate(event.id)}
@@ -156,6 +164,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
           <Crosshair className="size-3.5" aria-hidden />
           {t('feed.locate')}
         </button>
+        )}
       </footer>
     </article>
   );

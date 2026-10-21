@@ -10,6 +10,9 @@ import type { PublicEvent, Severity } from '@/types/event';
 export type TimePreset = 'live' | '1h' | '6h' | '24h' | '3d' | '7d' | 'custom';
 export type SourceKind = 'whatsapp' | 'telegram' | 'news' | 'other';
 export type LatLng = [number, number];
+/** place = a specific place (pinned on the map); country = only the country is known;
+ *  none = no usable location (only a broad region like "Middle East", or nothing). */
+export type PlaceKind = 'place' | 'country' | 'none';
 
 export interface EventFilters {
   preset: TimePreset;
@@ -22,7 +25,8 @@ export interface EventFilters {
   sources: SourceKind[];
   breakingOnly: boolean;
   verifiedOnly: boolean;
-  exactOnly: boolean;
+  /** Empty = all. Only 'place' events are pinned on the map; the others appear in the feed only. */
+  placeKinds: PlaceKind[];
   /** A drawn area: only events with a pin inside it are shown. */
   polygon: LatLng[] | null;
 }
@@ -37,7 +41,7 @@ export const EMPTY_FILTERS: EventFilters = {
   sources: [],
   breakingOnly: false,
   verifiedOnly: false,
-  exactOnly: false,
+  placeKinds: [],
   polygon: null,
 };
 
@@ -134,6 +138,18 @@ export function eventAreas(e: PublicEvent): Set<string> {
   return out;
 }
 
+export function placeKind(e: PublicEvent): PlaceKind {
+  const p = e.locationPrecision;
+  if (!p) return 'none';
+  if (p === 'country') return 'country';
+  // A region with no place name is the broad fallback ("Middle East"): not a real location.
+  if (p === 'region' && !e.locationName && !(e.places?.length)) return 'none';
+  return 'place';
+}
+
+/** Only events with a specific place get a pin; country-only / no-location events stay in the feed. */
+export const isOnMap = (e: PublicEvent) => placeKind(e) === 'place';
+
 export function sourceKind(e: PublicEvent): SourceKind {
   const name = e.sourceName ?? '';
   if (/^whatsapp/i.test(name)) return 'whatsapp';
@@ -186,7 +202,7 @@ export function matchesFilters(e: PublicEvent, f: EventFilters, now = Date.now()
   if (f.sources.length && !f.sources.includes(sourceKind(e))) return false;
   if (f.breakingOnly && !e.isBreaking) return false;
   if (f.verifiedOnly && !e.isVerified) return false;
-  if (f.exactOnly && (e.locationPrecision === 'region' || e.locationPrecision === 'country')) return false;
+  if (f.placeKinds.length && !f.placeKinds.includes(placeKind(e))) return false;
   if (f.polygon && f.polygon.length >= 3 && !eventPoints(e).some((p) => pointInPolygon(p, f.polygon!))) return false;
   return true;
 }
@@ -201,7 +217,7 @@ export function activeFilterCount(f: EventFilters): number {
     (f.sources.length ? 1 : 0) +
     (f.breakingOnly ? 1 : 0) +
     (f.verifiedOnly ? 1 : 0) +
-    (f.exactOnly ? 1 : 0) +
+    (f.placeKinds.length ? 1 : 0) +
     (f.polygon ? 1 : 0)
   );
 }

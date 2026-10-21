@@ -17,7 +17,7 @@ import { MobileEventSheet } from '@/components/map/MobileEventSheet';
 import { FilterPanel } from '@/components/filters/FilterPanel';
 import type { DrawMode } from '@/components/map/MapView';
 import { useArchiveRange } from '@/hooks/useArchiveRange';
-import { EMPTY_FILTERS, activeFilterCount, matchesFilters, needsArchive, type EventFilters, type LatLng } from '@/lib/eventFilters';
+import { EMPTY_FILTERS, activeFilterCount, isOnMap, matchesFilters, needsArchive, type EventFilters, type LatLng } from '@/lib/eventFilters';
 import { SlidersHorizontal } from 'lucide-react';
 import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 import { installAudioUnlock, playChime } from '@/lib/notifySound';
@@ -170,14 +170,23 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()),
     [allEvents, deferredQuery, categoryLabel, effectiveFilters],
   );
+  // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
+  const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
 
   // Card → map: fly to marker. On phones, switch to the map pane first.
   const handleLocate = useCallback(
     (id: string) => {
+      const ev = allEvents.find((e) => e.id === id);
+      if (ev && !isOnMap(ev)) {
+        // Not pinned on the map: open its details instead of flying nowhere.
+        select(id, 'feed');
+        setDetailsId(id);
+        return;
+      }
       setMobilePane('map');
       select(id, 'feed');
     },
-    [select],
+    [select, allEvents],
   );
 
   // Marker → card: highlight and scroll the card into view.
@@ -313,7 +322,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           </div>
           <div className="relative min-h-0 flex-1">
             <MapView
-              events={visibleEvents}
+              events={mapEvents}
               selectedId={selectedId}
               focusRequest={focusRequest}
               onMarkerSelect={handleMarkerSelect}
@@ -322,7 +331,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               alertFocus={alertFocus}
               alertShapes={alertShapes}
               compact={isPhone}
-              legend={<CategoryLegend events={visibleEvents} alertCount={alerts.length} />}
+              legend={<CategoryLegend events={mapEvents} alertCount={alerts.length} />}
               onBackgroundClick={isPhone ? clearSelection : undefined}
               area={filters.polygon}
               drawMode={drawMode}
@@ -335,7 +344,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
 
         {/* Column 3 — legend + skyscraper (wide screens) */}
         <aside className="ofm-scroll hidden min-h-0 flex-col items-center gap-5 overflow-y-auto border-s border-slate-200 bg-white px-4 py-4 xl:flex dark:border-slate-800 dark:bg-slate-950">
-          <CategoryLegend events={visibleEvents} alertCount={alerts.length} />
+          <CategoryLegend events={mapEvents} alertCount={alerts.length} />
           <AdSlot variant="skyscraper" slotId="sidebar-skyscraper" />
         </aside>
       </div>
