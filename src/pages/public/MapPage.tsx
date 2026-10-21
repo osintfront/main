@@ -23,6 +23,8 @@ import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 import { installAudioUnlock, playChime } from '@/lib/notifySound';
 import { isCategoryAudible } from '@/hooks/useSoundSetting';
 import { HFC_CATEGORY } from '@/config/hfcThreats';
+import { useEeis } from '@/hooks/useEeis';
+import { compileEei, matchesEei } from '@/lib/eei';
 
 type MobilePane = 'map' | 'feed';
 
@@ -151,6 +153,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     return [...events, ...older.events.filter((e) => !ids.has(e.id))];
   }, [events, older.events]);
   const filterCount = activeFilterCount(effectiveFilters);
+  // צי"ח: saved keyword queries; an event passes if it matches any query that is on.
+  const { eeis, add: addEei, remove: removeEei } = useEeis();
+  const eeiMatchers = useMemo(
+    () => eeis.filter((q) => effectiveFilters.eeis.includes(q.id)).map((q) => compileEei(q.query)),
+    [eeis, effectiveFilters.eeis],
+  );
   const startDrawing = useCallback(() => {
     setFiltersOpen(false);
     setMobilePane('map');
@@ -167,8 +175,9 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
       allEvents
         .filter((e) => matchesQuery(e, deferredQuery, categoryLabel(e.category.slug, e.category.name)))
         .filter((e) => matchesFilters(e, effectiveFilters))
+        .filter((e) => !eeiMatchers.length || eeiMatchers.some((m) => matchesEei(e, m)))
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()),
-    [allEvents, deferredQuery, categoryLabel, effectiveFilters],
+    [allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers],
   );
   // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
   const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
@@ -243,6 +252,9 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           onDrawArea={startDrawing}
           hideTime={isArchive}
           loadingArchive={older.loading}
+          eeis={eeis}
+          onAddEei={addEei}
+          onRemoveEei={removeEei}
         />
       ) : null}
 
@@ -264,6 +276,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             focusRequest={focusRequest}
             lastUpdated={lastUpdated}
             onRetry={reload}
+            onRefresh={isArchive ? undefined : reload}
             onClearQuery={() => setQuery('')}
             onLocate={handleLocate}
             newIds={newIds}

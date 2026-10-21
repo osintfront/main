@@ -6,6 +6,8 @@ export const CATEGORY_SLUGS = [
   'airstrike',
   'explosion',
   'infiltration',
+  'drone',
+  'uav',
   'terror-security-incident',
   'military-activity',
   'political-event',

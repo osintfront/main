@@ -29,6 +29,8 @@ export interface EventFilters {
   placeKinds: PlaceKind[];
   /** A drawn area: only events with a pin inside it are shown. */
   polygon: LatLng[] | null;
+  /** Active צי"ח (EEI) ids: an event must match at least one (matched in MapPage, see lib/eei). */
+  eeis: string[];
 }
 
 export const EMPTY_FILTERS: EventFilters = {
@@ -43,6 +45,7 @@ export const EMPTY_FILTERS: EventFilters = {
   verifiedOnly: false,
   placeKinds: [],
   polygon: null,
+  eeis: [],
 };
 
 export const TIME_PRESETS: { id: TimePreset; hours: number | null }[] = [
@@ -218,7 +221,8 @@ export function activeFilterCount(f: EventFilters): number {
     (f.breakingOnly ? 1 : 0) +
     (f.verifiedOnly ? 1 : 0) +
     (f.placeKinds.length ? 1 : 0) +
-    (f.polygon ? 1 : 0)
+    (f.polygon ? 1 : 0) +
+    (f.eeis.length ? 1 : 0)
   );
 }
 

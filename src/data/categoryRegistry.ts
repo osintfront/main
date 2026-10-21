@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { CategoryRef, CategorySlug, EventCategory } from '@/types/category';
+import { FixedWingUav, Infiltration, Quadcopter } from './customIcons';
 
 /**
  * Icons a category may reference by name. Category rows store the icon as a
@@ -43,6 +44,9 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Car,
   HeartHandshake,
   CircleDot,
+  Quadcopter,
+  FixedWingUav,
+  Infiltration,
 };
 
 export function getCategoryIcon(name: string | null | undefined): LucideIcon {
@@ -70,7 +74,9 @@ export const DEFAULT_CATEGORIES: readonly CategoryDefinition[] = [
   { slug: 'missile-rocket-attack', name: 'Missile or Rocket Attack', icon: 'Rocket', color: '#f97316' },
   { slug: 'airstrike', name: 'Airstrike', icon: 'Plane', color: '#9333ea' },
   { slug: 'explosion', name: 'Explosion', icon: 'Bomb', color: '#dc2626' },
-  { slug: 'infiltration', name: 'Infiltration', icon: 'Footprints', color: '#a16207' },
+  { slug: 'infiltration', name: 'Infiltration', icon: 'Infiltration', color: '#a16207' },
+  { slug: 'drone', name: 'Drone', icon: 'Quadcopter', color: '#0284c7' },
+  { slug: 'uav', name: 'UAV', icon: 'FixedWingUav', color: '#6d28d9' },
   { slug: 'terror-security-incident', name: 'Terror or Security Incident', icon: 'ShieldAlert', color: '#7f1d1d' },
   { slug: 'military-activity', name: 'Military Activity', icon: 'Swords', color: '#4d7c0f' },
   { slug: 'political-event', name: 'Political Event', icon: 'Landmark', color: '#2563eb' },
