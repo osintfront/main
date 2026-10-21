@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Loader2, Octagon, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Crosshair, Loader2, Octagon, Plus, X } from 'lucide-react';
+import { compileEei, matchesEei, type Eei } from '@/lib/eei';
 import { useI18n } from '@/i18n';
 import { DEFAULT_CATEGORIES, getCategoryIcon } from '@/data/categoryRegistry';
 import { SEVERITIES, type PublicEvent, type Severity } from '@/types/event';
@@ -31,6 +32,10 @@ interface FilterPanelProps {
   /** Archive page: the day picker sets the time, so the time section is hidden. */
   hideTime?: boolean;
   loadingArchive?: boolean;
+  /** Saved צי"ח (EEI) queries; which are on is in filters.eeis. */
+  eeis?: Eei[];
+  onAddEei?: (name: string, query: string) => string;
+  onRemoveEei?: (id: string) => void;
 }
 
 const SOURCES: SourceKind[] = ['whatsapp', 'telegram', 'news', 'other'];
@@ -84,7 +89,118 @@ function Count({ n }: { n: number }) {
  * Filters for the map and feed. A dropdown under the top bar on desktop, a
  * bottom sheet on phones. Changes apply at once; "Show N events" just closes.
  */
-export function FilterPanel({ filters, onChange, onClose, events, resultCount, onDrawArea, hideTime = false, loadingArchive = false }: FilterPanelProps) {
+/** צי"ח: saved keyword queries; an event shows if it matches any query that is on. */
+function EeiSection({
+  filters,
+  set,
+  events,
+  eeis,
+  onAdd,
+  onRemove,
+}: {
+  filters: EventFilters;
+  set: (patch: Partial<EventFilters>) => void;
+  events: PublicEvent[];
+  eeis: Eei[];
+  onAdd: (name: string, query: string) => string;
+  onRemove: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  const [name, setName] = useState('');
+  const [query, setQuery] = useState('');
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const q of eeis) {
+      const c = compileEei(q.query);
+      m.set(q.id, events.reduce((n, e) => n + (matchesEei(e, c) ? 1 : 0), 0));
+    }
+    return m;
+  }, [eeis, events]);
+  const preview = useMemo(() => {
+    const c = compileEei(query);
+    return c ? events.reduce((n, e) => n + (matchesEei(e, c) ? 1 : 0), 0) : null;
+  }, [query, events]);
+
+  const submit = (ev: FormEvent) => {
+    ev.preventDefault();
+    if (!compileEei(query)) return;
+    const id = onAdd(name, query);
+    set({ eeis: [...filters.eeis, id] });
+    setName('');
+    setQuery('');
+  };
+  const input =
+    'h-10 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 sm:h-9 sm:text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white';
+
+  return (
+    <Section title={t('eei.title')}>
+      {eeis.length ? (
+        <ul className="mb-3 flex flex-wrap gap-1.5">
+          {eeis.map((q) => (
+            <li key={q.id} className="inline-flex items-center">
+              <Chip on={filters.eeis.includes(q.id)} onClick={() => set({ eeis: toggle(filters.eeis, q.id) })}>
+                <Crosshair className="size-3.5" aria-hidden />
+                <span className="max-w-[16rem] truncate" title={q.query}>
+                  {q.name || q.query}
+                </span>
+                <Count n={counts.get(q.id) ?? 0} />
+              </Chip>
+              <button
+                type="button"
+                onClick={() => {
+                  onRemove(q.id);
+                  if (filters.eeis.includes(q.id)) set({ eeis: filters.eeis.filter((x) => x !== q.id) });
+                }}
+                aria-label={t('eei.remove', { name: q.name || q.query })}
+                className="ms-0.5 inline-flex size-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <form onSubmit={submit} className="space-y-2">
+        <label className="block">
+          <span className="sr-only">{t('eei.query')}</span>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('eei.queryPlaceholder')} className={input} dir="auto" />
+        </label>
+        <div className="flex gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">{t('eei.name')}</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('eei.namePlaceholder')} className={input} dir="auto" />
+          </label>
+          <button
+            type="submit"
+            disabled={!compileEei(query)}
+            className="inline-flex h-10 shrink-0 items-center gap-1 rounded-lg bg-sky-600 px-3 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-40 sm:h-9"
+          >
+            <Plus className="size-4" aria-hidden />
+            {t('eei.add')}
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {preview !== null ? <span className="font-semibold text-slate-700 dark:text-slate-200">{t('eei.preview', { count: preview })} · </span> : null}
+          {t('eei.hint')}
+        </p>
+      </form>
+    </Section>
+  );
+}
+
+export function FilterPanel({
+  filters,
+  onChange,
+  onClose,
+  events,
+  resultCount,
+  onDrawArea,
+  hideTime = false,
+  loadingArchive = false,
+  eeis = [],
+  onAddEei,
+  onRemoveEei,
+}: FilterPanelProps) {
   const { t, lang, categoryLabel } = useI18n();
   const set = (patch: Partial<EventFilters>) => onChange({ ...filters, ...patch });
   const panelRef = useRef<HTMLDivElement>(null);
@@ -166,6 +282,9 @@ export function FilterPanel({ filters, onChange, onClose, events, resultCount, o
         </header>
 
         <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto">
+          {onAddEei && onRemoveEei ? (
+            <EeiSection filters={filters} set={set} events={events} eeis={eeis} onAdd={onAddEei} onRemove={onRemoveEei} />
+          ) : null}
           {hideTime ? null : (
             <Section title={t('filters.time')}>
               <div className="flex flex-wrap gap-1.5">
