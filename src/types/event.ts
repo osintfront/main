@@ -62,6 +62,9 @@ export interface PublicEvent {
   latitude: number;
   longitude: number;
   locationName: string;
+  /** The place in each site language (from the place database or the AI editor). */
+  locationNameHe?: string;
+  locationNameEn?: string;
   locationPrecision?: LocationPrecision | null;
   country: string;
   region: string;

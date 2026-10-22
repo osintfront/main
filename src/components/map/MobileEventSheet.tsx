@@ -6,6 +6,7 @@ import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
 import { previewText } from '@/utils/text';
 import { BreakingBadge, CategoryBadge, SeverityBadge } from '@/components/common/Badges';
+import { whereLabel } from '@/utils/places';
 
 interface MobileEventSheetProps {
   event: PublicEvent;
@@ -21,7 +22,7 @@ export function MobileEventSheet({ event, onClose, onOpenDetails }: MobileEventS
   const { t, locale, lang, dir } = useI18n();
   const title = event.translations[lang]?.title || event.title;
   const description = previewText(event.translations[lang]?.description || event.description);
-  const where = [event.locationName, event.country].filter(Boolean).join(', ');
+  const where = whereLabel(event, lang);
   const placeCount = (event.places?.length ?? 0) + 1;
   const sourceLabel = event.sourceName || (event.sourceUrl ? hostnameOf(event.sourceUrl) : '');
 

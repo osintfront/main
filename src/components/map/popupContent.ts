@@ -3,6 +3,7 @@ import { formatDateTime } from '@/utils/time';
 import { hostnameOf, safeExternalUrl } from '@/utils/url';
 import { previewText } from '@/utils/text';
 import { loadEventMedia, toMediaView } from '@/services/eventMediaService';
+import { whereLabel } from '@/utils/places';
 
 export interface PopupLabels {
   categoryLabel: string;
@@ -49,7 +50,7 @@ export function buildPopupContent(
   title.dir = 'auto';
   root.append(title);
 
-  const where = [event.locationName, event.country].filter(Boolean).join(', ');
+  const where = whereLabel(event, labels.dir === 'rtl' ? 'he' : 'en');
   const time = formatDateTime(event.occurredAt, labels.locale);
   const sub = el('p', 'ofm-popup__sub');
   if (where) {

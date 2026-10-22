@@ -7,6 +7,7 @@ import { hostnameOf } from '@/utils/url';
 import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
 import { LinkifiedText } from '@/components/common/LinkifiedText';
+import { whereLabel } from '@/utils/places';
 
 interface EventDetailsDialogProps {
   event: PublicEvent;
@@ -24,7 +25,7 @@ export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDia
   const closeRef = useRef<HTMLButtonElement>(null);
   const title = event.translations[lang]?.title || event.title;
   const description = event.translations[lang]?.description || event.description;
-  const where = [event.locationName, event.region, event.country].filter(Boolean).join(', ');
+  const where = whereLabel(event, lang);
   const sourceLabel = event.sourceName || (event.sourceUrl ? hostnameOf(event.sourceUrl) : '');
 
   // Focus the close button, close on Escape, give focus back on close, and keep the page from scrolling.

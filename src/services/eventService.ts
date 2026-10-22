@@ -18,6 +18,8 @@ const PUBLIC_EVENT_COLUMNS = [
   'latitude',
   'longitude',
   'location_name',
+  'location_name_he',
+  'location_name_en',
   'location_precision',
   'sources',
   'locations',
@@ -48,6 +50,8 @@ interface PublishedEventRow {
   latitude: number | string | null;
   longitude: number | string | null;
   location_name: string | null;
+  location_name_he?: string | null;
+  location_name_en?: string | null;
   location_precision?: string | null;
   sources?: unknown;
   locations?: unknown;
@@ -146,6 +150,8 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     latitude,
     longitude,
     locationName: row.location_name ?? '',
+    locationNameHe: row.location_name_he ?? '',
+    locationNameEn: row.location_name_en ?? '',
     locationPrecision: (LOCATION_PRECISIONS as readonly string[]).includes(row.location_precision ?? '')
       ? (row.location_precision as LocationPrecision)
       : null,
