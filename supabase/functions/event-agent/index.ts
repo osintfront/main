@@ -127,6 +127,15 @@ async function translate(limit: number) {
 }
 
 Deno.serve(async (req) => {
+  try {
+    return await handle(req);
+  } catch (e) {
+    console.error("event-agent", String((e as Error)?.message ?? e).slice(0, 300));
+    return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 500);
+  }
+});
+
+async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
   const body = await req.json().catch(() => ({}));
@@ -143,4 +152,4 @@ Deno.serve(async (req) => {
   }
   if (action === "translate") return await translate(Math.min(Math.max(Number(body?.limit ?? 20) | 0, 1), 60));
   return json({ error: "unknown action" }, 400);
-});
+}
