@@ -28,3 +28,11 @@ export const Infiltration = createLucideIcon('Infiltration', [
   ['path', { d: 'M2 12h19', key: 'arrow' }],
   ['path', { d: 'm17.5 8.5 3.5 3.5-3.5 3.5', key: 'head' }],
 ]);
+
+/** הפגזה ארטילרית — a field gun: barrel raised, wheel, trail, and a shell's arc. */
+export const Artillery = createLucideIcon('Artillery', [
+  ['path', { d: 'M4 15 16 7', key: 'barrel' }],
+  ['circle', { cx: '9', cy: '17', r: '3', key: 'wheel' }],
+  ['path', { d: 'M11.5 15.5 20 18', key: 'trail' }],
+  ['path', { d: 'M17 5c2-1.5 3.5-1.5 5 0', key: 'arc' }],
+]);

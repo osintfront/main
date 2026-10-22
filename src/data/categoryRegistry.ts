@@ -22,7 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { CategoryRef, CategorySlug, EventCategory } from '@/types/category';
-import { FixedWingUav, Infiltration, Quadcopter } from './customIcons';
+import { Artillery, FixedWingUav, Infiltration, Quadcopter } from './customIcons';
 
 /**
  * Icons a category may reference by name. Category rows store the icon as a
@@ -50,6 +50,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Quadcopter,
   FixedWingUav,
   Infiltration,
+  Artillery,
   Target,
   Binoculars,
   MessageSquareQuote,
@@ -80,6 +81,7 @@ export const DEFAULT_CATEGORIES: readonly CategoryDefinition[] = [
   { slug: 'assassination', name: 'Assassination', icon: 'Target', color: '#991b1b' },
   { slug: 'missile-rocket-attack', name: 'Missile or Rocket Attack', icon: 'Rocket', color: '#f97316' },
   { slug: 'airstrike', name: 'Airstrike', icon: 'Plane', color: '#9333ea' },
+  { slug: 'artillery-shelling', name: 'Artillery shelling', icon: 'Artillery', color: '#b45309' },
   { slug: 'explosion', name: 'Explosion', icon: 'Bomb', color: '#dc2626' },
   { slug: 'infiltration', name: 'Infiltration', icon: 'Infiltration', color: '#a16207' },
   { slug: 'drone', name: 'Drone', icon: 'Quadcopter', color: '#0284c7' },

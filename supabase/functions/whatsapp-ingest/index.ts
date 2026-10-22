@@ -284,6 +284,7 @@ Rules:
 - A strike that killed a NAMED person (commander, operative, official): assassination.
 - Photos/videos/reports of troops, vehicles or weapons at a stated location: force-sighting. Movements, operations, deployments without a documented sighting: military-activity.
 - Gunfire, sweep fire (ירי סריקה), light-weapons fire: shooting-gunfire (small-arms fire).
+- Artillery, mortar or tank shelling (قصف مدفعي, مدفعية, هاون, قذائف, tank fire at a place): artillery-shelling — not airstrike (airstrike = aircraft / drones dropping or firing).
 - If torn between event and not_event, choose uncertain — never not_event.
 Examples:
 - "מפקד גזרת דרום אל-ליטאני, תת-אלוף X: המשך התקיפות של צה\"ל מדגיש את הצורך בפעולה ערבית" -> event, statements

@@ -181,6 +181,7 @@ export const en = {
 
   'category.shooting-gunfire': 'Small-arms fire',
   'category.assassination': 'Assassination',
+  'category.artillery-shelling': 'Artillery shelling',
   'category.force-sighting': 'Forces sighting',
   'category.statements': 'Statements',
   'category.missile-rocket-attack': 'Missile or Rocket Attack',

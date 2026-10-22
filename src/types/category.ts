@@ -21,6 +21,7 @@ export const CATEGORY_SLUGS = [
   'assassination',
   'force-sighting',
   'statements',
+  'artillery-shelling',
   'other',
 ] as const;
 
