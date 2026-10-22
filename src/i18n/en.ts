@@ -681,6 +681,7 @@ export const en = {
   "usage.claudeNoKey": "To show this, add an Anthropic Admin API key (sk-ant-admin…) as the Supabase secret ANTHROPIC_ADMIN_KEY. Create it in the Claude Console → Settings → Admin keys.",
   "usage.claudeError": "Could not read the Claude API report.",
   "usage.siteTitle": "This site's AI calls",
+  "media.tooBigNoSize": "The video is too large to show here.",
 } as const;
 
 export type TranslationKey = keyof typeof en;

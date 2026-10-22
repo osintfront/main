@@ -683,4 +683,5 @@ export const he: Record<TranslationKey, string> = {
   "usage.claudeNoKey": "כדי להציג, הוסיפו מפתח Admin API של Anthropic (sk-ant-admin…) כסוד ANTHROPIC_ADMIN_KEY ב-Supabase. יוצרים אותו ב-Claude Console ← Settings ← Admin keys.",
   "usage.claudeError": "לא ניתן לקרוא את דוח ה-Claude API.",
   "usage.siteTitle": "קריאות ה-AI של האתר",
+  "media.tooBigNoSize": "הקובץ גדול מדי להצגה כאן.",
 };

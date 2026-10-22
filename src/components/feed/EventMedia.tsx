@@ -55,7 +55,7 @@ function VideoStill({ still }: { still: Still }) {
   }
 
   const note =
-    state === 'too_big' ? t('media.tooBig', { mb: mb ?? 50 }) : state === 'unavailable' ? t('media.unavailable') : state === 'error' ? t('media.videoError') : null;
+    state === 'too_big' ? (mb ? t('media.tooBig', { mb }) : t('media.tooBigNoSize')) : state === 'unavailable' ? t('media.unavailable') : state === 'error' ? t('media.videoError') : null;
 
   return (
     <div>
