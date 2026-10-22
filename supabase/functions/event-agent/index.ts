@@ -4,11 +4,17 @@
 //                                and caches them in events.translations; later readers get the cache.
 //   {action:"edit", id}          cron secret — a foreign-language draft a person published:
 //                                run the editor agent (Hebrew headline + summary, English, places).
+//   {action:"video", id}         public — play pressed on a video thumbnail (id = thumbnail): fetch the
+//                                video of that post once (max 50 MB) and return its URL.
+//   {action:"claude_usage"}      staff (their own session) — the whole Claude API organization's daily
+//                                usage and cost (Admin API; needs the secret ANTHROPIC_ADMIN_KEY).
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { editReport, expandReport, foreignShare, formatDescription, locationsForDb, mainCountry, translateBrief, translationsFor } from "../_shared/editor.ts";
 import { setUsageSink } from "../_shared/usage.ts";
+import { videoForThumb } from "../_shared/videoOnDemand.ts";
+import { claudeUsage } from "../_shared/claudeUsage.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -144,6 +150,26 @@ async function handle(req: Request): Promise<Response> {
   if (action === "expand") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await expand(id);
+  }
+  if (action === "claude_usage") {
+    // Staff only: check the caller's own session.
+    const auth = req.headers.get("authorization") ?? "";
+    const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      auth: { persistSession: false },
+      global: { headers: { Authorization: auth } },
+    });
+    const { data: ok } = await asUser.rpc("has_permission", { p_permission: "dashboard.view" });
+    if (ok !== true) return json({ error: "unauthorized" }, 401);
+    try {
+      return json({ ok: true, ...(await claudeUsage(30)) });
+    } catch (e) {
+      return json({ ok: false, configured: true, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "video") {
+    if (!UUID.test(id)) return json({ error: "bad id" }, 400);
+    const r = await videoForThumb(db, id);
+    return r ? json({ ok: true, ...r }) : json({ error: "not found" }, 404);
   }
   if (!(await cronOk(req))) return json({ error: "unauthorized" }, 401);
   if (action === "edit") {

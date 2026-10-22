@@ -423,3 +423,9 @@ export async function setEventCategory(id: string, slug: string): Promise<void> 
   const { error } = await client().rpc('set_event_category', { p_id: id, p_slug: slug });
   if (error) throw toServiceError(error);
 }
+
+/** Move one of an event's extra places (index in events.locations); the place is learned. */
+export async function moveEventPlace(id: string, index: number, latitude: number, longitude: number): Promise<void> {
+  const { error } = await client().rpc('move_event_place', { p_id: id, p_index: index, p_lat: latitude, p_lng: longitude });
+  if (error) throw toServiceError(error);
+}

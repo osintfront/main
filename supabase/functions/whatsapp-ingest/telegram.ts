@@ -8,6 +8,8 @@ export interface TgPost {
   date: string | null; // ISO
   text: string;
   photos: string[]; // image URLs (telesco.pe CDN)
+  /** Per photo: "video_thumb" when it is the still of a video (the video is fetched only on demand). */
+  photoKinds: ("image" | "video_thumb")[];
   forwardedFrom: string | null;
 }
 
@@ -71,10 +73,12 @@ export async function fetchChannel(name: string, before?: number): Promise<{ tit
     const id = Number(s[2]);
     const textHtml = (chunk.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/) ?? [])[1] ?? "";
     const date = (chunk.match(/<time[^>]*datetime="([^"]+)"/) ?? [])[1] ?? null;
-    const photos = [...chunk.matchAll(/tgme_widget_message_(?:photo_wrap|video_thumb)[^"]*"[^>]*background-image:url\('([^']+)'\)/g)]
-      .map((m) => m[1])
-      .filter((u) => /^https:\/\//.test(u))
+    const found = [...chunk.matchAll(/tgme_widget_message_(photo_wrap|video_thumb)[^"]*"[^>]*background-image:url\('([^']+)'\)/g)]
+      .map((m) => ({ url: m[2], kind: m[1] === "video_thumb" ? "video_thumb" as const : "image" as const }))
+      .filter((m) => /^https:\/\//.test(m.url))
       .slice(0, 4);
+    const photos = found.map((m) => m.url);
+    const photoKinds = found.map((m) => m.kind);
     const fwd = (chunk.match(/tgme_widget_message_forwarded_from_name[^>]*>(?:<span[^>]*>)?([^<]+)/) ?? [])[1];
     posts.push({
       id,
@@ -83,6 +87,7 @@ export async function fetchChannel(name: string, before?: number): Promise<{ tit
       date: date && !isNaN(new Date(date).getTime()) ? new Date(date).toISOString() : null,
       text: htmlToText(textHtml),
       photos,
+      photoKinds,
       forwardedFrom: fwd ? decode(fwd).trim() : null,
     });
   }

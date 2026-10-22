@@ -46,16 +46,21 @@ interface MapViewProps {
   onDrawModeChange?: (mode: DrawMode | null) => void;
   onAreaDrawn?: (points: LatLng[]) => void;
   onClearArea?: () => void;
-  /** Staff: the event whose pin is being moved (null = none). */
-  movingId?: string | null;
+  /** Staff: the pin being moved — the event's main pin (place null) or one of its extra places. */
+  moving?: MoveTarget | null;
   /** Staff: "change location" in a popup. Absent = visitors (no button). */
-  onMoveRequest?: (id: string) => void;
+  onMoveRequest?: (target: MoveTarget) => void;
   onMoveEnd?: () => void;
   /** Save the new pin; resolve true when stored. */
-  onMoveSave?: (id: string, lat: number, lng: number) => Promise<boolean>;
+  onMoveSave?: (target: MoveTarget, lat: number, lng: number) => Promise<boolean>;
 }
 
 export type DrawMode = 'polygon' | 'octagon';
+/** place = index in events.locations (EventPlace.index), null = the main pin. */
+export interface MoveTarget {
+  id: string;
+  place: number | null;
+}
 
 const SEVERITY_RANK: Record<Severity, number> = { low: 0, medium: 1, high: 2, critical: 3 };
 
@@ -122,7 +127,7 @@ export function MapView({
   onDrawModeChange,
   onAreaDrawn,
   onClearArea,
-  movingId = null,
+  moving = null,
   onMoveRequest,
   onMoveEnd,
   onMoveSave,
@@ -284,8 +289,9 @@ export function MapView({
       if (markersRef.current.has(event.id)) continue; // unchanged: keep its pins
       const selected = event.id === selectedRef.current;
       const places = [
-        { lat: event.latitude, lng: event.longitude, label: event.title },
+        { lat: event.latitude, lng: event.longitude, label: event.title, place: null as number | null },
         ...(event.places ?? []).map((p) => ({
+          place: p.index as number | null,
           lat: p.latitude,
           lng: p.longitude,
           label: `${event.title} — ${(lang === 'he' ? p.name : p.nameEn) || p.name || p.nameEn}`,
@@ -327,7 +333,7 @@ export function MapView({
                   moveLocation: canMove ? t('move.button') : undefined,
                 },
                 (id) => onViewEventRef.current(id),
-                canMove ? (id) => onMoveRequestRef.current?.(id) : undefined,
+                canMove ? (id) => onMoveRequestRef.current?.({ id, place: place.place }) : undefined,
               ),
             { maxWidth: 320, minWidth: 240, autoPanPadding: [28, 28], className: 'ofm-popup-shell' },
           );
@@ -343,6 +349,8 @@ export function MapView({
   }, [events, t, dir, locale, lang, categoryLabel, compact, canMove]);
 
   // 4c. Staff: move a pin. Drag the pin or tap the map; ✓ saves, ✗ cancels.
+  const movingId = moving?.id ?? null;
+  const movingPlace = moving?.place ?? null;
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !movingId) {
@@ -351,24 +359,25 @@ export function MapView({
     }
     const ev = eventsRef.current.find((e) => e.id === movingId);
     const c = map.getCenter();
-    setMovePos(ev && ev.locationPrecision ? [ev.latitude, ev.longitude] : [c.lat, c.lng]);
+    const extra = movingPlace !== null ? ev?.places?.find((p) => p.index === movingPlace) : undefined;
+    setMovePos(extra ? [extra.latitude, extra.longitude] : ev && ev.locationPrecision ? [ev.latitude, ev.longitude] : [c.lat, c.lng]);
     map.closePopup();
     drawClickRef.current = (p) => setMovePos(p);
     return () => {
       drawClickRef.current = null;
     };
-  }, [movingId]);
+  }, [movingId, movingPlace]);
 
   const saveMove = useCallback(async () => {
     const pos = movePosRef.current;
     if (!movingId || !pos || !onMoveSaveRef.current) return;
     setMoveBusy(true);
     try {
-      if (await onMoveSaveRef.current(movingId, pos[0], pos[1])) onMoveEndRef.current?.();
+      if (await onMoveSaveRef.current({ id: movingId, place: movingPlace }, pos[0], pos[1])) onMoveEndRef.current?.();
     } finally {
       setMoveBusy(false);
     }
-  }, [movingId]);
+  }, [movingId, movingPlace]);
   const saveMoveRef = useRef(saveMove);
   saveMoveRef.current = saveMove;
 

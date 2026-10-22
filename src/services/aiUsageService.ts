@@ -40,3 +40,22 @@ export async function fetchAiUsage(days = 30): Promise<AiUsageRow[]> {
     costUsd: Number(r.cost_usd) || 0,
   }));
 }
+
+/** The whole Claude API organization, per day (Anthropic Admin API, via event-agent). */
+export interface ClaudeDay {
+  day: string;
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+  webSearches: number;
+  costUsd: number;
+  models: Record<string, { input: number; output: number; costUsd: number }>;
+}
+
+export async function fetchClaudeUsage(): Promise<{ configured: boolean; days: ClaudeDay[]; error?: string }> {
+  if (!supabase) return { configured: false, days: [] };
+  const { data, error } = await supabase.functions.invoke('event-agent', { body: { action: 'claude_usage' } });
+  if (error) return { configured: true, days: [], error: String(error.message ?? error) };
+  return { configured: !!data?.configured, days: Array.isArray(data?.days) ? data.days : [], error: data?.error };
+}

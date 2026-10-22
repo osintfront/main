@@ -53,7 +53,7 @@ const sourceUrl = (m: InMsg, text: string) => m.url ?? firstUrl(text);
 const STORAGE_LIMIT = Number(Deno.env.get("MEDIA_STORAGE_LIMIT_BYTES") ?? 1024 ** 3); // free tier: 1 GB
 const HIGH_WATER = 0.9; // start evicting when an upload would pass 90%
 const LOW_WATER = 0.8; // evict down to 80%
-const VIDEO_MAX = 40 * 1024 * 1024;
+const VIDEO_MAX = 50 * 1024 * 1024;
 const VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"];
 
 async function storageUsed(): Promise<number> {
@@ -95,7 +95,7 @@ async function makeRoom(incoming: number) {
 async function videoRequest(v: any) {
   const size = Number(v?.size);
   const mime = VIDEO_MIMES.includes(String(v?.mime)) ? String(v.mime) : "video/mp4";
-  if (!v?.event_id || !(size > 0) || size > VIDEO_MAX) return json({ error: "invalid video (max 40MB)" }, 400);
+  if (!v?.event_id || !(size > 0) || size > VIDEO_MAX) return json({ error: "invalid video (max 50MB)" }, 400);
   const { data: ev } = await db.from("events").select("id").eq("id", v.event_id).maybeSingle();
   if (!ev) return json({ error: "event not found" }, 404);
   const room = await makeRoom(size);
@@ -117,9 +117,12 @@ async function videoRequest(v: any) {
 }
 
 // Store up to 4 compressed images for an event in the public "event-media" bucket.
-async function storeMedia(eventId: string, key: string, media?: InMedia[]) {
+async function storeMedia(eventId: string, key: string, media?: InMedia[], postUrl?: string | null) {
   if (!Array.isArray(media) || !media.length) return 0;
   let n = 0;
+  let videoIndex = 0;
+  // Only public posts can be fetched later (t.me/<channel>/<n>; not private t.me/c/… links).
+  const fetchable = postUrl && /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{3,}\/\d+$/.test(postUrl) ? postUrl : null;
   const d = new Date();
   for (const [i, m] of media.slice(0, 4).entries()) {
     try {
@@ -136,6 +139,7 @@ async function storeMedia(eventId: string, key: string, media?: InMedia[]) {
         event_id: eventId, kind: m.kind === "video_thumb" ? "video_thumb" : "image", storage_path: path, public_url: url,
         width: Number.isFinite(m.width) ? Math.round(m.width!) : null, height: Number.isFinite(m.height) ? Math.round(m.height!) : null,
         bytes: bytes.length, source_msg_key: key,
+        ...(m.kind === "video_thumb" ? { source_url: fetchable, source_index: videoIndex++ } : {}),
       }, { onConflict: "storage_path" });
       n++;
     } catch (_e) { /* skip bad image */ }
@@ -244,7 +248,7 @@ const CLASSIFY_TOOL = {
       title: { type: "string", description: "Short headline (max 150 chars) in the language of the message" },
       severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
       is_breaking: { type: "boolean" },
-      location_name: { type: "string", description: "Most specific place named, in the message's language; empty if none" },
+      location_name: { type: "string", description: "Most specific place named, in the message's language; empty if none. Only the place itself: 'X in the Y district / sector', 'X north of Y', 'in northern Y' → X (or Y only when no other place is named). Never the district, sector or reference town." },
       location_name_en: { type: "string", description: "The same place in English (common international spelling, e.g. Yater, Bint Jbeil, Khan Younis); empty if none" },
       city: { type: "string" },
       region: { type: "string" },
@@ -462,7 +466,7 @@ async function processOne(m: InMsg) {
     if (error) throw error;
     c.reason = `${update.description ? "[update added] " : "[source only] "}${c.reason ?? ""}`;
     await log("merged_duplicate", dup.id);
-    const media_saved = await storeMedia(dup.id, key, m.media);
+    const media_saved = await storeMedia(dup.id, key, m.media, m.url);
     return { key, status: "merged_duplicate", event_id: dup.id, added_text: !!update.description, media_saved };
   }
 
@@ -529,7 +533,7 @@ async function processOne(m: InMsg) {
   // the event appears at once and is rewritten in the house template seconds later.
   // Editor only for what is (or will be) on the map — not for drafts left for review.
   if (!m.light && (finalStatus === "published" || waitingForPlace)) background.push(applyEditor(ins!.id, row, text, `${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, sourceUrl(m, text), sentIso, waitingForPlace));
-  const media_saved = await storeMedia(ins!.id, key, m.media);
+  const media_saved = await storeMedia(ins!.id, key, m.media, m.url);
   return { key, status: finalStatus === "published" ? "event_published" : "event_draft", event_id: ins!.id, title: row.title, media_saved };
 }
 
@@ -635,9 +639,9 @@ async function pollTelegram(dry: boolean) {
       for (const p of fresh) {
         if (p.text.trim().length >= 3) {
           const media: InMedia[] = [];
-          for (const u of p.photos) {
+          for (const [i, u] of p.photos.entries()) {
             const img = await imageAsBase64(u);
-            if (img) media.push({ kind: "image", mime: img.mime, data: img.data });
+            if (img) media.push({ kind: p.photoKinds?.[i] ?? "image", mime: img.mime, data: img.data });
           }
           try {
             results.push({

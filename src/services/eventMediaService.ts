@@ -16,14 +16,19 @@ export interface EventMediaItem {
   width: number | null;
   height: number | null;
   sourceMsgKey: string | null;
+  /** Video stills: the post to fetch the video from on demand, and how that went. */
+  sourceUrl: string | null;
+  videoState: 'loading' | 'ready' | 'too_big' | 'unavailable' | null;
+  /** On-demand video: the still it belongs to. */
+  thumbId: string | null;
 }
 
 /** What to render: images, plus each video with its thumbnail as poster. */
 export interface EventMediaView {
   images: EventMediaItem[];
   videos: { video: EventMediaItem; poster: string | null }[];
-  /** Thumbnails whose video was removed — shown as stills with a play mark. */
-  stills: EventMediaItem[];
+  /** Video stills without an uploaded video — shown with a play mark; the video is fetched on demand. */
+  stills: (EventMediaItem & { onDemand: EventMediaItem | null })[];
 }
 
 const cache = new Map<string, { items: EventMediaItem[]; at: number }>();
@@ -41,6 +46,9 @@ interface Row {
   width: number | null;
   height: number | null;
   source_msg_key: string | null;
+  source_url: string | null;
+  video_state: EventMediaItem['videoState'];
+  thumb_id: string | null;
 }
 
 async function flush() {
@@ -52,7 +60,7 @@ async function flush() {
   if (supabase) {
     const { data } = await supabase
       .from('event_media')
-      .select('id, event_id, kind, public_url, width, height, source_msg_key')
+      .select('id, event_id, kind, public_url, width, height, source_msg_key, source_url, video_state, thumb_id')
       .in('event_id', ids)
       .order('created_at');
     rows = (data as Row[] | null) ?? [];
@@ -68,6 +76,9 @@ async function flush() {
         width: r.width,
         height: r.height,
         sourceMsgKey: r.source_msg_key,
+        sourceUrl: r.source_url ?? null,
+        videoState: r.video_state ?? null,
+        thumbId: r.thumb_id ?? null,
       }));
     cache.set(id, { items, at: Date.now() });
     for (const cb of waiting.get(id) ?? []) cb(items);
@@ -93,13 +104,35 @@ export function invalidateEventMedia(eventId?: string) {
 }
 
 export function toMediaView(items: EventMediaItem[]): EventMediaView {
-  const videoItems = items.filter((m) => m.kind === 'video');
+  // Uploaded with the message (WhatsApp extension): shown as a player straight away.
+  const videoItems = items.filter((m) => m.kind === 'video' && !m.thumbId);
   const withVideo = new Set(videoItems.map((v) => v.sourceMsgKey));
   const thumbFor = (key: string | null) => items.find((m) => m.kind === 'video_thumb' && m.sourceMsgKey === key)?.url ?? null;
   return {
     images: items.filter((m) => m.kind === 'image'),
     videos: videoItems.map((video) => ({ video, poster: thumbFor(video.sourceMsgKey) })),
-    stills: items.filter((m) => m.kind === 'video_thumb' && !withVideo.has(m.sourceMsgKey)),
+    stills: items
+      .filter((m) => m.kind === 'video_thumb' && !withVideo.has(m.sourceMsgKey))
+      .map((m) => ({ ...m, onDemand: items.find((v) => v.kind === 'video' && v.thumbId === m.id) ?? null })),
   };
+}
+
+export type VideoResult =
+  | { state: 'ready'; url: string }
+  | { state: 'too_big'; bytes: number | null }
+  | { state: 'unavailable'; link: string | null };
+
+/** Play pressed on a video still: the server fetches the video once (max 50 MB). */
+export async function requestVideo(thumbId: string): Promise<VideoResult> {
+  if (!supabase) return { state: 'unavailable', link: null };
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const { data, error } = await supabase.functions.invoke('event-agent', { body: { action: 'video', id: thumbId } });
+    if (error) throw error;
+    if (data?.state === 'ready') return { state: 'ready', url: String(data.url) };
+    if (data?.state === 'too_big') return { state: 'too_big', bytes: data.bytes ?? null };
+    if (data?.state === 'unavailable') return { state: 'unavailable', link: data.link ?? null };
+    await new Promise((r) => setTimeout(r, 3000)); // another reader is fetching it
+  }
+  throw new Error('video timeout');
 }
 

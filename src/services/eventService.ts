@@ -107,7 +107,7 @@ function toSources(v: unknown): EventSource[] {
 function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
   if (!Array.isArray(v)) return [];
   const out: EventPlace[] = [];
-  for (const p of v) {
+  for (const [index, p] of v.entries()) {
     if (!p || typeof p !== 'object') continue;
     const o = p as { name?: unknown; name_en?: unknown; lat?: unknown; lng?: unknown; precision?: unknown };
     const lat = toNumber(typeof o.lat === 'number' || typeof o.lat === 'string' ? o.lat : null);
@@ -116,6 +116,7 @@ function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
     if (Math.abs(lat - mainLat) < 0.003 && Math.abs(lng - mainLng) < 0.003) continue;
     if (out.some((q) => Math.abs(q.latitude - lat) < 0.003 && Math.abs(q.longitude - lng) < 0.003)) continue;
     out.push({
+      index,
       name: typeof o.name === 'string' ? o.name.slice(0, 120) : '',
       nameEn: typeof o.name_en === 'string' ? o.name_en.slice(0, 120) : '',
       latitude: lat,

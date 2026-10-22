@@ -3,6 +3,7 @@ import { formatDateTime } from '@/utils/time';
 import { hostnameOf, safeExternalUrl } from '@/utils/url';
 import { previewText } from '@/utils/text';
 import { loadEventMedia, toMediaView } from '@/services/eventMediaService';
+import { openLightbox } from '@/lib/lightbox';
 import { whereLabel } from '@/utils/places';
 
 export interface PopupLabels {
@@ -99,18 +100,20 @@ export function buildPopupContent(
       media.append(v);
       return;
     }
-    const still = view.images[0] ?? view.stills[0];
+    const img0 = view.images[0];
+    const still = img0 ?? view.stills[0];
     if (still) {
-      const a = el('a', 'ofm-popup__image-link');
-      a.href = still.url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
+      // Image → full-screen viewer. Video still → the event window, where it plays on demand.
+      const b = el('button', 'ofm-popup__image-link');
+      b.type = 'button';
       const img = el('img', 'ofm-popup__image');
       img.src = still.url;
       img.alt = '';
       img.loading = 'lazy';
-      a.append(img);
-      media.append(a);
+      b.append(img);
+      if (!img0) b.append(el('span', 'ofm-popup__play', '▶'));
+      b.addEventListener('click', () => (img0 ? openLightbox(img0.url) : onView(event.id)));
+      media.append(b);
     }
   });
 

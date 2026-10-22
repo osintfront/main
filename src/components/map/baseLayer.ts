@@ -2,7 +2,7 @@ import L from 'leaflet';
 import { TILE_PROVIDERS, mapConfig, type MapTheme, type TileLayerSpec, type TileProviderId } from '@/config/map';
 
 /** Map styles a visitor can pick: the standard map plus OpenStreetMap-based layers. */
-export const BASE_STYLES = ['standard', 'cyclosm', 'transport', 'topo'] as const;
+export const BASE_STYLES = ['standard', 'cyclosm', 'topo'] as const;
 export type BaseStyle = (typeof BASE_STYLES)[number];
 
 const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -14,12 +14,6 @@ const STYLE_SPECS: Record<Exclude<BaseStyle, 'standard'>, TileLayerSpec> = {
     attribution: `${OSM} · <a href="https://www.cyclosm.org">CyclOSM</a>`,
     subdomains: 'abc',
     maxZoom: 20,
-  },
-  transport: {
-    // ÖPNVKarte (public transport). Thunderforest's transport map needs an API key.
-    url: 'https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',
-    attribution: `${OSM} · <a href="https://memomaps.de/">memomaps.de</a> CC-BY-SA`,
-    maxZoom: 18,
   },
   topo: {
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',

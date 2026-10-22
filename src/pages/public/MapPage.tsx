@@ -16,7 +16,7 @@ import { CategoryLegend } from '@/components/map/CategoryLegend';
 import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
 import { MobileEventSheet } from '@/components/map/MobileEventSheet';
 import { FilterPanel } from '@/components/filters/FilterPanel';
-import type { DrawMode } from '@/components/map/MapView';
+import type { DrawMode, MoveTarget } from '@/components/map/MapView';
 import { useArchiveRange } from '@/hooks/useArchiveRange';
 import { EMPTY_FILTERS, activeFilterCount, isOnMap, matchesFilters, needsArchive, type EventFilters, type LatLng } from '@/lib/eventFilters';
 import { SlidersHorizontal } from 'lucide-react';
@@ -27,7 +27,7 @@ import { HFC_CATEGORY } from '@/config/hfcThreats';
 import { useEeis } from '@/hooks/useEeis';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/common/Toast';
-import { moveEventPin } from '@/services/eventAdminService';
+import { moveEventPin, moveEventPlace } from '@/services/eventAdminService';
 import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
 
@@ -226,17 +226,19 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const { can } = usePermissions();
   const toast = useToast();
   const canMove = !isDemo && (can('event.edit.any') || can('event.edit.own'));
-  const [movingId, setMovingId] = useState<string | null>(null);
-  const startMove = useCallback((id: string) => {
+  const [moving, setMoving] = useState<MoveTarget | null>(null);
+  const startMove = useCallback((target: MoveTarget) => {
     setDetailsId(null);
     setMobilePane('map');
-    setMovingId(id);
+    setMoving(target);
   }, []);
-  const endMove = useCallback(() => setMovingId(null), []);
+  const startMoveMain = useCallback((id: string) => startMove({ id, place: null }), [startMove]);
+  const endMove = useCallback(() => setMoving(null), []);
   const saveMove = useCallback(
-    async (id: string, lat: number, lng: number) => {
+    async (target: MoveTarget, lat: number, lng: number) => {
       try {
-        await moveEventPin(id, lat, lng);
+        if (target.place === null) await moveEventPin(target.id, lat, lng);
+        else await moveEventPlace(target.id, target.place, lat, lng);
         toast.success(t('move.saved'));
         reload();
         return true;
@@ -251,7 +253,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const closeDetails = useCallback(() => setDetailsId(null), []);
   // Phones: the selected event shows as a card along the bottom of the map.
   const sheetEvent =
-    isPhone && mobilePane === 'map' && selectedId && !detailsId && !drawMode && !movingId ? visibleEvents.find((e) => e.id === selectedId) ?? null : null;
+    isPhone && mobilePane === 'map' && selectedId && !detailsId && !drawMode && !moving ? visibleEvents.find((e) => e.id === selectedId) ?? null : null;
   const openDetailsFromSheet = useCallback((id: string) => setDetailsId(id), []);
   const locateFromDetails = useCallback(
     (id: string) => {
@@ -394,7 +396,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               onDrawModeChange={setDrawMode}
               onAreaDrawn={handleAreaDrawn}
               onClearArea={clearArea}
-              movingId={movingId}
+              moving={moving}
               onMoveRequest={canMove ? startMove : undefined}
               onMoveEnd={endMove}
               onMoveSave={saveMove}
@@ -417,7 +419,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             event={sheetEvent}
             onClose={clearSelection}
             onOpenDetails={openDetailsFromSheet}
-            onMove={canMove ? startMove : undefined}
+            onMove={canMove ? startMoveMain : undefined}
           />
         </div>
       ) : null}

@@ -40,6 +40,8 @@ export interface EventSource {
 
 /** A further place the report names; each gets its own pin on the map. */
 export interface EventPlace {
+  /** Position in events.locations (to move this place). */
+  index: number;
   name: string;
   nameEn: string;
   latitude: number;

@@ -641,7 +641,6 @@ export const en = {
   "map.styles": "Map style",
   "map.style.standard": "Standard",
   "map.style.cyclosm": "CyclOSM",
-  "map.style.transport": "Transport",
   "map.style.topo": "Topographic",
   "list.quickLocation": "Set location",
   "list.quickLocationHint": "Search a place, click the map or drag the pin. The system learns this place for future reports.",
@@ -670,6 +669,18 @@ export const en = {
   "usage.searches": "Web searches",
   "usage.cost": "Cost",
   "usage.empty": "No AI calls logged yet.",
+  "media.play": "Play video",
+  "media.loadingVideo": "Loading video…",
+  "media.tooBig": "The video is too large to show here ({mb} MB; limit 50 MB).",
+  "media.unavailable": "This video can't be shown here.",
+  "media.videoError": "Could not load the video. Try again later.",
+  "media.watchAtSource": "Watch at the source",
+  "media.enlarge": "Enlarge image",
+  "usage.claudeTitle": "Claude API (whole account)",
+  "usage.claudeHint": "Usage and cost reported by Anthropic for the whole API organization (includes calls not made by this site).",
+  "usage.claudeNoKey": "To show this, add an Anthropic Admin API key (sk-ant-admin…) as the Supabase secret ANTHROPIC_ADMIN_KEY. Create it in the Claude Console → Settings → Admin keys.",
+  "usage.claudeError": "Could not read the Claude API report.",
+  "usage.siteTitle": "This site's AI calls",
 } as const;
 
 export type TranslationKey = keyof typeof en;

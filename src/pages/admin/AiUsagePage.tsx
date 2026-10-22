@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Alert, Spinner } from '@/components/common/Feedback';
 import { useI18n } from '@/i18n';
-import { fetchAiUsage, type AiUsageRow } from '@/services/aiUsageService';
+import { fetchAiUsage, fetchClaudeUsage, type AiUsageRow, type ClaudeDay } from '@/services/aiUsageService';
 import { friendlyError } from '@/services/serviceError';
 
 const fmt = (n: number) => n.toLocaleString('en-US');
@@ -14,6 +14,14 @@ export function AiUsagePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [claude, setClaude] = useState<{ configured: boolean; days: ClaudeDay[]; error?: string } | null>(null);
+  const [claudeOpen, setClaudeOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchClaudeUsage()
+      .then(setClaude)
+      .catch(() => setClaude({ configured: true, days: [], error: 'x' }));
+  }, []);
 
   useEffect(() => {
     fetchAiUsage(30)
@@ -47,7 +55,65 @@ export function AiUsagePage() {
       <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('admin.nav.aiUsage')}</h1>
       <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-400">{t('usage.intro')}</p>
       {error ? <Alert tone="error" className="mt-4">{error}</Alert> : null}
-      <p className="mt-4 text-sm font-semibold text-slate-800 dark:text-slate-100">{t('usage.total30', { cost: usd(month) })}</p>
+      <section className="mt-5">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-white">{t('usage.claudeTitle')}</h2>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('usage.claudeHint')}</p>
+        {!claude ? (
+          <Spinner label={t('common.loading')} />
+        ) : !claude.configured ? (
+          <Alert tone="info" className="mt-2">{t('usage.claudeNoKey')}</Alert>
+        ) : claude.error ? (
+          <Alert tone="error" className="mt-2">{t('usage.claudeError')}</Alert>
+        ) : (
+          <>
+            <p className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {t('usage.total30', { cost: usd(claude.days.reduce((n, d) => n + d.costUsd, 0)) })}
+            </p>
+            <div className="mt-2 overflow-x-auto rounded-xl bg-white ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
+              <table className="w-full text-sm" dir="ltr">
+                <thead className="border-b border-slate-100 dark:border-slate-800">
+                  <tr>
+                    <th className={th}>{t('usage.day')}</th>
+                    <th className={th}>{t('usage.input')}</th>
+                    <th className={th}>{t('usage.output')}</th>
+                    <th className={th}>{t('usage.searches')}</th>
+                    <th className={th}>{t('usage.cost')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {claude.days.map((d) => (
+                    <Fragment key={d.day}>
+                      <tr className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" onClick={() => setClaudeOpen(claudeOpen === d.day ? null : d.day)}>
+                        <td className={`${td} font-semibold`}>{d.day}</td>
+                        <td className={td}>{fmt(d.input + d.cacheRead + d.cacheWrite)}</td>
+                        <td className={td}>{fmt(d.output)}</td>
+                        <td className={td}>{fmt(d.webSearches)}</td>
+                        <td className={`${td} font-semibold`}>{usd(d.costUsd)}</td>
+                      </tr>
+                      {claudeOpen === d.day
+                        ? Object.entries(d.models)
+                            .sort((a, b) => b[1].costUsd - a[1].costUsd)
+                            .map(([m, v]) => (
+                              <tr key={m} className="bg-slate-50/60 text-xs text-slate-600 dark:bg-slate-800/30 dark:text-slate-300">
+                                <td className={`${td} ps-6 text-slate-500`}>{m}</td>
+                                <td className={td}>{fmt(v.input)}</td>
+                                <td className={td}>{fmt(v.output)}</td>
+                                <td className={td} />
+                                <td className={td}>{usd(v.costUsd)}</td>
+                              </tr>
+                            ))
+                        : null}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+
+      <h2 className="mt-6 text-base font-semibold text-slate-900 dark:text-white">{t('usage.siteTitle')}</h2>
+      <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">{t('usage.total30', { cost: usd(month) })}</p>
       <div className="mt-3 overflow-x-auto rounded-xl bg-white ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
         <table className="w-full text-sm" dir="ltr">
           <thead className="border-b border-slate-100 dark:border-slate-800">
