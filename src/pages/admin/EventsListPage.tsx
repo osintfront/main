@@ -218,6 +218,8 @@ export function EventsListPage() {
     }
   };
   const canMovePins = can('event.edit.any') || can('event.edit.own');
+  // Bulk approve / delete: admins only (editors only edit).
+  const canBulk = can('event.publish') || can('event.delete');
 
   const approveChange = async (ev: AdminEvent) => {
     setBusyId(ev.id);
@@ -411,9 +413,11 @@ export function EventsListPage() {
           <table className={cn('w-full text-sm', status === 'loading' && 'opacity-60')}>
             <thead className="hidden border-b border-slate-200 bg-slate-50 text-start text-xs font-semibold uppercase tracking-wide text-slate-500 md:table-header-group dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
               <tr>
-                <th scope="col" className="w-10 ps-4 py-2.5">
-                  <input type="checkbox" className="size-4 accent-sky-600" checked={allSelected} onChange={toggleAll} aria-label={t('list.selectAll')} />
-                </th>
+                {canBulk ? (
+                  <th scope="col" className="w-10 ps-4 py-2.5">
+                    <input type="checkbox" className="size-4 accent-sky-600" checked={allSelected} onChange={toggleAll} aria-label={t('list.selectAll')} />
+                  </th>
+                ) : null}
                 <th scope="col" className="px-4 py-2.5 text-start">{t('list.colTitle')}</th>
                 <th scope="col" className="px-3 py-2.5 text-start">{t('form.category')}</th>
                 <th scope="col" className="hidden px-3 py-2.5 text-start lg:table-cell">{t('list.colLocation')}</th>
@@ -435,10 +439,13 @@ export function EventsListPage() {
                   <tr
                     key={ev.id}
                     className={cn(
-                      'relative block px-4 py-3 ps-11 md:table-row md:p-0 hover:bg-slate-50/70 dark:hover:bg-slate-800/40',
+                      'relative block px-4 py-3 md:table-row md:p-0',
+                      canBulk && 'ps-11',
+                      ' hover:bg-slate-50/70 dark:hover:bg-slate-800/40',
                       selected.has(ev.id) && 'bg-sky-50/70 dark:bg-sky-500/10',
                     )}
                   >
+                    {canBulk ? (
                     <td className="absolute start-4 top-3.5 md:static md:table-cell md:w-10 md:ps-4 md:py-3">
                       <input
                         type="checkbox"
@@ -448,6 +455,7 @@ export function EventsListPage() {
                         aria-label={t('list.selectRow', { title: ev.title || t('list.untitled') })}
                       />
                     </td>
+                    ) : null}
                     <td className="block md:table-cell md:px-4 md:py-3">
                       <Link to={`/admin/events/${ev.id}`} className="font-semibold text-slate-900 hover:text-sky-700 hover:underline dark:text-white dark:hover:text-sky-300" dir="auto">
                         {ev.title || <span className="italic text-slate-400">{t('list.untitled')}</span>}
