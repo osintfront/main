@@ -90,6 +90,8 @@ async function importCountry(cc: string, part = 0, parts = 1) {
   type P = { name: string; ascii: string; fc: string; fcode: string; admin1: string; pop: number; lat: string; lng: string };
   const places = new Map<number, P>();
   await zipLines(`${BASE}/${cc}.zip`, `${cc}.txt`, (line) => {
+    // Cheap checks before split() — the CPU budget per call is small.
+    if (parts > 1 && Number(line.slice(0, line.indexOf("\t"))) % parts !== part) return;
     const f = line.split("\t");
     if (f.length < 19 || f[8] !== cc) return;
     if (!KEEP_CLASSES.has(f[6]) && !KEEP_CODES.has(f[7])) return;
@@ -100,6 +102,12 @@ async function importCountry(cc: string, part = 0, parts = 1) {
   const names = new Map<number, Record<string, [number, string][]>>();
   let kept = 0;
   await zipLines(`${BASE}/alternatenames/${cc}.zip`, `${cc}.txt`, (line) => {
+    // Field 3 is the language: skip other languages (most of the file) without split().
+    const t1 = line.indexOf("\t");
+    const t2 = line.indexOf("\t", t1 + 1);
+    const t3 = line.indexOf("\t", t2 + 1);
+    if (t3 - t2 !== 3) return; // "he" / "ar" / "en" are two letters
+    if (!places.has(Number(line.slice(t1 + 1, t2)))) return;
     const f = line.split("\t");
     if (f.length < 4 || !LANGS.has(f[2])) return;
     const gid = Number(f[1]);
