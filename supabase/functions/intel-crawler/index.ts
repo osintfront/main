@@ -14,6 +14,7 @@
 // Auth: header x-cron-secret must equal public.intel_config.cron_secret.
 // Body (optional): { "agent": "lebanon", "sync": true } to run one agent now.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { inRegion } from "../_shared/region.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, formatCategoryLessons, formatDescription, isTransient, locationsForDb, mainCountry, mainPoint, translationsFor, type EditorSource } from "../_shared/editor.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
@@ -396,6 +397,10 @@ async function runAgent(agent: string, settings: Record<string, any>) {
       }
       const cat = categories.find((c: any) => c.slug === r.category_slug);
       if (!cat) return void (await logItem("skipped", null, "no category"));
+      if (!inRegion([...(r.countries ?? []), mainCountry(r)], `${r.title}\n${text}`)) {
+        result.irrelevant = (result.irrelevant as number) + 1;
+        return void (await logItem("irrelevant", null, `outside the region (${r.countries?.join(", ") ?? ""})`));
+      }
       const pt = mainPoint(r);
       const row: Record<string, unknown> = {
         title: r.title.slice(0, 200),

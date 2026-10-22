@@ -7,6 +7,7 @@
 // name). If it does add concrete facts, just those facts are appended to the
 // description as an "עדכון" (update) — and the source is recorded as well.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { inRegion } from "../_shared/region.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor, type EditResult } from "../_shared/editor.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
@@ -469,6 +470,12 @@ async function processOne(m: InMsg) {
     await log("skipped_off_topic", null);
     return { key, status: "skipped_off_topic", reason: c.reason };
   }
+  // Outside Israel / the Middle East (Ukraine, Europe, world markets…): not for this map.
+  if (c.decision !== "duplicate" && !inRegion([c.country], text)) {
+    c.reason = `outside the region (${c.country}) — ${c.reason ?? ""}`;
+    await log("skipped_off_topic", null);
+    return { key, status: "skipped_off_region", reason: c.reason };
+  }
 
   const srcLabel = m.platform === "telegram"
     ? [`Telegram – ${m.chat}`, c.original_source].filter(Boolean).join(" / ")
@@ -585,6 +592,11 @@ async function translateRow(eventId: string, title: string, text: string) {
 // Editor agent: Hebrew template, verified names, sources. The raw text stays if it fails.
 async function applyEditor(eventId: string, row: Record<string, unknown>, text: string, srcLabel: string, url: string | null, sentIso: string, publishWhenPlaced = false) {
   const edited = await runEditor(text, srcLabel, url, sentIso);
+  // The editor found it is about another part of the world: take it off the map.
+  if (edited && !inRegion([...edited.countries, mainCountry(edited)], `${edited.title_en ?? ""}\n${text}`)) {
+    await db.from("events").update({ deleted_at: new Date().toISOString(), ai_suggestions: { ...(row.ai_suggestions as object), removed: "outside the region", countries: edited.countries } }).eq("id", eventId);
+    return;
+  }
   if (!edited) {
     // The editor failed or timed out: at least a cheap Hebrew/English headline + summary.
     if (foreignShare(`${row.title} ${text}`) > 0.4) await translateRow(eventId, String(row.title ?? ""), text);
