@@ -3,7 +3,8 @@
 -- An Edge Function has ~2 s of CPU per call: enough for small countries, not for
 -- Iran. For those, geonames-import only streams the raw unzipped text into
 -- geo_staging ({"country":"IR","stage":true}), and the database does the
--- filtering/merging set-based:  select public.import_staged_geonames('IR');
+-- filtering/merging set-based, a few chunks per call (repeat until it returns 0):
+--   select public.import_staged_geonames('IR');
 -- Same rules as geonames-import / tools/geonames/build_places.py.
 -- ════════════════════════════════════════════════════════════════════
 create table if not exists public.geo_staging (
@@ -15,14 +16,21 @@ create table if not exists public.geo_staging (
 alter table public.geo_staging enable row level security; -- no policies: service role only
 revoke all on public.geo_staging from anon, authenticated;
 
-create or replace function public.import_staged_geonames(p_cc text)
+drop function if exists public.import_staged_geonames(text);
+create or replace function public.import_staged_geonames(p_cc text, p_chunks integer default 4)
 returns integer language plpgsql security definer set search_path = '' as $$
-declare v_rows integer;
+declare v_rows integer; v_ids bigint[];
 begin
+  select array_agg(id) into v_ids
+  from (select id from public.geo_staging where country = p_cc and kind = 'dump' order by id limit p_chunks) x;
+  if v_ids is null then
+    delete from public.geo_staging where country = p_cc;
+    return 0;
+  end if;
   with d as (
     select string_to_array(l, E'\t') f
-    from public.geo_staging s, regexp_split_to_table(s.content, E'\n') l
-    where s.country = p_cc and s.kind = 'dump' and l <> ''
+    from public.geo_staging s, string_to_table(s.content, E'\n') l
+    where s.id = any(v_ids) and l <> ''
   ), p as (
     select f[1]::bigint gid, f[2] nm, f[3] ascii, f[5]::float8 lat, f[6]::float8 lng, f[7] fc, f[8] fcode,
            f[11] admin1, coalesce(nullif(f[15], '')::bigint, 0) pop
@@ -35,7 +43,7 @@ begin
         'WAD','STM','LK','RSV','BAY','GULF','STRT','SEA','CHN'))
   ), a as (
     select string_to_array(l, E'\t') f
-    from public.geo_staging s, regexp_split_to_table(s.content, E'\n') l
+    from public.geo_staging s, string_to_table(s.content, E'\n') l
     where s.country = p_cc and s.kind = 'alt' and split_part(l, E'\t', 3) in ('he', 'ar', 'en')
   ), an as (
     select f[2]::bigint gid, f[3] lang, btrim(f[4]) nm,
@@ -78,9 +86,9 @@ begin
     feature_code = excluded.feature_code, admin1 = excluded.admin1,
     population = excluded.population, geom = excluded.geom;
   get diagnostics v_rows = row_count;
-  delete from public.geo_staging where country = p_cc;
+  delete from public.geo_staging where id = any(v_ids);
   return v_rows;
 end;
 $$;
-revoke execute on function public.import_staged_geonames(text) from public, anon, authenticated;
-grant execute on function public.import_staged_geonames(text) to service_role;
+revoke execute on function public.import_staged_geonames(text, integer) from public, anon, authenticated;
+grant execute on function public.import_staged_geonames(text, integer) to service_role;

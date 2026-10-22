@@ -126,7 +126,7 @@ async function stageCountry(cc: string) {
     await flush();
     out[kind] = chunks;
   }
-  return { country: cc, staged: out, next: `select public.import_staged_geonames('${cc}');` };
+  return { country: cc, staged: out, next: `select public.import_staged_geonames('${cc}'); -- repeat until 0` };
 }
 
 async function importCountry(cc: string, part = 0, parts = 1) {
