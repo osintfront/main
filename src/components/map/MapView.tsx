@@ -14,7 +14,7 @@ import type { HfcAlert, HfcShape } from '@/types/hfcAlert';
 import { alertNames, HFC_CATEGORY, threatInfo, zoneHeadline } from '@/config/hfcThreats';
 import { formatEventTime } from '@/utils/time';
 import { buildHfcPopup } from './hfcPopup';
-import { BASE_STYLES, createBaseLayer, loadBaseStyle, saveBaseStyle, type BaseStyle } from './baseLayer';
+import { BASE_STYLES, createBaseLayer, createFiresLayer, loadBaseStyle, loadFiresOn, saveBaseStyle, saveFiresOn, type BaseStyle } from './baseLayer';
 import { createMarkerIcon } from './markerIcon';
 import { buildPopupContent } from './popupContent';
 import { IconButton } from '@/components/common/IconButton';
@@ -175,6 +175,8 @@ export function MapView({
   const [moveBusy, setMoveBusy] = useState(false);
   const [baseStyle, setBaseStyle] = useState<BaseStyle>(loadBaseStyle);
   const [stylesOpen, setStylesOpen] = useState(false);
+  const [firesOn, setFiresOn] = useState(loadFiresOn);
+  const firesLayerRef = useRef<L.Layer | null>(null);
   const eventsRef = useRef(events);
   eventsRef.current = events;
   // While drawing, a tap on the map adds a corner instead of closing things.
@@ -242,6 +244,22 @@ export function MapView({
     layer.addTo(map);
     baseLayerRef.current = layer;
   }, [theme, baseStyle]);
+
+  // 2b. NASA FIRMS fires overlay (visitor's choice).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (firesLayerRef.current) {
+      map.removeLayer(firesLayerRef.current);
+      firesLayerRef.current = null;
+    }
+    if (!firesOn) return;
+    try {
+      firesLayerRef.current = createFiresLayer().addTo(map);
+    } catch {
+      /* overlay is optional */
+    }
+  }, [firesOn]);
 
   // 3. Zoom control sits on the side away from the feed and follows the language.
   useEffect(() => {
@@ -894,6 +912,18 @@ export function MapView({
               {t(`map.style.${id}`)}
             </button>
           ))}
+          <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-slate-100 px-2.5 pt-2 pb-1.5 text-sm text-slate-700 dark:border-slate-800 dark:text-slate-200">
+            <input
+              type="checkbox"
+              className="size-4 accent-orange-600"
+              checked={firesOn}
+              onChange={(e) => {
+                setFiresOn(e.target.checked);
+                saveFiresOn(e.target.checked);
+              }}
+            />
+            {t('map.fires')}
+          </label>
         </div>
       ) : null}
       {movingId ? (

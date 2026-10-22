@@ -715,6 +715,7 @@ export const en = {
   "list.sentForReview": "Saved — sent to an admin for approval",
   "move.copy": "Duplicate",
   "move.copied": "Pin duplicated",
+  "map.fires": "NASA fires (last 48 h)",
 } as const;
 
 export type TranslationKey = keyof typeof en;

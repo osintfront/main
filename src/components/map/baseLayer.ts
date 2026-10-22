@@ -70,3 +70,38 @@ export function createBaseLayer(theme: MapTheme, provider: TileProviderId = mapC
   }
   return tileLayer(TILE_PROVIDERS[provider][theme]);
 }
+
+/**
+ * NASA FIRMS active fires (VIIRS thermal anomalies) from NASA GIBS — free, no key.
+ * Two days (yesterday + today, UTC) so the night's and the day's passes both show.
+ */
+export function createFiresLayer(): L.Layer {
+  const day = (offset: number) => new Date(Date.now() - offset * 86400_000).toISOString().slice(0, 10);
+  const wms = (time: string) =>
+    L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi', {
+      layers: 'VIIRS_NOAA20_Thermal_Anomalies_375m_All,VIIRS_SNPP_Thermal_Anomalies_375m_All',
+      format: 'image/png',
+      transparent: true,
+      version: '1.1.1',
+      attribution: 'Fires: <a href="https://firms.modaps.eosdis.nasa.gov/">NASA FIRMS</a> / GIBS',
+      time, // extra WMS parameter (the day)
+      zIndex: 350,
+    } as L.WMSOptions);
+  return L.layerGroup([wms(day(1)), wms(day(0))]);
+}
+
+const FIRES_KEY = 'ofm.mapFires';
+export function loadFiresOn(): boolean {
+  try {
+    return window.localStorage.getItem(FIRES_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
+export function saveFiresOn(on: boolean): void {
+  try {
+    window.localStorage.setItem(FIRES_KEY, on ? 'on' : 'off');
+  } catch {
+    /* storage blocked */
+  }
+}

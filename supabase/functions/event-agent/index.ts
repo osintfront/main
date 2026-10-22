@@ -158,7 +158,7 @@ async function handle(req: Request): Promise<Response> {
       auth: { persistSession: false },
       global: { headers: { Authorization: auth } },
     });
-    const { data: ok } = await asUser.rpc("has_permission", { p_permission: "dashboard.view" });
+    const { data: ok } = await asUser.rpc("has_permission", { p_permission: "ai.usage.view" });
     if (ok !== true) return json({ error: "unauthorized" }, 401);
     try {
       return json({ ok: true, ...(await claudeUsage(30)) });

@@ -717,4 +717,5 @@ export const he: Record<TranslationKey, string> = {
   "list.sentForReview": "נשמר — נשלח לאישור מנהל",
   "move.copy": "שכפול",
   "move.copied": "הסימון שוכפל",
+  "map.fires": "שריפות NASA (48 שעות)",
 };
