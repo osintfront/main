@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
-import { Check, Globe2, Layers, LocateFixed, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
+import { Check, Globe2, Layers, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
 import { octagon, type LatLng } from '@/lib/eventFilters';
 import type { Severity } from '@/types/event';
 import { mapConfig } from '@/config/map';
@@ -14,7 +14,7 @@ import type { HfcAlert, HfcShape } from '@/types/hfcAlert';
 import { alertNames, HFC_CATEGORY, threatInfo, zoneHeadline } from '@/config/hfcThreats';
 import { formatEventTime } from '@/utils/time';
 import { buildHfcPopup } from './hfcPopup';
-import { createBaseLayer } from './baseLayer';
+import { BASE_STYLES, createBaseLayer, loadBaseStyle, saveBaseStyle, type BaseStyle } from './baseLayer';
 import { createMarkerIcon } from './markerIcon';
 import { buildPopupContent } from './popupContent';
 import { IconButton } from '@/components/common/IconButton';
@@ -46,6 +46,13 @@ interface MapViewProps {
   onDrawModeChange?: (mode: DrawMode | null) => void;
   onAreaDrawn?: (points: LatLng[]) => void;
   onClearArea?: () => void;
+  /** Staff: the event whose pin is being moved (null = none). */
+  movingId?: string | null;
+  /** Staff: "change location" in a popup. Absent = visitors (no button). */
+  onMoveRequest?: (id: string) => void;
+  onMoveEnd?: () => void;
+  /** Save the new pin; resolve true when stored. */
+  onMoveSave?: (id: string, lat: number, lng: number) => Promise<boolean>;
 }
 
 export type DrawMode = 'polygon' | 'octagon';
@@ -115,6 +122,10 @@ export function MapView({
   onDrawModeChange,
   onAreaDrawn,
   onClearArea,
+  movingId = null,
+  onMoveRequest,
+  onMoveEnd,
+  onMoveSave,
 }: MapViewProps) {
   const { theme } = useTheme();
   const { t, dir, locale, lang, categoryLabel } = useI18n();
@@ -145,6 +156,22 @@ export function MapView({
   onViewEventRef.current = onViewEvent;
   const onBackgroundClickRef = useRef(onBackgroundClick);
   onBackgroundClickRef.current = onBackgroundClick;
+  const onMoveRequestRef = useRef(onMoveRequest);
+  onMoveRequestRef.current = onMoveRequest;
+  const onMoveEndRef = useRef(onMoveEnd);
+  onMoveEndRef.current = onMoveEnd;
+  const onMoveSaveRef = useRef(onMoveSave);
+  onMoveSaveRef.current = onMoveSave;
+  const canMove = !!onMoveRequest;
+  const moveLayerRef = useRef<L.LayerGroup | null>(null);
+  const [movePos, setMovePos] = useState<LatLng | null>(null);
+  const movePosRef = useRef<LatLng | null>(null);
+  movePosRef.current = movePos;
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [baseStyle, setBaseStyle] = useState<BaseStyle>(loadBaseStyle);
+  const [stylesOpen, setStylesOpen] = useState(false);
+  const eventsRef = useRef(events);
+  eventsRef.current = events;
   // While drawing, a tap on the map adds a corner instead of closing things.
   const drawClickRef = useRef<((p: LatLng) => void) | null>(null);
 
@@ -163,6 +190,7 @@ export function MapView({
     alertLayerRef.current = L.layerGroup().addTo(map);
     linkLayerRef.current = L.layerGroup().addTo(map);
     drawLayerRef.current = L.layerGroup().addTo(map);
+    moveLayerRef.current = L.layerGroup().addTo(map);
     markerLayerRef.current = L.markerClusterGroup({
       showCoverageOnHover: false,
       spiderfyOnMaxZoom: true,
@@ -189,6 +217,7 @@ export function MapView({
       markerLayerRef.current = null;
       linkLayerRef.current = null;
       drawLayerRef.current = null;
+      moveLayerRef.current = null;
       alertLayerRef.current = null;
       alertEntriesRef.current.clear();
       handledAlertFocusRef.current = null;
@@ -204,10 +233,10 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
     if (baseLayerRef.current) map.removeLayer(baseLayerRef.current);
-    const layer = createBaseLayer(theme);
+    const layer = createBaseLayer(theme, undefined, baseStyle);
     layer.addTo(map);
     baseLayerRef.current = layer;
-  }, [theme]);
+  }, [theme, baseStyle]);
 
   // 3. Zoom control sits on the side away from the feed and follows the language.
   useEffect(() => {
@@ -232,7 +261,7 @@ export function MapView({
   useEffect(() => {
     const layer = markerLayerRef.current;
     if (!layer) return;
-    const deps = [t, dir, locale, lang, categoryLabel, compact];
+    const deps = [t, dir, locale, lang, categoryLabel, compact, canMove];
     const sameDeps = builtWithRef.current.length === deps.length && deps.every((d, i) => d === builtWithRef.current[i]);
     builtWithRef.current = deps;
     const wanted = new Map(events.map((e) => [e.id, e]));
@@ -295,8 +324,10 @@ export function MapView({
                   approximate: t('feed.approximate'),
                   locale,
                   dir,
+                  moveLocation: canMove ? t('move.button') : undefined,
                 },
                 (id) => onViewEventRef.current(id),
+                canMove ? (id) => onMoveRequestRef.current?.(id) : undefined,
               ),
             { maxWidth: 320, minWidth: 240, autoPanPadding: [28, 28], className: 'ofm-popup-shell' },
           );
@@ -309,7 +340,70 @@ export function MapView({
     }
     if (all.length) layer.addLayers(all);
     if (all.length || gone.length || !sameDeps) setMarkersVersion((v) => v + 1);
-  }, [events, t, dir, locale, lang, categoryLabel, compact]);
+  }, [events, t, dir, locale, lang, categoryLabel, compact, canMove]);
+
+  // 4c. Staff: move a pin. Drag the pin or tap the map; ✓ saves, ✗ cancels.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !movingId) {
+      setMovePos(null);
+      return;
+    }
+    const ev = eventsRef.current.find((e) => e.id === movingId);
+    const c = map.getCenter();
+    setMovePos(ev && ev.locationPrecision ? [ev.latitude, ev.longitude] : [c.lat, c.lng]);
+    map.closePopup();
+    drawClickRef.current = (p) => setMovePos(p);
+    return () => {
+      drawClickRef.current = null;
+    };
+  }, [movingId]);
+
+  const saveMove = useCallback(async () => {
+    const pos = movePosRef.current;
+    if (!movingId || !pos || !onMoveSaveRef.current) return;
+    setMoveBusy(true);
+    try {
+      if (await onMoveSaveRef.current(movingId, pos[0], pos[1])) onMoveEndRef.current?.();
+    } finally {
+      setMoveBusy(false);
+    }
+  }, [movingId]);
+  const saveMoveRef = useRef(saveMove);
+  saveMoveRef.current = saveMove;
+
+  useEffect(() => {
+    const layer = moveLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    if (!movingId || !movePos) return;
+    const icon = L.divIcon({
+      className: 'ofm-move',
+      html:
+        `<div class="ofm-move__actions">` +
+        `<button type="button" data-act="ok" class="ofm-move__ok" title="${t('move.save')}" aria-label="${t('move.save')}"${moveBusy ? ' disabled' : ''}>✓</button>` +
+        `<button type="button" data-act="no" class="ofm-move__no" title="${t('move.cancel')}" aria-label="${t('move.cancel')}">✕</button>` +
+        `</div><div class="ofm-move__pin"></div>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+    const pin = L.marker(movePos, { icon, draggable: !moveBusy, zIndexOffset: 5000, keyboard: false }).addTo(layer);
+    pin.on('dragend', () => {
+      const ll = pin.getLatLng();
+      setMovePos([ll.lat, ll.lng]);
+    });
+    const el = pin.getElement();
+    if (el) {
+      el.querySelectorAll('button').forEach((b) => {
+        L.DomEvent.on(b, 'mousedown touchstart dblclick', L.DomEvent.stopPropagation);
+        L.DomEvent.on(b, 'click', (e) => {
+          L.DomEvent.stop(e);
+          if (b.dataset.act === 'ok') void saveMoveRef.current();
+          else onMoveEndRef.current?.();
+        });
+      });
+    }
+  }, [movingId, movePos, moveBusy, t]);
 
   // 4b. Home Front Command alerts: merged polygon + a pulsing siren pin at its centre.
   useEffect(() => {
@@ -664,6 +758,15 @@ export function MapView({
         >
           <Maximize2 className="size-4" aria-hidden />
         </IconButton>
+        <IconButton
+          label={t('map.styles')}
+          onClick={() => setStylesOpen((v) => !v)}
+          aria-expanded={stylesOpen}
+          className="pointer-events-auto shadow-md"
+          variant="map"
+        >
+          <MapIcon className="size-4" aria-hidden />
+        </IconButton>
         {legend ? (
           <IconButton
             label={t('map.showLegend')}
@@ -754,6 +857,53 @@ export function MapView({
               className="inline-flex size-7 items-center justify-center rounded-full hover:bg-white/15"
             >
               <X className="size-4" aria-hidden />
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {stylesOpen ? (
+        <div className="absolute start-14 top-3 z-[650] w-52 rounded-xl bg-white/95 p-1.5 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10" role="menu">
+          {BASE_STYLES.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={baseStyle === id}
+              onClick={() => {
+                setBaseStyle(id);
+                saveBaseStyle(id);
+                setStylesOpen(false);
+              }}
+              className={
+                'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-start text-sm ' +
+                (baseStyle === id ? 'bg-sky-50 font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800')
+              }
+            >
+              {baseStyle === id ? <Check className="size-4" aria-hidden /> : <span className="size-4" aria-hidden />}
+              {t(`map.style.${id}`)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {movingId ? (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-[700] flex justify-center px-3">
+          <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-2xl bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:text-slate-200 dark:ring-white/10">
+            <span>{t('move.hint')}</span>
+            <button
+              type="button"
+              onClick={() => void saveMove()}
+              disabled={moveBusy}
+              className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+            >
+              <Check className="size-3.5" aria-hidden />
+              {t('move.save')}
+            </button>
+            <button
+              type="button"
+              onClick={() => onMoveEnd?.()}
+              className="inline-flex h-8 items-center rounded-lg px-2.5 font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              {t('move.cancel')}
             </button>
           </div>
         </div>

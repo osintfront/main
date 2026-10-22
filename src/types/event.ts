@@ -47,8 +47,18 @@ export interface EventPlace {
   precision: LocationPrecision | null;
 }
 
-/** Optional per-language overrides, prepared for future translated titles/summaries. */
-export type EventTranslations = Partial<Record<string, { title?: string; description?: string }>>;
+/** Per-language text: headline, ≤100-char summary, and the expanded report (written on "expand"). */
+export interface EventText {
+  title?: string;
+  description?: string;
+  summary?: string;
+  details?: string;
+  religious?: string;
+  implications?: string;
+}
+export type EventTranslations = Partial<Record<string, EventText>>;
+
+export type MediaKind = 'image' | 'video' | 'document';
 
 /**
  * An event as the public site sees it. Built from the `published_events`
@@ -82,6 +92,8 @@ export interface PublicEvent {
   isVerified: boolean;
   category: CategoryRef;
   translations: EventTranslations;
+  /** Kinds of media attached (for the media filter). */
+  mediaKinds?: MediaKind[];
 }
 
 /** Full event as staff see it in the back office. */

@@ -18,6 +18,7 @@ import { AccountPage } from '@/pages/admin/AccountPage';
 import { SettingsPage } from '@/pages/admin/SettingsPage';
 import { NewsAgentsPage } from '@/pages/admin/NewsAgentsPage';
 import { LearningPage } from '@/pages/admin/LearningPage';
+import { AiUsagePage } from '@/pages/admin/AiUsagePage';
 import { ModulePlaceholderPage } from '@/pages/admin/ModulePlaceholderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SitePage } from '@/pages/public/SitePage';
@@ -31,6 +32,7 @@ const IMPLEMENTED: Record<string, ComponentType> = {
   settings: SettingsPage,
   newsAgents: NewsAgentsPage,
   learning: LearningPage,
+  aiUsage: AiUsagePage,
 };
 
 export function App() {

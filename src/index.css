@@ -362,6 +362,68 @@
   color: var(--color-slate-900);
 }
 
+/* Staff: "change location" in a popup + the pin being moved (✓ / ✗ above it). */
+.ofm-popup__move {
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1px solid var(--color-sky-500);
+  color: var(--color-sky-700);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.ofm-popup__move:hover {
+  background: var(--color-sky-50);
+}
+.dark .ofm-popup__move {
+  color: var(--color-sky-300);
+}
+.ofm-move {
+  position: relative;
+}
+.ofm-move__pin {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: var(--color-sky-600);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px var(--color-sky-600), 0 4px 10px rgb(0 0 0 / 0.35);
+  cursor: grab;
+}
+.ofm-move__actions {
+  position: absolute;
+  left: 0;
+  top: -46px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+.ofm-move__actions button {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+.ofm-move__ok {
+  background: var(--color-emerald-600);
+}
+.ofm-move__no {
+  background: var(--color-red-600);
+}
+.ofm-move__actions button:disabled {
+  opacity: 0.5;
+}
+
 /* ─── Home Front Command alerts ─────────────────────────────────── */
 .ofm-hfc-area {
   animation: ofm-hfc-breathe 1.6s ease-in-out infinite;

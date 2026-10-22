@@ -1,4 +1,4 @@
-import type { PublicEvent, Severity } from '@/types/event';
+import type { MediaKind, PublicEvent, Severity } from '@/types/event';
 
 /**
  * Visitor-side filters for the map and feed: time range, areas, event types,
@@ -8,7 +8,9 @@ import type { PublicEvent, Severity } from '@/types/event';
  */
 
 export type TimePreset = 'live' | '1h' | '6h' | '24h' | '3d' | '7d' | 'custom';
-export type SourceKind = 'whatsapp' | 'telegram' | 'news' | 'other';
+export type SourceKind = 'telegram' | 'whatsapp' | 'x' | 'facebook' | 'instagram' | 'tiktok' | 'news' | 'other';
+/** Media on the event: none, or which kinds are attached. */
+export type MediaFilter = 'none' | MediaKind;
 export type LatLng = [number, number];
 /** place = a specific place (pinned on the map); country = only the country is known;
  *  none = no usable location (only a broad region like "Middle East", or nothing). */
@@ -23,6 +25,7 @@ export interface EventFilters {
   categories: string[];
   severities: Severity[];
   sources: SourceKind[];
+  media: MediaFilter[];
   breakingOnly: boolean;
   verifiedOnly: boolean;
   /** Empty = all. Only 'place' events are pinned on the map; the others appear in the feed only. */
@@ -41,6 +44,7 @@ export const EMPTY_FILTERS: EventFilters = {
   categories: [],
   severities: [],
   sources: [],
+  media: [],
   breakingOnly: false,
   verifiedOnly: false,
   placeKinds: [],
@@ -99,15 +103,13 @@ export const AREAS: AreaDef[] = [
   { id: 'jordan', en: 'Jordan', he: 'ירדן', names: ['jordan', 'ירדן'], bbox: [29.19, 34.96, 33.37, 39.3] },
   { id: 'egypt', en: 'Egypt', he: 'מצרים', names: ['egypt', 'מצרים', 'sinai', 'סיני'], bbox: [22.0, 24.7, 31.67, 36.9] },
   { id: 'saudi', en: 'Saudi Arabia', he: 'סעודיה', names: ['saudi arabia', 'ksa', 'סעודיה', 'ערב הסעודית'], bbox: [16.35, 34.5, 32.15, 55.67] },
-  {
-    id: 'gulf',
-    en: 'Gulf states',
-    he: 'מדינות המפרץ',
-    names: ['qatar', 'uae', 'united arab emirates', 'bahrain', 'kuwait', 'oman', 'persian gulf', 'קטאר', 'איחוד האמירויות', 'האמירויות', 'בחריין', 'כווית', 'עומאן'],
-    bbox: [16.6, 47.7, 30.1, 59.9],
-  },
+  { id: 'qatar', en: 'Qatar', he: 'קטאר', names: ['qatar', 'קטאר'], bbox: [24.4, 50.7, 26.2, 51.7] },
+  { id: 'uae', en: 'UAE', he: 'איחוד האמירויות', names: ['uae', 'united arab emirates', 'emirates', 'איחוד האמירויות', 'האמירויות'], bbox: [22.6, 51.5, 26.1, 56.4] },
+  { id: 'bahrain', en: 'Bahrain', he: 'בחריין', names: ['bahrain', 'בחריין'], bbox: [25.5, 50.3, 26.4, 50.9] },
+  { id: 'kuwait', en: 'Kuwait', he: 'כווית', names: ['kuwait', 'כווית'], bbox: [28.5, 46.5, 30.1, 48.5] },
+  { id: 'oman', en: 'Oman', he: 'עומאן', names: ['oman', 'עומאן'], bbox: [16.6, 52.0, 26.4, 59.9] },
   { id: 'turkey', en: 'Turkey', he: 'טורקיה', names: ['turkey', 'türkiye', 'טורקיה'], bbox: [35.8, 25.6, 42.2, 44.8] },
-  { id: 'other', en: 'Other countries', he: 'מדינות אחרות', names: [], bbox: null },
+  { id: 'cyprus', en: 'Cyprus', he: 'קפריסין', names: ['cyprus', 'קפריסין'], bbox: [34.5, 32.2, 35.7, 34.6] },
 ];
 
 const NAME_TO_AREA = new Map<string, string>();
@@ -117,12 +119,15 @@ const inBox = (lat: number, lng: number, b: [number, number, number, number]) =>
 
 function areaAt(lat: number, lng: number): string {
   // Small areas first, so Gaza / the West Bank win over Israel's box.
-  for (const id of ['gaza', 'westbank', 'lebanon', 'israel', 'jordan', 'syria', 'iraq', 'yemen', 'gulf', 'iran', 'saudi', 'egypt', 'turkey']) {
+  for (const id of ['gaza', 'westbank', 'lebanon', 'israel', 'jordan', 'bahrain', 'qatar', 'kuwait', 'uae', 'syria', 'iraq', 'yemen', 'oman', 'iran', 'saudi', 'egypt', 'cyprus', 'turkey']) {
     const a = AREAS.find((x) => x.id === id)!;
     if (a.bbox && inBox(lat, lng, a.bbox)) return id;
   }
-  return 'other';
+  return '';
 }
+
+/** Any other country named on events gets its own area: id "c:<name>". */
+export const COUNTRY_AREA_PREFIX = 'c:';
 
 const areaCache = new WeakMap<PublicEvent, Set<string>>();
 
@@ -134,9 +139,12 @@ export function eventAreas(e: PublicEvent): Set<string> {
   for (const part of (e.country || '').split(/\s*[/,;|]\s*/)) {
     const key = part.trim().toLowerCase();
     if (!key) continue;
-    out.add(NAME_TO_AREA.get(key) ?? 'other');
+    out.add(NAME_TO_AREA.get(key) ?? COUNTRY_AREA_PREFIX + part.trim());
   }
-  if (out.size === 0) out.add(areaAt(e.latitude, e.longitude));
+  if (out.size === 0 && e.locationPrecision) {
+    const a = areaAt(e.latitude, e.longitude);
+    if (a) out.add(a);
+  }
   areaCache.set(e, out);
   return out;
 }
@@ -153,12 +161,37 @@ export function placeKind(e: PublicEvent): PlaceKind {
 /** Only events with a specific place get a pin; country-only / no-location events stay in the feed. */
 export const isOnMap = (e: PublicEvent) => placeKind(e) === 'place';
 
+const HOST_KIND: [RegExp, SourceKind][] = [
+  [/(^|\.)(t\.me|telegram\.(me|org))$/, 'telegram'],
+  [/(^|\.)(wa\.me|whatsapp\.com)$/, 'whatsapp'],
+  [/(^|\.)(x\.com|twitter\.com)$/, 'x'],
+  [/(^|\.)(facebook\.com|fb\.com|fb\.watch)$/, 'facebook'],
+  [/(^|\.)instagram\.com$/, 'instagram'],
+  [/(^|\.)tiktok\.com$/, 'tiktok'],
+];
+
 export function sourceKind(e: PublicEvent): SourceKind {
   const name = e.sourceName ?? '';
   if (/^whatsapp/i.test(name)) return 'whatsapp';
   if (/^telegram/i.test(name)) return 'telegram';
+  if (e.sourceUrl) {
+    try {
+      const host = new URL(e.sourceUrl).hostname.toLowerCase();
+      for (const [re, kind] of HOST_KIND) if (re.test(host)) return kind;
+    } catch {
+      /* not a URL */
+    }
+  }
+  if (/^(x|twitter)\b/i.test(name)) return 'x';
+  if (/^facebook/i.test(name)) return 'facebook';
+  if (/^instagram/i.test(name)) return 'instagram';
+  if (/^tiktok/i.test(name)) return 'tiktok';
   if (e.sourceType === 'news_website') return 'news';
   return 'other';
+}
+
+export function mediaKinds(e: PublicEvent): MediaFilter[] {
+  return e.mediaKinds?.length ? e.mediaKinds : ['none'];
 }
 
 // ─── Drawn area ────────────────────────────────────────────────────
@@ -203,6 +236,7 @@ export function matchesFilters(e: PublicEvent, f: EventFilters, now = Date.now()
   if (f.categories.length && !f.categories.includes(e.category.slug)) return false;
   if (f.severities.length && !f.severities.includes(e.severity)) return false;
   if (f.sources.length && !f.sources.includes(sourceKind(e))) return false;
+  if (f.media?.length && !mediaKinds(e).some((m) => f.media.includes(m))) return false;
   if (f.breakingOnly && !e.isBreaking) return false;
   if (f.verifiedOnly && !e.isVerified) return false;
   if (f.placeKinds.length && !f.placeKinds.includes(placeKind(e))) return false;
@@ -218,11 +252,11 @@ export function activeFilterCount(f: EventFilters): number {
     (f.categories.length ? 1 : 0) +
     (f.severities.length ? 1 : 0) +
     (f.sources.length ? 1 : 0) +
+    (f.media?.length ? 1 : 0) +
     (f.breakingOnly ? 1 : 0) +
     (f.verifiedOnly ? 1 : 0) +
     (f.placeKinds.length ? 1 : 0) +
-    (f.polygon ? 1 : 0) +
-    (f.eeis.length ? 1 : 0)
+    (f.polygon ? 1 : 0)
   );
 }
 

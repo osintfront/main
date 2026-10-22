@@ -6,7 +6,7 @@ import { formatDateTime, formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
 import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
-import { LinkifiedText } from '@/components/common/LinkifiedText';
+import { EventText, eventTexts } from './EventText';
 import { whereLabel } from '@/utils/places';
 
 interface EventDetailsDialogProps {
@@ -23,8 +23,7 @@ interface EventDetailsDialogProps {
 export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDialogProps) {
   const { t, locale, lang } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
-  const title = event.translations[lang]?.title || event.title;
-  const description = event.translations[lang]?.description || event.description;
+  const { title } = eventTexts(event, lang);
   const where = whereLabel(event, lang);
   const sourceLabel = event.sourceName || (event.sourceUrl ? hostnameOf(event.sourceUrl) : '');
 
@@ -108,13 +107,7 @@ export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDia
               ))}
             </ul>
           ) : null}
-          {description ? (
-            <p className="whitespace-pre-line break-words text-[15px] leading-relaxed text-slate-800 dark:text-slate-200" dir="auto">
-              <LinkifiedText text={description} mapsLabel={t('details.openInMaps')} />
-            </p>
-          ) : (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('details.noDescription')}</p>
-          )}
+          <EventText event={event} />
           <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
           {event.sources && event.sources.length ? (
             <section aria-labelledby="event-sources-title" className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">

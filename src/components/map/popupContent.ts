@@ -15,6 +15,8 @@ export interface PopupLabels {
   approximate: string;
   locale: string;
   dir: 'ltr' | 'rtl';
+  /** Staff only: "change location" button. */
+  moveLocation?: string;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -32,7 +34,11 @@ export function buildPopupContent(
   event: PublicEvent,
   labels: PopupLabels,
   onView: (id: string) => void,
+  /** Staff only: move the pin (opens the re-pin mode on the map). */
+  onMove?: (id: string) => void,
 ): HTMLElement {
+  const lang = labels.dir === 'rtl' ? 'he' : 'en';
+  const tr = event.translations[lang] ?? {};
   const root = el('div', 'ofm-popup');
   root.dir = labels.dir;
 
@@ -46,11 +52,11 @@ export function buildPopupContent(
   root.append(meta);
 
   // dir=auto per text block: an English report inside the Hebrew UI keeps its own direction.
-  const title = el('h3', 'ofm-popup__title', event.title);
+  const title = el('h3', 'ofm-popup__title', tr.title || event.title);
   title.dir = 'auto';
   root.append(title);
 
-  const where = whereLabel(event, labels.dir === 'rtl' ? 'he' : 'en');
+  const where = whereLabel(event, lang);
   const time = formatDateTime(event.occurredAt, labels.locale);
   const sub = el('p', 'ofm-popup__sub');
   if (where) {
@@ -68,7 +74,7 @@ export function buildPopupContent(
   }
   root.append(sub);
 
-  const preview = previewText(event.description ?? '');
+  const preview = previewText(tr.summary || tr.description || (lang === 'he' ? event.description : '') || event.description || '');
   if (preview) {
     const text = preview.length > 220 ? `${preview.slice(0, 217).trimEnd()}…` : preview;
     const desc = el('p', 'ofm-popup__desc', text);
@@ -130,6 +136,12 @@ export function buildPopupContent(
   button.type = 'button';
   button.addEventListener('click', () => onView(event.id));
   footer.append(button);
+  if (onMove && labels.moveLocation) {
+    const move = el('button', 'ofm-popup__move', labels.moveLocation);
+    move.type = 'button';
+    move.addEventListener('click', () => onMove(event.id));
+    footer.append(move);
+  }
   root.append(footer);
 
   return root;

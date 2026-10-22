@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Archive, BadgeCheck, CheckCircle2, ChevronLeft, ChevronRight, Copy, FilePlus2, Inbox, Pencil, RefreshCw, Search, SlidersHorizontal, Trash2, Zap } from 'lucide-react';
+import { Archive, BadgeCheck, CheckCircle2, ChevronLeft, ChevronRight, Copy, FilePlus2, Inbox, MapPin, Pencil, RefreshCw, Search, SlidersHorizontal, Trash2, X, Zap } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useI18n } from '@/i18n';
@@ -10,7 +10,9 @@ import {
   duplicateEvent,
   eventToInput,
   listEvents,
+  moveEventPin,
   PAGE_SIZE,
+  setEventCategory,
   softDeleteEvent,
   updateEvent,
   type EventFilters,
@@ -26,6 +28,7 @@ import { Button } from '@/components/common/Form';
 import { IconButton } from '@/components/common/IconButton';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useToast } from '@/components/common/Toast';
+import { QuickLocationDialog } from '@/components/admin/events/QuickLocationDialog';
 
 const SELECT =
   'h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
@@ -54,6 +57,12 @@ export function EventsListPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'archive'; event: AdminEvent } | null>(null);
+  // Several rows at once: approve (publish) or delete.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<'publish' | 'delete' | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [locating, setLocating] = useState<AdminEvent | null>(null);
+  const [locBusy, setLocBusy] = useState(false);
 
   const who = useMemo(() => ({ can, userId: user?.id ?? null }), [can, user?.id]);
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
@@ -68,6 +77,7 @@ export function EventsListPage() {
       const res = await listEvents({ ...filters, userId: user?.id ?? null }, page);
       setRows(res.events);
       setTotal(res.total);
+      setSelected((prev) => new Set([...prev].filter((id) => res.events.some((e) => e.id === id))));
       setStatus('ready');
       setError(null);
     } catch (err) {
@@ -133,6 +143,79 @@ export function EventsListPage() {
   };
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const toggleRow = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
+  const selectedRows = rows.filter((r) => selected.has(r.id));
+  const publishable = selectedRows.filter((r) => availableActions(r, who).includes('publish'));
+  const deletable = can('event.delete') ? selectedRows.filter((r) => !r.deletedAt) : [];
+
+  const runBulk = async (kind: 'publish' | 'delete') => {
+    setBulkBusy(true);
+    let ok = 0;
+    let failed = 0;
+    for (const ev of kind === 'publish' ? publishable : deletable) {
+      try {
+        if (kind === 'publish') {
+          const v = validateEvent(eventToInput(ev), 'published');
+          if (Object.values(v).some(Boolean)) {
+            failed++;
+            continue;
+          }
+          await updateEvent(ev.id, null, { expectedStatus: ev.status, status: 'published' });
+        } else {
+          await softDeleteEvent(ev.id);
+        }
+        ok++;
+      } catch {
+        failed++;
+      }
+    }
+    setBulkBusy(false);
+    setBulk(null);
+    setSelected(new Set());
+    if (ok) toast.success(t(kind === 'publish' ? 'list.bulkPublished' : 'list.bulkDeleted', { count: ok }));
+    if (failed) toast.error(t('list.bulkFailed', { count: failed }));
+    await load();
+  };
+
+  const changeCategory = async (ev: AdminEvent, categoryId: string) => {
+    const cat = categoryById.get(categoryId);
+    if (!cat || categoryId === ev.categoryId) return;
+    setBusyId(ev.id);
+    try {
+      await setEventCategory(ev.id, cat.slug);
+      setRows((list) => list.map((r) => (r.id === ev.id ? { ...r, categoryId } : r)));
+      toast.success(t('list.categoryChanged'));
+    } catch (err) {
+      toast.error(friendlyError(err, t));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const saveLocation = async (lat: number, lng: number, name: string) => {
+    if (!locating) return;
+    setLocBusy(true);
+    try {
+      await moveEventPin(locating.id, lat, lng, name);
+      toast.success(t('move.saved'));
+      setLocating(null);
+      await load();
+    } catch (err) {
+      toast.error(friendlyError(err, t));
+    } finally {
+      setLocBusy(false);
+    }
+  };
+  const canMovePins = can('event.edit.any') || can('event.edit.own');
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -253,6 +336,40 @@ export function EventsListPage() {
         </Alert>
       ) : null}
 
+      {selected.size ? (
+        <div className="sticky top-0 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm text-white shadow-lg dark:bg-slate-800">
+          <span className="font-semibold">{t('list.selected', { count: selected.size })}</span>
+          {publishable.length ? (
+            <button
+              type="button"
+              onClick={() => setBulk('publish')}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 font-semibold hover:bg-emerald-500"
+            >
+              <CheckCircle2 className="size-4" aria-hidden />
+              {t('list.bulkPublish', { count: publishable.length })}
+            </button>
+          ) : null}
+          {deletable.length ? (
+            <button
+              type="button"
+              onClick={() => setBulk('delete')}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-red-600 px-3 font-semibold hover:bg-red-500"
+            >
+              <Trash2 className="size-4" aria-hidden />
+              {t('list.bulkDelete', { count: deletable.length })}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="ms-auto inline-flex h-8 items-center gap-1 rounded-lg px-2 font-medium hover:bg-white/10"
+          >
+            <X className="size-4" aria-hidden />
+            {t('list.clearSelection')}
+          </button>
+        </div>
+      ) : null}
+
       {/* Table (desktop) / cards (mobile) */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         {status === 'loading' && rows.length === 0 ? (
@@ -276,6 +393,9 @@ export function EventsListPage() {
           <table className={cn('w-full text-sm', status === 'loading' && 'opacity-60')}>
             <thead className="hidden border-b border-slate-200 bg-slate-50 text-start text-xs font-semibold uppercase tracking-wide text-slate-500 md:table-header-group dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
               <tr>
+                <th scope="col" className="w-10 ps-4 py-2.5">
+                  <input type="checkbox" className="size-4 accent-sky-600" checked={allSelected} onChange={toggleAll} aria-label={t('list.selectAll')} />
+                </th>
                 <th scope="col" className="px-4 py-2.5 text-start">{t('list.colTitle')}</th>
                 <th scope="col" className="px-3 py-2.5 text-start">{t('form.category')}</th>
                 <th scope="col" className="hidden px-3 py-2.5 text-start lg:table-cell">{t('list.colLocation')}</th>
@@ -294,7 +414,22 @@ export function EventsListPage() {
                 const editable = canEditEvent(ev, who);
                 const busy = busyId === ev.id;
                 return (
-                  <tr key={ev.id} className="block px-4 py-3 md:table-row md:p-0 hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                  <tr
+                    key={ev.id}
+                    className={cn(
+                      'relative block px-4 py-3 ps-11 md:table-row md:p-0 hover:bg-slate-50/70 dark:hover:bg-slate-800/40',
+                      selected.has(ev.id) && 'bg-sky-50/70 dark:bg-sky-500/10',
+                    )}
+                  >
+                    <td className="absolute start-4 top-3.5 md:static md:table-cell md:w-10 md:ps-4 md:py-3">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-sky-600"
+                        checked={selected.has(ev.id)}
+                        onChange={() => toggleRow(ev.id)}
+                        aria-label={t('list.selectRow', { title: ev.title || t('list.untitled') })}
+                      />
+                    </td>
                     <td className="block md:table-cell md:px-4 md:py-3">
                       <Link to={`/admin/events/${ev.id}`} className="font-semibold text-slate-900 hover:text-sky-700 hover:underline dark:text-white dark:hover:text-sky-300" dir="auto">
                         {ev.title || <span className="italic text-slate-400">{t('list.untitled')}</span>}
@@ -318,14 +453,46 @@ export function EventsListPage() {
                       </div>
                     </td>
                     <td className="mt-2 block md:mt-0 md:table-cell md:px-3 md:py-3">
-                      {cat ? (
+                      {editable || can('event.edit.any') ? (
+                        <select
+                          aria-label={t('form.category')}
+                          value={ev.categoryId ?? ''}
+                          disabled={busy || !!ev.deletedAt}
+                          onChange={(e) => void changeCategory(ev, e.target.value)}
+                          className="h-8 max-w-[12rem] rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          style={cat ? { borderInlineStartColor: cat.color, borderInlineStartWidth: 4 } : undefined}
+                        >
+                          {!ev.categoryId ? <option value="">—</option> : null}
+                          {categories.filter((c) => c.isActive || c.id === ev.categoryId).map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {categoryLabel(c.slug, c.name)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : cat ? (
                         <CategoryBadge category={{ id: cat.id, slug: cat.slug, name: cat.name, icon: cat.icon, color: cat.color, markerColor: cat.markerColor }} />
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="hidden max-w-[14rem] truncate text-slate-600 lg:table-cell lg:px-3 lg:py-3 dark:text-slate-300" dir="auto">
-                      {[ev.locationName, ev.country].filter(Boolean).join(', ') || '—'}
+                    <td className="hidden max-w-[14rem] text-slate-600 lg:table-cell lg:px-3 lg:py-3 dark:text-slate-300">
+                      {canMovePins && !ev.deletedAt ? (
+                        <button
+                          type="button"
+                          onClick={() => setLocating(ev)}
+                          title={t('list.quickLocation')}
+                          className="inline-flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 text-start hover:bg-sky-50 hover:text-sky-800 dark:hover:bg-sky-500/10 dark:hover:text-sky-200"
+                        >
+                          <MapPin className={cn('size-3.5 shrink-0', ev.latitude === null ? 'text-amber-500' : 'text-slate-400')} aria-hidden />
+                          <span className="truncate" dir="auto">
+                            {[ev.locationName, ev.country].filter(Boolean).join(', ') || t('list.noLocation')}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="block truncate" dir="auto">
+                          {[ev.locationName, ev.country].filter(Boolean).join(', ') || '—'}
+                        </span>
+                      )}
                     </td>
                     <td className="mt-2 inline-block md:mt-0 md:table-cell md:px-3 md:py-3">
                       <StatusBadge status={ev.status} />
@@ -382,6 +549,35 @@ export function EventsListPage() {
         </nav>
       ) : null}
 
+      <ConfirmDialog
+        open={bulk === 'publish'}
+        title={t('list.bulkPublishTitle', { count: publishable.length })}
+        body={t('list.bulkPublishBody')}
+        confirmLabel={t('form.publish')}
+        busy={bulkBusy}
+        onCancel={() => setBulk(null)}
+        onConfirm={() => void runBulk('publish')}
+      />
+      <ConfirmDialog
+        open={bulk === 'delete'}
+        title={t('list.bulkDeleteTitle', { count: deletable.length })}
+        body={t('form.deleteBody')}
+        confirmLabel={t('form.delete')}
+        tone="danger"
+        busy={bulkBusy}
+        onCancel={() => setBulk(null)}
+        onConfirm={() => void runBulk('delete')}
+      />
+      {locating ? (
+        <QuickLocationDialog
+          event={locating}
+          iconName={(locating.categoryId && categoryById.get(locating.categoryId)?.icon) || 'CircleDot'}
+          color={(locating.categoryId && categoryById.get(locating.categoryId)?.markerColor) || '#0284c7'}
+          busy={locBusy}
+          onCancel={() => setLocating(null)}
+          onSave={(a, b, n) => void saveLocation(a, b, n)}
+        />
+      ) : null}
       <ConfirmDialog
         open={confirm?.kind === 'archive'}
         title={t('form.archiveTitle')}

@@ -277,7 +277,9 @@ export function EventEditorPage() {
   }
 
   const disabled = !editable || !!busy;
-  const categoryOptions = categories.map((c) => ({ value: c.id, label: categoryLabel(c.slug, c.name) }));
+  const categoryOptions = categories
+    .filter((c) => c.isActive || c.id === input.categoryId)
+    .map((c) => ({ value: c.id, label: categoryLabel(c.slug, c.name) }));
   const CategoryIcon = getCategoryIcon(category?.icon);
   const actionMeta: Record<WorkflowAction, { label: string; icon: typeof Send; variant: 'primary' | 'secondary' | 'danger' }> = {
     submit: { label: t('form.submitReview'), icon: Send, variant: 'secondary' },

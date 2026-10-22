@@ -406,3 +406,20 @@ export async function recentAudit(limit = 8): Promise<AuditEntry[]> {
     actorName: a.actor ? a.actor.full_name || a.actor.email : null,
   }));
 }
+
+/** Move an event's pin (staff; the database learns the place from it). */
+export async function moveEventPin(id: string, latitude: number, longitude: number, locationName?: string): Promise<void> {
+  const { error } = await client().rpc('move_event_pin', {
+    p_id: id,
+    p_lat: latitude,
+    p_lng: longitude,
+    p_location_name: locationName ?? null,
+  });
+  if (error) throw toServiceError(error);
+}
+
+/** Change an event's category (staff; the classifier learns from it). */
+export async function setEventCategory(id: string, slug: string): Promise<void> {
+  const { error } = await client().rpc('set_event_category', { p_id: id, p_slug: slug });
+  if (error) throw toServiceError(error);
+}

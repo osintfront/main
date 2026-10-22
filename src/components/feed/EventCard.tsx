@@ -6,9 +6,9 @@ import { cn } from '@/utils/cn';
 import { isOnMap } from '@/lib/eventFilters';
 import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
-import { previewText } from '@/utils/text';
 import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
+import { EventText, eventTexts } from './EventText';
 import { whereLabel } from '@/utils/places';
 
 interface EventCardProps {
@@ -23,9 +23,7 @@ interface EventCardProps {
 
 function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDetails }: EventCardProps) {
   const { t, locale, lang } = useI18n();
-  const title = event.translations[lang]?.title || event.title;
-  const fullDescription = event.translations[lang]?.description || event.description;
-  const description = previewText(fullDescription);
+  const { title } = eventTexts(event, lang);
   const where = whereLabel(event, lang);
   const placeCount = (event.places?.length ?? 0) + 1;
   const onMap = isOnMap(event);
@@ -78,20 +76,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
       <h3 className="mt-2 text-[15px] font-semibold leading-snug text-slate-900 dark:text-white" dir="auto">
         {title}
       </h3>
-      {description ? (
-        <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300" dir="auto">
-          {description}
-        </p>
-      ) : null}
-      {onOpenDetails && (fullDescription.length > 150 || (fullDescription.match(/\n/g)?.length ?? 0) >= 2) ? (
-        <button
-          type="button"
-          onClick={() => onOpenDetails(event.id)}
-          className="-my-1 mt-0 py-2 text-xs font-semibold text-sky-700 hover:underline sm:my-0 sm:mt-1 sm:py-0 focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-sky-400"
-        >
-          {t('details.readMore')}
-        </button>
-      ) : null}
+      <EventText event={event} compact />
 
       <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
 

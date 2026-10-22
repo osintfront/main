@@ -4,7 +4,8 @@ import { useI18n } from '@/i18n';
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
-import { previewText } from '@/utils/text';
+import { cn } from '@/utils/cn';
+import { eventTexts } from '@/components/feed/EventText';
 import { BreakingBadge, CategoryBadge, SeverityBadge } from '@/components/common/Badges';
 import { whereLabel } from '@/utils/places';
 
@@ -12,16 +13,17 @@ interface MobileEventSheetProps {
   event: PublicEvent;
   onClose: () => void;
   onOpenDetails: (id: string) => void;
+  /** Staff: move the pin. */
+  onMove?: (id: string) => void;
 }
 
 /**
  * Phones: tapping a pin shows the event in a card along the bottom of the map
  * (instead of a small popup over the pins). Swipe down or tap × to close.
  */
-export function MobileEventSheet({ event, onClose, onOpenDetails }: MobileEventSheetProps) {
+export function MobileEventSheet({ event, onClose, onOpenDetails, onMove }: MobileEventSheetProps) {
   const { t, locale, lang, dir } = useI18n();
-  const title = event.translations[lang]?.title || event.title;
-  const description = previewText(event.translations[lang]?.description || event.description);
+  const { title, summary: description } = eventTexts(event, lang);
   const where = whereLabel(event, lang);
   const placeCount = (event.places?.length ?? 0) + 1;
   const sourceLabel = event.sourceName || (event.sourceUrl ? hostnameOf(event.sourceUrl) : '');
@@ -118,10 +120,22 @@ export function MobileEventSheet({ event, onClose, onOpenDetails }: MobileEventS
             <ExternalLink className="size-3.5 shrink-0" aria-hidden />
           </a>
         ) : null}
+        {onMove ? (
+          <button
+            type="button"
+            onClick={() => onMove(event.id)}
+            className="ms-auto inline-flex h-10 shrink-0 items-center rounded-xl border border-sky-500 px-3 text-sm font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-500/10"
+          >
+            {t('move.button')}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => onOpenDetails(event.id)}
-          className="ms-auto inline-flex h-10 shrink-0 items-center gap-1 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+          className={cn(
+            !onMove && 'ms-auto',
+            'inline-flex h-10 shrink-0 items-center gap-1 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200',
+          )}
         >
           {t('map.viewEvent')}
           <ChevronRight className={dir === 'rtl' ? 'size-4 -scale-x-100' : 'size-4'} aria-hidden />

@@ -1,4 +1,5 @@
 import {
+  Binoculars,
   Bomb,
   Car,
   CircleDot,
@@ -11,11 +12,13 @@ import {
   HeartHandshake,
   Landmark,
   Megaphone,
+  MessageSquareQuote,
   Plane,
   Rocket,
   ShieldAlert,
   Siren,
   Swords,
+  Target,
   type LucideIcon,
 } from 'lucide-react';
 import type { CategoryRef, CategorySlug, EventCategory } from '@/types/category';
@@ -47,6 +50,9 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Quadcopter,
   FixedWingUav,
   Infiltration,
+  Target,
+  Binoculars,
+  MessageSquareQuote,
 };
 
 export function getCategoryIcon(name: string | null | undefined): LucideIcon {
@@ -70,7 +76,8 @@ interface CategoryDefinition {
 export const DEFAULT_CATEGORIES: readonly CategoryDefinition[] = [
   // Filled automatically from Home Front Command alerts (migration 0007), not by staff.
   { slug: 'home-front-alerts', name: 'Home Front Command Alerts', icon: 'Siren', color: '#ff2d2d' },
-  { slug: 'shooting-gunfire', name: 'Shooting / Gunfire', icon: 'Crosshair', color: '#e11d48' },
+  { slug: 'shooting-gunfire', name: 'Small-arms fire', icon: 'Crosshair', color: '#e11d48' },
+  { slug: 'assassination', name: 'Assassination', icon: 'Target', color: '#991b1b' },
   { slug: 'missile-rocket-attack', name: 'Missile or Rocket Attack', icon: 'Rocket', color: '#f97316' },
   { slug: 'airstrike', name: 'Airstrike', icon: 'Plane', color: '#9333ea' },
   { slug: 'explosion', name: 'Explosion', icon: 'Bomb', color: '#dc2626' },
@@ -79,13 +86,14 @@ export const DEFAULT_CATEGORIES: readonly CategoryDefinition[] = [
   { slug: 'uav', name: 'UAV', icon: 'FixedWingUav', color: '#6d28d9' },
   { slug: 'terror-security-incident', name: 'Terror or Security Incident', icon: 'ShieldAlert', color: '#7f1d1d' },
   { slug: 'military-activity', name: 'Military Activity', icon: 'Swords', color: '#4d7c0f' },
+  { slug: 'force-sighting', name: 'Forces sighting', icon: 'Binoculars', color: '#15803d' },
   { slug: 'political-event', name: 'Political Event', icon: 'Landmark', color: '#2563eb' },
+  { slug: 'statements', name: 'Statements', icon: 'MessageSquareQuote', color: '#1d4ed8' },
   { slug: 'protest-civil-unrest', name: 'Protest or Civil Unrest', icon: 'Megaphone', color: '#db2777' },
   { slug: 'natural-disaster', name: 'Natural Disaster', icon: 'CloudLightning', color: '#0d9488' },
   { slug: 'fire', name: 'Fire', icon: 'Flame', color: '#f59e0b' },
   { slug: 'infrastructure-incident', name: 'Infrastructure Incident', icon: 'Construction', color: '#64748b' },
   { slug: 'cyber-incident', name: 'Cyber Incident', icon: 'Cpu', color: '#0891b2' },
-  { slug: 'transportation-incident', name: 'Transportation Incident', icon: 'Car', color: '#4f46e5' },
   { slug: 'humanitarian-event', name: 'Humanitarian Event', icon: 'HeartHandshake', color: '#16a34a' },
   { slug: 'other', name: 'Other', icon: 'CircleDot', color: '#78716c' },
 ];

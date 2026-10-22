@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { FALLBACK_CATEGORY, safeColor } from '@/data/categoryRegistry';
-import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type EventPlace, type EventSource, type LocationPrecision, type PublicEvent, type Severity, type SourceType } from '@/types/event';
+import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type EventPlace, type EventSource, type LocationPrecision, type MediaKind, type PublicEvent, type Severity, type SourceType } from '@/types/event';
 import { safeExternalUrl } from '@/utils/url';
 import { cleanReportText } from '@/utils/text';
 import { ServiceError, toServiceError } from './serviceError';
@@ -40,6 +40,7 @@ const PUBLIC_EVENT_COLUMNS = [
   'category_icon',
   'category_color',
   'category_marker_color',
+  'media_kinds',
 ].join(',');
 
 interface PublishedEventRow {
@@ -72,6 +73,7 @@ interface PublishedEventRow {
   category_icon: string | null;
   category_color: string | null;
   category_marker_color: string | null;
+  media_kinds?: string[] | null;
 }
 
 function toNumber(value: number | string | null): number | null {
@@ -126,10 +128,14 @@ function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
 }
 
 export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null {
-  const latitude = toNumber(row.latitude);
-  const longitude = toNumber(row.longitude);
-  if (latitude === null || longitude === null) return null;
-  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  let latitude = toNumber(row.latitude);
+  let longitude = toNumber(row.longitude);
+  // Published without a pin: listed in the feed only (no location precision → not on the map).
+  const pinned = latitude !== null && longitude !== null && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+  if (!pinned) {
+    latitude = 0;
+    longitude = 0;
+  }
 
   const category = row.category_slug
     ? {
@@ -147,12 +153,12 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     title: row.title ?? '',
     description: cleanReportText(row.description ?? ''),
     severity: asSeverity(row.severity),
-    latitude,
-    longitude,
+    latitude: latitude ?? 0,
+    longitude: longitude ?? 0,
     locationName: row.location_name ?? '',
     locationNameHe: row.location_name_he ?? '',
     locationNameEn: row.location_name_en ?? '',
-    locationPrecision: (LOCATION_PRECISIONS as readonly string[]).includes(row.location_precision ?? '')
+    locationPrecision: pinned && (LOCATION_PRECISIONS as readonly string[]).includes(row.location_precision ?? '')
       ? (row.location_precision as LocationPrecision)
       : null,
     country: row.country ?? '',
@@ -162,7 +168,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     // Never pass an unvalidated URL to the UI.
     sourceUrl: safeExternalUrl(row.source_url),
     sources: toSources(row.sources),
-    places: toPlaces(row.locations, latitude, longitude),
+    places: pinned ? toPlaces(row.locations, latitude!, longitude!) : [],
     sourceType: asSourceType(row.source_type),
     occurredAt: row.occurred_at,
     publishedAt: row.published_at,
@@ -170,6 +176,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     isVerified: !!row.is_verified,
     category,
     translations: row.translations && typeof row.translations === 'object' ? (row.translations as PublicEvent['translations']) : {},
+    mediaKinds: Array.isArray(row.media_kinds) ? (row.media_kinds.filter((k) => k === 'image' || k === 'video' || k === 'document') as MediaKind[]) : [],
   };
 }
 

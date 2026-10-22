@@ -87,13 +87,8 @@ export function validateEvent(input: EventInput, target: EventStatus): FieldErro
   }
   if (target === 'published') {
     if (!input.categoryId) errors.categoryId = 'validation.categoryRequired';
-    // Without coordinates the server places the pin from the place names,
-    // so publishing needs either coordinates or at least one place name.
-    const hasPlace = [input.locationName, input.city, input.region, input.country].some((v) => v.trim());
-    if ((input.latitude === null || input.longitude === null) && !hasPlace) {
-      errors.latitude = errors.latitude ?? 'validation.coordsRequired';
-      errors.locationName = 'validation.locationRequired';
-    }
+    // No location needed: without coordinates the server places the pin from the place
+    // names, and an event with no place at all is listed in the feed only.
   }
   return errors;
 }

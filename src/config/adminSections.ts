@@ -1,5 +1,6 @@
 import {
   FilePlus2,
+  Cpu,
   GraduationCap,
   LayoutDashboard,
   ListChecks,
@@ -125,6 +126,18 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     anyOf: ['dashboard.view'],
     phase: 3,
     backend: ['learned_places', 'category_corrections', 'events_learn_from_correction trigger'],
+    showInNav: true,
+  },
+  {
+    id: 'aiUsage',
+    path: '/admin/ai-usage',
+    route: 'ai-usage',
+    labelKey: 'admin.nav.aiUsage',
+    descriptionKey: 'admin.module.aiUsage',
+    icon: Cpu,
+    anyOf: ['dashboard.view'],
+    phase: 3,
+    backend: ['ai_usage', 'ai_usage_daily view'],
     showInNav: true,
   },
   {

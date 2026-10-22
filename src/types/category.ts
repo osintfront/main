@@ -18,6 +18,9 @@ export const CATEGORY_SLUGS = [
   'cyber-incident',
   'transportation-incident',
   'humanitarian-event',
+  'assassination',
+  'force-sighting',
+  'statements',
   'other',
 ] as const;
 

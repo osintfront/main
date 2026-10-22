@@ -5,14 +5,18 @@ import { useI18n } from '@/i18n';
 import { DEFAULT_CATEGORIES, getCategoryIcon } from '@/data/categoryRegistry';
 import { SEVERITIES, type PublicEvent, type Severity } from '@/types/event';
 import { cn } from '@/utils/cn';
+import { countryLabel } from '@/utils/places';
 import {
   AREAS,
+  COUNTRY_AREA_PREFIX,
   EMPTY_FILTERS,
   TIME_PRESETS,
   activeFilterCount,
   eventAreas,
   sourceKind,
+  mediaKinds,
   placeKind,
+  type MediaFilter,
   type PlaceKind,
   type EventFilters,
   type SourceKind,
@@ -38,7 +42,9 @@ interface FilterPanelProps {
   onRemoveEei?: (id: string) => void;
 }
 
-const SOURCES: SourceKind[] = ['whatsapp', 'telegram', 'news', 'other'];
+const SHOW_EEI = false;
+const SOURCES: SourceKind[] = ['telegram', 'whatsapp', 'x', 'facebook', 'instagram', 'tiktok', 'news', 'other'];
+const MEDIA: MediaFilter[] = ['none', 'video', 'image', 'document'];
 
 /** "2026-10-21T09:30" for <input type="datetime-local"> from an ISO string (local time). */
 function toLocalInput(iso: string): string {
@@ -219,6 +225,7 @@ export function FilterPanel({
     const sev = new Map<string, number>();
     const src = new Map<string, number>();
     const place = new Map<string, number>();
+    const media = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
     for (const e of events) {
       eventAreas(e).forEach((a) => bump(area, a));
@@ -226,8 +233,9 @@ export function FilterPanel({
       bump(sev, e.severity);
       bump(src, sourceKind(e));
       bump(place, placeKind(e));
+      mediaKinds(e).forEach((m) => bump(media, m));
     }
-    return { area, cat, sev, src, place };
+    return { area, cat, sev, src, place, media };
   }, [events]);
 
   const categories = useMemo(() => {
@@ -241,6 +249,16 @@ export function FilterPanel({
       });
     return [...known, ...extra].sort((a, b) => (counts.cat.get(b.slug) ?? 0) - (counts.cat.get(a.slug) ?? 0));
   }, [counts, events]);
+
+  // Known countries/areas, then any other country named on the loaded events (most events first).
+  const areas = useMemo(() => {
+    const known = AREAS.map((a) => ({ id: a.id, label: lang === 'he' ? a.he : a.en }));
+    const extra = [...counts.area.keys()]
+      .filter((id) => id.startsWith(COUNTRY_AREA_PREFIX))
+      .sort((a, b) => (counts.area.get(b) ?? 0) - (counts.area.get(a) ?? 0))
+      .map((id) => ({ id, label: countryLabel(id.slice(COUNTRY_AREA_PREFIX.length), lang) }));
+    return [...known, ...extra];
+  }, [counts, lang]);
 
   const active = activeFilterCount(filters);
 
@@ -282,9 +300,32 @@ export function FilterPanel({
         </header>
 
         <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto">
-          {onAddEei && onRemoveEei ? (
+          {/* צי"ח (EEI) is switched off for now; the section is kept for later. */}
+          {SHOW_EEI && onAddEei && onRemoveEei ? (
             <EeiSection filters={filters} set={set} events={events} eeis={eeis} onAdd={onAddEei} onRemove={onRemoveEei} />
           ) : null}
+          <Section title={t('filters.drawTitle')}>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={onDrawArea}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-dashed border-sky-400 px-3 text-[13px] font-semibold text-sky-700 hover:bg-sky-50 sm:min-h-8 sm:text-xs dark:text-sky-300 dark:hover:bg-sky-500/10"
+              >
+                <Octagon className="size-4" aria-hidden />
+                {filters.polygon ? t('filters.redrawArea') : t('filters.drawArea')}
+              </button>
+              {filters.polygon ? (
+                <button
+                  type="button"
+                  onClick={() => set({ polygon: null })}
+                  className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-slate-600 hover:bg-slate-100 sm:min-h-8 sm:text-xs dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <X className="size-3.5" aria-hidden />
+                  {t('filters.clearArea')}
+                </button>
+              ) : null}
+            </div>
+          </Section>
           {hideTime ? null : (
             <Section title={t('filters.time')}>
               <div className="flex flex-wrap gap-1.5">
@@ -324,32 +365,12 @@ export function FilterPanel({
 
           <Section title={t('filters.areas')}>
             <div className="flex flex-wrap gap-1.5">
-              {AREAS.map((a) => (
+              {areas.map((a) => (
                 <Chip key={a.id} on={filters.areas.includes(a.id)} onClick={() => set({ areas: toggle(filters.areas, a.id) })}>
-                  {lang === 'he' ? a.he : a.en}
+                  {a.label}
                   <Count n={counts.area.get(a.id) ?? 0} />
                 </Chip>
               ))}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={onDrawArea}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-dashed border-sky-400 px-3 text-[13px] font-semibold text-sky-700 hover:bg-sky-50 sm:min-h-8 sm:text-xs dark:text-sky-300 dark:hover:bg-sky-500/10"
-              >
-                <Octagon className="size-4" aria-hidden />
-                {filters.polygon ? t('filters.redrawArea') : t('filters.drawArea')}
-              </button>
-              {filters.polygon ? (
-                <button
-                  type="button"
-                  onClick={() => set({ polygon: null })}
-                  className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-slate-600 hover:bg-slate-100 sm:min-h-8 sm:text-xs dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <X className="size-3.5" aria-hidden />
-                  {t('filters.clearArea')}
-                </button>
-              ) : null}
             </div>
           </Section>
 
@@ -391,6 +412,17 @@ export function FilterPanel({
                 <Chip key={s} on={filters.sources.includes(s)} onClick={() => set({ sources: toggle(filters.sources, s) })}>
                   {t(`filters.source.${s}`)}
                   <Count n={counts.src.get(s) ?? 0} />
+                </Chip>
+              ))}
+            </div>
+          </Section>
+
+          <Section title={t('filters.media')}>
+            <div className="flex flex-wrap gap-1.5">
+              {MEDIA.map((m) => (
+                <Chip key={m} on={filters.media.includes(m)} onClick={() => set({ media: toggle(filters.media, m) })}>
+                  {t(`filters.media.${m}`)}
+                  <Count n={counts.media.get(m) ?? 0} />
                 </Chip>
               ))}
             </div>

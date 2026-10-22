@@ -25,6 +25,10 @@ import { installAudioUnlock, playChime } from '@/lib/notifySound';
 import { isCategoryAudible } from '@/hooks/useSoundSetting';
 import { HFC_CATEGORY } from '@/config/hfcThreats';
 import { useEeis } from '@/hooks/useEeis';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useToast } from '@/components/common/Toast';
+import { moveEventPin } from '@/services/eventAdminService';
+import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
 
 type MobilePane = 'map' | 'feed';
@@ -87,6 +91,8 @@ function ArchiveDayPicker({ day, onChange }: { day: string; onChange: (day: stri
   );
 }
 
+
+const ADS_ENABLED = false;
 export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const { t, categoryLabel } = useI18n();
   const isArchive = mode === 'archive';
@@ -111,7 +117,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const [mobilePane, setMobilePane] = useState<MobilePane>('map');
   // Ads only on the live map with content: none in the archive or on an empty page
   // (Google: no ads on screens without publisher content).
-  const showAds = !isArchive && events.length > 0;
+  // Ad slots are off until the ad account is approved (placeholders hidden).
+  const showAds = ADS_ENABLED && !isArchive && events.length > 0;
   const { alerts, now: alertsNow, shapes: alertShapes, ready: alertsReady } = useHfcAlerts(!isArchive);
 
   // Sound: browsers allow audio only after an interaction, so unlock on the first one.
@@ -215,11 +222,36 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     },
     [select],
   );
+  // Staff: move a pin from the map (popup or phone card, then confirm on the map).
+  const { can } = usePermissions();
+  const toast = useToast();
+  const canMove = !isDemo && (can('event.edit.any') || can('event.edit.own'));
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const startMove = useCallback((id: string) => {
+    setDetailsId(null);
+    setMobilePane('map');
+    setMovingId(id);
+  }, []);
+  const endMove = useCallback(() => setMovingId(null), []);
+  const saveMove = useCallback(
+    async (id: string, lat: number, lng: number) => {
+      try {
+        await moveEventPin(id, lat, lng);
+        toast.success(t('move.saved'));
+        reload();
+        return true;
+      } catch (err) {
+        toast.error(friendlyError(err, t));
+        return false;
+      }
+    },
+    [toast, t, reload],
+  );
   const detailsEvent = detailsId ? allEvents.find((e) => e.id === detailsId) ?? null : null;
   const closeDetails = useCallback(() => setDetailsId(null), []);
   // Phones: the selected event shows as a card along the bottom of the map.
   const sheetEvent =
-    isPhone && mobilePane === 'map' && selectedId && !detailsId && !drawMode ? visibleEvents.find((e) => e.id === selectedId) ?? null : null;
+    isPhone && mobilePane === 'map' && selectedId && !detailsId && !drawMode && !movingId ? visibleEvents.find((e) => e.id === selectedId) ?? null : null;
   const openDetailsFromSheet = useCallback((id: string) => setDetailsId(id), []);
   const locateFromDetails = useCallback(
     (id: string) => {
@@ -362,6 +394,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               onDrawModeChange={setDrawMode}
               onAreaDrawn={handleAreaDrawn}
               onClearArea={clearArea}
+              movingId={movingId}
+              onMoveRequest={canMove ? startMove : undefined}
+              onMoveEnd={endMove}
+              onMoveSave={saveMove}
             />
           </div>
         </main>
@@ -376,7 +412,13 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
 
       {sheetEvent ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(env(safe-area-inset-bottom),12px)+56px)] z-[1100] mx-auto max-w-lg lg:hidden">
-          <MobileEventSheet key={sheetEvent.id} event={sheetEvent} onClose={clearSelection} onOpenDetails={openDetailsFromSheet} />
+          <MobileEventSheet
+            key={sheetEvent.id}
+            event={sheetEvent}
+            onClose={clearSelection}
+            onOpenDetails={openDetailsFromSheet}
+            onMove={canMove ? startMove : undefined}
+          />
         </div>
       ) : null}
 
