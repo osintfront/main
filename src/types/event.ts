@@ -116,8 +116,6 @@ export interface AdminEvent {
   rejectionReason: string | null;
   duplicateOfEventId: string | null;
   deletedAt: string | null;
-  /** WhatsApp-ready text written by the editor agent (staff only). */
-  whatsappText: string | null;
 }
 
 /** Editable fields of an event (what the form submits). */

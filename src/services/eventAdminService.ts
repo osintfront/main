@@ -10,7 +10,7 @@ const ADMIN_EVENT_COLUMNS = [
   'latitude', 'longitude', 'location_name', 'country', 'region', 'city', 'address', 'location_precision',
   'source_name', 'source_url', 'source_type', 'occurred_at', 'published_at', 'created_at', 'updated_at',
   'created_by', 'approved_by', 'is_breaking', 'is_verified', 'geocoding_confidence', 'classification_confidence',
-  'coordinates_manually_corrected', 'rejection_reason', 'duplicate_of_event_id', 'deleted_at', 'whatsapp_text',
+  'coordinates_manually_corrected', 'rejection_reason', 'duplicate_of_event_id', 'deleted_at',
   // Name of the reporter. RLS on profiles returns null for staff who may not read other profiles.
   'creator:profiles!events_created_by_fkey(full_name,email)',
 ].join(',');
@@ -48,7 +48,6 @@ interface EventRow {
   rejection_reason: string | null;
   duplicate_of_event_id: string | null;
   deleted_at: string | null;
-  whatsapp_text?: string | null;
   creator?: { full_name: string; email: string } | null;
 }
 
@@ -95,7 +94,6 @@ function mapRow(r: EventRow): AdminEvent {
     rejectionReason: r.rejection_reason,
     duplicateOfEventId: r.duplicate_of_event_id,
     deletedAt: r.deleted_at,
-    whatsappText: r.whatsapp_text ?? null,
   };
 }
 

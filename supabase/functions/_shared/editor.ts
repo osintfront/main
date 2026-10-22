@@ -56,14 +56,39 @@ export interface EditInput {
   allowedDomains?: string[];
   /** The article is old: it may only enrich an existing event (duplicate_of), never be one. */
   contextOnly?: boolean;
+  /** "fast" = Haiku, no web search; "strong" = Sonnet + 1 search. Default: by language (editorTier). */
+  tier?: "fast" | "strong";
 }
 
 const API_KEY = (Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("Whatsapp_Key") || "").trim();
-// Translation quality matters more than speed: Sonnet only. (Haiku produced the bad translations.)
-const MODELS = [
+// Two tiers (cost): a report that needs TRANSLATION (Arabic, Persian, English…) goes to Sonnet
+// (Haiku 4.5 produced bad translations); a report already in Hebrew only needs restructuring,
+// which the much cheaper Haiku 5.5 does well. Web search is used only on the strong tier.
+const STRONG_MODELS = [
   Deno.env.get("EDITOR_MODEL") ?? "claude-sonnet-5-5",
   Deno.env.get("EDITOR_FALLBACK_MODEL") ?? "claude-sonnet-4-5",
 ].filter((m, i, a) => a.indexOf(m) === i);
+const FAST_MODELS = [
+  Deno.env.get("EDITOR_FAST_MODEL") ?? "claude-haiku-5-5",
+  ...STRONG_MODELS, // Haiku 5.5 unavailable → fall back to Sonnet rather than fail
+].filter((m, i, a) => a.indexOf(m) === i);
+/** Cheap model for classification / headline filtering (newest first, older as fallback). */
+export const CHEAP_MODELS = [
+  Deno.env.get("CLASSIFY_MODEL") ?? "claude-haiku-5-5",
+  "claude-haiku-4-5",
+].filter((m, i, a) => a.indexOf(m) === i);
+
+/** Share of the letters that are NOT Hebrew (0–1). */
+export function foreignShare(text: string): number {
+  const he = (text.match(/[\u05D0-\u05EA]/g) ?? []).length;
+  const other = (text.match(/[A-Za-z\u0600-\u06FF\u0750-\u077F]/g) ?? []).length;
+  return he + other === 0 ? 0 : other / (he + other);
+}
+
+/** Strong tier when the report must be translated (mostly non-Hebrew text). */
+export function editorTier(text: string): "fast" | "strong" {
+  return foreignShare(text) > 0.4 ? "strong" : "fast";
+}
 const MAX_ATTEMPTS = 4;
 
 /** Domains Anthropic's web search refuses (learned at runtime; seeded with known ones). */
@@ -311,7 +336,9 @@ ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשע
   // ~10% of normal input). The cache breakpoint on the system block covers the tools too.
   const systemBlocks = [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
   const editorTool = tool(input.mode, categories);
-  const webSearch = input.allowedDomains?.length
+  const tier = input.tier ?? editorTier(input.text);
+  const MODELS = tier === "strong" ? STRONG_MODELS : FAST_MODELS;
+  const webSearch = tier === "strong" && input.allowedDomains?.length
     ? { type: "web_search_20250305", name: "web_search", max_uses: 1, allowed_domains: input.allowedDomains.filter((d) => !BLOCKED_SEARCH_DOMAINS.has(d)).slice(0, 100) }
     : null;
 
