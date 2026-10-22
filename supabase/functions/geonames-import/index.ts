@@ -9,7 +9,7 @@
 // Body: { "country": "IL" }   (IL SY LB IQ YE SA IR); big countries: { "country": "IR", "part": 0, "parts": 4 }
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { unzipSync, strFromU8 } from "npm:fflate@0.8.2";
+import { Unzip, UnzipInflate } from "npm:fflate@0.8.2";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const BASE = "https://download.geonames.org/export/dump";
@@ -32,51 +32,85 @@ function normalize(s: string): string {
 }
 const clean = (s: string) => (s || "").replace(/[֑-ׇ]/g, "").replace(/[\t\n|]/g, " ").trim();
 
-async function zipText(url: string, member: string): Promise<string> {
+/** Streams one member of a remote zip, line by line: download, inflate and decode
+ *  chunk by chunk, so even the biggest country (IR) never sits whole in memory. */
+async function zipLines(url: string, member: string, onLine: (line: string) => void): Promise<void> {
   const res = await fetch(url, { headers: { "User-Agent": "Osintfront geonames importer" } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  const files = unzipSync(new Uint8Array(await res.arrayBuffer()), { filter: (f) => f.name === member });
-  const data = files[member];
-  if (!data) throw new Error(`${member} not in ${url}`);
-  return strFromU8(data);
-}
-
-function* lines(text: string) {
-  let i = 0;
-  while (i < text.length) {
-    let j = text.indexOf("\n", i);
-    if (j < 0) j = text.length;
-    yield text.slice(i, j);
-    i = j + 1;
+  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} for ${url}`);
+  const decoder = new TextDecoder();
+  let rest = "";
+  let found = false;
+  let failure: unknown = null;
+  const emit = (text: string, final: boolean) => {
+    rest += text;
+    let i = 0;
+    for (let j = rest.indexOf("\n"); j >= 0; j = rest.indexOf("\n", i)) {
+      onLine(rest.slice(i, j));
+      i = j + 1;
+    }
+    rest = rest.slice(i);
+    if (final && rest) {
+      onLine(rest);
+      rest = "";
+    }
+  };
+  const unzip = new Unzip((file) => {
+    if (file.name !== member) return;
+    found = true;
+    file.ondata = (err, data, final) => {
+      if (err) {
+        failure = err;
+        return;
+      }
+      try {
+        emit(decoder.decode(data, { stream: !final }), final);
+      } catch (e) {
+        failure = e;
+      }
+    };
+    file.start();
+  });
+  unzip.register(UnzipInflate);
+  const reader = res.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      unzip.push(new Uint8Array(0), true);
+      break;
+    }
+    unzip.push(value);
+    if (failure) throw failure;
   }
+  if (failure) throw failure;
+  if (!found) throw new Error(`${member} not in ${url}`);
 }
 
 async function importCountry(cc: string, part = 0, parts = 1) {
   // 3a
   type P = { name: string; ascii: string; fc: string; fcode: string; admin1: string; pop: number; lat: string; lng: string };
   const places = new Map<number, P>();
-  for (const line of lines(await zipText(`${BASE}/${cc}.zip`, `${cc}.txt`))) {
+  await zipLines(`${BASE}/${cc}.zip`, `${cc}.txt`, (line) => {
     const f = line.split("\t");
-    if (f.length < 19 || f[8] !== cc) continue;
-    if (!KEEP_CLASSES.has(f[6]) && !KEEP_CODES.has(f[7])) continue;
-    if (Number(f[0]) % parts !== part) continue; // big countries (IR) are split into parts
+    if (f.length < 19 || f[8] !== cc) return;
+    if (!KEEP_CLASSES.has(f[6]) && !KEEP_CODES.has(f[7])) return;
+    if (Number(f[0]) % parts !== part) return; // big countries (IR) can be split into parts
     places.set(Number(f[0]), { name: f[1], ascii: f[2], fc: f[6], fcode: f[7], admin1: f[10], pop: Number(f[14] || 0), lat: f[4], lng: f[5] });
-  }
+  });
   // 3b
   const names = new Map<number, Record<string, [number, string][]>>();
   let kept = 0;
-  for (const line of lines(await zipText(`${BASE}/alternatenames/${cc}.zip`, `${cc}.txt`))) {
+  await zipLines(`${BASE}/alternatenames/${cc}.zip`, `${cc}.txt`, (line) => {
     const f = line.split("\t");
-    if (f.length < 4 || !LANGS.has(f[2])) continue;
+    if (f.length < 4 || !LANGS.has(f[2])) return;
     const gid = Number(f[1]);
-    if (!places.has(gid)) continue;
-    if (f[6] === "1" || f[7] === "1" || !f[3]?.trim()) continue; // colloquial / historic / empty
+    if (!places.has(gid)) return;
+    if (f[6] === "1" || f[7] === "1" || !f[3]?.trim()) return; // colloquial / historic / empty
     const rank = f[4] === "1" ? 0 : f[5] === "1" ? 1 : 2;
     const byLang = names.get(gid) ?? {};
     (byLang[f[2]] ??= []).push([rank, f[3].trim()]);
     names.set(gid, byLang);
     kept++;
-  }
+  });
   const best = (c?: [number, string][]) => (c?.length ? [...c].sort((a, b) => a[0] - b[0] || a[1].length - b[1].length)[0][1] : "");
   // 3c + load
   let rows: string[] = [];
