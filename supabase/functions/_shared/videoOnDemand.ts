@@ -13,7 +13,7 @@ export type VideoAnswer =
   | { state: "ready"; url: string; width: number | null; height: number | null }
   | { state: "loading" }
   | { state: "too_big"; bytes: number | null }
-  | { state: "unavailable"; link: string | null };
+  | { state: "unavailable"; link: string | null; why?: string };
 
 async function storageUsed(db: SupabaseClient): Promise<number> {
   const { data, error } = await db.rpc("media_storage_usage");
@@ -48,12 +48,27 @@ export async function makeRoom(db: SupabaseClient, incoming: number) {
   return used;
 }
 
-/** The video file URLs of a public post, in order (from its embed page). */
-async function postVideoUrls(postUrl: string): Promise<string[]> {
+/** The video file URLs of a public post, in order: its embed page, else the channel page around it. */
+async function postVideoUrls(postUrl: string): Promise<{ urls: string[]; why: string }> {
+  const grab = (html: string) => [...html.matchAll(/<video[^>]*?\ssrc="(https:\/\/[^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&"));
   const res = await fetch(`${postUrl}?embed=1&mode=tme`, { headers: { "User-Agent": UA, "Accept-Language": "en" } });
-  if (!res.ok) return [];
-  const html = await res.text();
-  return [...html.matchAll(/<video[^>]+src="(https:\/\/[^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&"));
+  const html = res.ok ? await res.text() : "";
+  let urls = grab(html);
+  if (urls.length) return { urls, why: "embed" };
+  // The channel preview (t.me/s/<channel>/<id>) lists the post with its video player.
+  const m = postUrl.match(/^https:\/\/t\.me\/([A-Za-z0-9_]+)\/(\d+)$/);
+  if (m) {
+    const r2 = await fetch(`https://t.me/s/${m[1]}/${m[2]}`, { headers: { "User-Agent": UA, "Accept-Language": "en" } });
+    const page = r2.ok ? await r2.text() : "";
+    const at = page.indexOf(`data-post="${m[1]}/${m[2]}"`);
+    if (at >= 0) {
+      const next = page.indexOf('data-post="', at + 12);
+      urls = grab(page.slice(at, next > 0 ? next : undefined));
+      if (urls.length) return { urls, why: "channel" };
+    }
+    return { urls: [], why: `embed ${res.status} ${html.length}b ${/too big|not_supported/i.test(html) ? "too-big-note" : ""}; channel ${r2.status} ${at >= 0 ? "post-found" : "post-missing"}` };
+  }
+  return { urls: [], why: `embed ${res.status}` };
 }
 
 export async function videoForThumb(db: SupabaseClient, thumbId: string): Promise<VideoAnswer | null> {
@@ -77,12 +92,13 @@ export async function videoForThumb(db: SupabaseClient, thumbId: string): Promis
     db.from("event_media").update({ video_state, video_state_at: new Date().toISOString(), ...extra }).eq("id", thumb.id);
   await mark("loading");
   try {
-    const urls = await postVideoUrls(thumb.source_url);
+    const { urls, why } = await postVideoUrls(thumb.source_url);
     const src = urls[Number(thumb.source_index ?? 0)] ?? urls[0];
     // No file on the web preview (Telegram leaves big videos out): watch it on Telegram.
     if (!src) {
+      console.log("video unavailable", thumb.source_url, why);
       await mark("unavailable");
-      return { state: "unavailable", link: thumb.source_url };
+      return { state: "unavailable", link: thumb.source_url, why };
     }
     const res = await fetch(src, { headers: { "User-Agent": UA } });
     if (!res.ok || !res.body) {

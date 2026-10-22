@@ -19,8 +19,8 @@ create index if not exists event_media_thumb_idx on public.event_media (thumb_id
 
 -- Public posts already stored: their post link comes from the message key ("channel/123").
 update public.event_media
-   set source_url = 'https://t.me/' || source_msg_key
- where source_url is null and source_msg_key ~ '^[A-Za-z][A-Za-z0-9_]{3,}/[0-9]+$';
+   set source_url = 'https://t.me/' || regexp_replace(source_msg_key, '^tg:', ''), source_index = 0
+ where source_url is null and source_msg_key ~ '^(tg:)?[A-Za-z][A-Za-z0-9_]{3,}/[0-9]+$' and kind = 'video_thumb';
 
 -- ── Moving one of an event's extra places (a report with several pins) ──────────
 -- p_index = position in events.locations. The place name is learned for next time.
