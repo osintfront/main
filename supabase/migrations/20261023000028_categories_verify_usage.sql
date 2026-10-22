@@ -261,7 +261,8 @@ create or replace function public.events_send_to_editor()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_secret text;
 begin
-  if new.status = 'published' and old.status is distinct from 'published'
+  -- Only a person publishing (the ingest functions run their own editor).
+  if auth.uid() is not null and new.status = 'published' and old.status is distinct from 'published'
      and coalesce(new.ai_suggestions ->> 'editor_model', '') = ''
      and coalesce(new.ai_suggestions ->> 'sent_to_editor', '') = ''
      and public.foreign_share(coalesce(new.title, '') || ' ' || coalesce(new.description, '')) > 0.4 then
