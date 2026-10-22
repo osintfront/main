@@ -6,7 +6,9 @@
 //   3b. keep only he/ar/en alternate names of those IDs (no historic/colloquial)
 //   3c. merge → TSV rows → public.load_geo_places_tsv() in chunks
 // No AI and no paid API. Auth: header x-cron-secret (public.intel_config.cron_secret).
-// Body: { "country": "IL" }   (IL SY LB IQ YE SA IR); big countries: { "country": "IR", "part": 0, "parts": 4 }
+// Body: { "country": "IL" }   (IL SY LB IQ YE SA IR)
+// Too big for the CPU budget (IR): { "country": "IR", "stage": true } then
+//   select public.import_staged_geonames('IR');
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
@@ -36,7 +38,7 @@ const clean = (s: string) => (s || "").replace(/[֑-ׇ]/g, "").replace(/[\t\n|]/
  *  DecompressionStream and decoded as a stream, so the unzipped text never sits whole
  *  in memory and the small per-call CPU budget is spent on our filtering, not on
  *  inflating in JavaScript. */
-async function zipLines(url: string, member: string, onLine: (line: string) => void): Promise<void> {
+async function zipLines(url: string, member: string, onLine: (line: string) => void, onChunk?: () => Promise<void>): Promise<void> {
   const res = await fetch(url, { headers: { "User-Agent": "Osintfront geonames importer" } });
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   const zip = new Uint8Array(await res.arrayBuffer());
@@ -67,7 +69,8 @@ async function zipLines(url: string, member: string, onLine: (line: string) => v
   }
   if (local < 0) throw new Error(`${member} not in ${url}`);
   const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
-  let stream: ReadableStream<Uint8Array> = new Blob([zip.subarray(start, start + size)]).stream();
+  // deno-lint-ignore no-explicit-any
+  let stream: ReadableStream<any> = new Blob([zip.subarray(start, start + size)]).stream();
   if (method === 8) stream = stream.pipeThrough(new DecompressionStream("deflate-raw"));
   else if (method !== 0) throw new Error(`zip method ${method} not supported`);
   const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
@@ -82,8 +85,48 @@ async function zipLines(url: string, member: string, onLine: (line: string) => v
       i = j + 1;
     }
     rest = rest.slice(i);
+    if (onChunk) await onChunk();
   }
   if (rest) onLine(rest);
+}
+
+/** Big countries: only stream the raw text into public.geo_staging (very little CPU
+ *  here); the database then filters and merges: select public.import_staged_geonames('IR'). */
+async function stageCountry(cc: string) {
+  await db.from("geo_staging").delete().eq("country", cc);
+  const out: Record<string, number> = {};
+  for (const [kind, url] of [["dump", `${BASE}/${cc}.zip`], ["alt", `${BASE}/alternatenames/${cc}.zip`]] as const) {
+    let buf: string[] = [];
+    let size = 0;
+    let chunks = 0;
+    const flush = async () => {
+      if (!buf.length) return;
+      const { error } = await db.from("geo_staging").insert({ country: cc, kind, content: buf.join("\n") });
+      if (error) throw new Error(error.message);
+      buf = [];
+      size = 0;
+      chunks++;
+    };
+    const pending: string[] = [];
+    await zipLines(url, `${cc}.txt`, (line) => {
+      if (kind === "alt") {
+        const t2 = line.indexOf("\t", line.indexOf("\t") + 1);
+        const lang = line.slice(t2 + 1, t2 + 4);
+        if (lang !== "he\t" && lang !== "ar\t" && lang !== "en\t") return; // he/ar/en only
+      }
+      pending.push(line);
+    }, async () => {
+      for (const l of pending.splice(0)) {
+        buf.push(l);
+        size += l.length;
+        if (size > 1_500_000) await flush();
+      }
+    });
+    for (const l of pending.splice(0)) buf.push(l);
+    await flush();
+    out[kind] = chunks;
+  }
+  return { country: cc, staged: out, next: `select public.import_staged_geonames('${cc}');` };
 }
 
 async function importCountry(cc: string, part = 0, parts = 1) {
@@ -157,6 +200,7 @@ Deno.serve(async (req) => {
   const cc = String(body?.country ?? "").toUpperCase();
   if (!COUNTRIES.has(cc)) return json({ error: "country must be one of IL SY LB IQ YE SA IR" }, 400);
   try {
+    if (body?.stage) return json({ ok: true, ...(await stageCountry(cc)) });
     const parts = Math.min(Math.max(Number(body?.parts ?? 1) | 0, 1), 16);
     const part = Math.min(Math.max(Number(body?.part ?? 0) | 0, 0), parts - 1);
     return json({ ok: true, ...(await importCountry(cc, part, parts)) });
