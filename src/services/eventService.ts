@@ -212,3 +212,13 @@ export async function fetchArchivedEvents(fromIso: string, toIso: string, limit 
     .map(mapPublishedEventRow)
     .filter((e): e is PublicEvent => e !== null);
 }
+
+/** One event for a shared link (?event=<id>): live first, then the archive. */
+export async function fetchPublicEvent(id: string): Promise<PublicEvent | null> {
+  if (!supabase || !/^[0-9a-f-]{36}$/i.test(id)) return null;
+  for (const view of ['published_events', 'archived_events']) {
+    const { data } = await supabase.from(view).select(PUBLIC_EVENT_COLUMNS).eq('id', id).maybeSingle();
+    if (data) return mapPublishedEventRow(data as unknown as PublishedEventRow);
+  }
+  return null;
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, Inbox, RefreshCw, Siren } from 'lucide-react';
+import { AlertTriangle, ArrowUp, Inbox, RefreshCw, Siren } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import type { FocusRequest } from '@/hooks/useMapSelection';
 import type { LoadStatus } from '@/hooks/useEvents';
@@ -106,6 +106,7 @@ export function EventFeed({
   const scrolledFor = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [spinning, setSpinning] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const refresh = () => {
     if (!onRefresh) return;
     onRefresh();
@@ -167,7 +168,8 @@ export function EventFeed({
       </div>
 
       {toolbar ? <div className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">{toolbar}</div> : null}
-      <div ref={listRef} className="ofm-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={listRef} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 400)} className="ofm-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {alerts.length > 0 ? (
           <section aria-labelledby="hfc-heading" className="mb-4">
             <h3
@@ -236,6 +238,19 @@ export function EventFeed({
             })}
           </ul>
         )}
+      </div>
+      {scrolled ? (
+        <button
+          type="button"
+          onClick={() => listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label={t('feed.toTop')}
+          title={t('feed.toTop')}
+          className="absolute bottom-4 start-1/2 z-10 inline-flex h-9 -translate-x-1/2 items-center gap-1.5 rounded-full bg-slate-900/90 px-3.5 text-xs font-semibold text-white shadow-lg ring-1 ring-white/10 backdrop-blur hover:bg-slate-700 rtl:translate-x-1/2 dark:bg-white/90 dark:text-slate-900"
+        >
+          <ArrowUp className="size-4" aria-hidden />
+          {t('feed.toTop')}
+        </button>
+      ) : null}
       </div>
       {footer}
     </section>

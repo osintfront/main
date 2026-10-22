@@ -716,6 +716,9 @@ export const en = {
   "move.copy": "Duplicate",
   "move.copied": "Pin duplicated",
   "map.fires": "NASA fires (last 48 h)",
+  "text.share": "Share",
+  "text.shareWhatsapp": "Share on WhatsApp",
+  "feed.toTop": "Latest",
 } as const;
 
 export type TranslationKey = keyof typeof en;

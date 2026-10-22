@@ -51,15 +51,21 @@ async function expand(id: string) {
     .eq("id", id).maybeSingle();
   if (!ev || ev.deleted_at || !["published", "archived"].includes(ev.status)) return json({ error: "not found" }, 404);
   const tr = asTr(ev.translations);
+  // Other reports merged into this event (same incident, other sources): the expansion joins them.
+  const { data: merged } = await db.from("whatsapp_ingest_log").select("message_text,chat_name")
+    .eq("event_id", id).eq("decision", "merged_duplicate").order("sent_at").limit(6);
+  const others = (merged ?? []).filter((m: any) => m.message_text && m.message_text !== ev.original_report_text);
   const cached = expandedView(tr);
-  if (cached.he) return json({ ok: true, cached: true, ...cached });
+  // Cached unless more reports were merged since it was written.
+  if (cached.he && Number(ev.ai_suggestions?.expanded_sources ?? 0) >= others.length) return json({ ok: true, cached: true, ...cached });
   // One writer at a time: a second reader within a minute waits for the first.
   const started = Date.parse(String(ev.ai_suggestions?.expanding_at ?? ""));
   if (Number.isFinite(started) && Date.now() - started < 90_000) return json({ ok: true, pending: true }, 202);
   await db.from("events").update({ ai_suggestions: { ...(ev.ai_suggestions ?? {}), expanding_at: new Date().toISOString() } }).eq("id", id);
   try {
     const r = await expandReport({
-      text: ev.original_report_text || ev.description || ev.title,
+      text: [ev.original_report_text || ev.description || ev.title,
+        ...others.map((m: any, i: number) => `--- דיווח נוסף ${i + 1} (${m.chat_name ?? "מקור נוסף"}):\n${String(m.message_text).slice(0, 2000)}`)].join("\n\n"),
       title: ev.title, summary: tr.he?.summary ?? ev.description ?? "", origin: ev.source_name ?? "",
     });
     const next: Tr = {
@@ -68,7 +74,7 @@ async function expand(id: string) {
       en: { ...(tr.en ?? {}), details: r.en.details, religious: r.en.religious, implications: r.en.implications },
     };
     const { data: cur } = await db.from("events").select("ai_suggestions").eq("id", id).maybeSingle();
-    const ai = { ...(cur?.ai_suggestions ?? {}), expand_model: r.model };
+    const ai = { ...(cur?.ai_suggestions ?? {}), expand_model: r.model, expanded_sources: others.length };
     delete (ai as Record<string, unknown>).expanding_at;
     await db.from("events").update({ translations: next, ai_suggestions: ai }).eq("id", id);
     return json({ ok: true, cached: false, ...expandedView(next) });
@@ -105,12 +111,13 @@ async function edit(id: string) {
   return json({ ok: true, id, title: update.title });
 }
 
-async function translate(limit: number) {
+async function translate(limit: number, drafts = false) {
   const { data: rows } = await db.from("events")
     .select("id,title,description,original_report_text,translations")
-    .is("deleted_at", null).in("status", ["published", "archived"])
+    .is("deleted_at", null).in("status", drafts ? ["draft", "pending_review"] : ["published", "archived"])
     .order("occurred_at", { ascending: false }).limit(400);
-  const todo = (rows ?? []).filter((e) => !asTr(e.translations).en?.title).slice(0, limit);
+  // Drafts: only those still in a foreign language (their headline is rewritten in Hebrew).
+  const todo = (rows ?? []).filter((e) => drafts ? foreignShare(e.title) > 0.4 : !asTr(e.translations).en?.title).slice(0, limit);
   let done = 0;
   const errors: string[] = [];
   for (const e of todo) {
@@ -122,7 +129,9 @@ async function translate(limit: number) {
         he: { ...(tr.he ?? {}), summary: tr.he?.summary || r.summary_he, ...(foreignShare(e.title) > 0.4 ? { title: r.title_he } : {}) },
         en: { ...(tr.en ?? {}), title: r.title_en, summary: r.summary_en, description: tr.en?.description || r.summary_en },
       };
-      await db.from("events").update({ translations: next }).eq("id", e.id);
+      await db.from("events").update(drafts && foreignShare(e.title) > 0.4
+        ? { translations: next, title: r.title_he.slice(0, 200), description: r.summary_he || e.description }
+        : { translations: next }).eq("id", e.id);
       done++;
     } catch (err) {
       errors.push(String((err as Error)?.message ?? err).slice(0, 120));
@@ -176,6 +185,6 @@ async function handle(req: Request): Promise<Response> {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
   }
-  if (action === "translate") return await translate(Math.min(Math.max(Number(body?.limit ?? 20) | 0, 1), 60));
+  if (action === "translate") return await translate(Math.min(Math.max(Number(body?.limit ?? 20) | 0, 1), 60), body?.drafts === true);
   return json({ error: "unknown action" }, 400);
 }

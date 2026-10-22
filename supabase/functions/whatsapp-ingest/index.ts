@@ -8,7 +8,7 @@
 // description as an "עדכון" (update) — and the source is recorded as well.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { CHEAP_MODELS, editReport, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor, type EditResult } from "../_shared/editor.ts";
+import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor, type EditResult } from "../_shared/editor.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 
@@ -382,6 +382,30 @@ function pickCandidates(text: string, sentAt: Date, pool: any[]): any[] {
   return [...recent, ...similar].map((x) => x.e);
 }
 
+/** Share of words two reports have in common (Jaccard), 0–1. */
+function overlap(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared / (a.size + b.size - shared);
+}
+
+/** The same report again within the last hour (repost / forward / another channel copying it):
+ *  merged as a source without asking the AI. */
+const SAME_TEXT = 0.55;
+function obviousDuplicate(text: string, sentAt: Date, pool: any[]): any | null {
+  const mine = words(text);
+  if (mine.size < 4) return null;
+  let best: any = null;
+  let bestScore = 0;
+  for (const e of pool) {
+    if (Math.abs(new Date(e.occurred_at).getTime() - sentAt.getTime()) > 60 * 60000) continue;
+    const score = overlap(mine, words(e.original_report_text || e.description || e.title));
+    if (score > bestScore) [best, bestScore] = [e, score];
+  }
+  return bestScore >= SAME_TEXT ? best : null;
+}
+
 async function processOne(m: InMsg) {
   const text = String(m.text ?? "").trim();
   const sentAt = new Date(m.sent_at);
@@ -420,13 +444,12 @@ async function processOne(m: InMsg) {
     .limit(100);
   const candidates = pickCandidates(text, sentAt, pool ?? []);
 
-  const c = await classify({ ...m, text, sent_at: sentIso }, candidates ?? []);
-  // Safety net: a long message is almost always a report. Never drop it silently —
-  // keep it as an uncategorized draft for review instead.
-  if (c.decision === "not_event" && text.length >= 100) {
-    c.decision = "uncertain";
-    c.reason = `AI said not_event (${c.reason ?? ""}) — kept as draft because the message is long`;
-  }
+  // A near-identical report from the last hour: merge as a source, no AI call.
+  const same = obviousDuplicate(text, sentAt, pool ?? []);
+  if (same && !candidates.some((x) => x.id === same.id)) candidates.push(same);
+  const c = same
+    ? { decision: "duplicate", duplicate_of: same.id, adds_new_info: false, reason: "same text as an event from the last hour" } as any
+    : await classify({ ...m, text, sent_at: sentIso }, candidates ?? []);
   const log = async (decision: string, event_id: string | null) =>
     db.from("whatsapp_ingest_log").upsert(
       { msg_key: key, chat_name: m.chat, sender: clip(m.sender, 200), sent_at: sentIso, message_text: text, decision, event_id, reason: clip(c.reason, 500) },
@@ -473,6 +496,8 @@ async function processOne(m: InMsg) {
   const cats = await categories();
   let cat = c.decision === "event" ? cats.find((x) => x.slug === c.category_slug && x.slug !== "other") : undefined;
   const confident = !!cat;
+  // A draft keeps the AI's best guess of a category (editors fix it in one click).
+  if (!cat && c.category_slug) cat = cats.find((x) => x.slug === c.category_slug && x.slug !== "other");
   if (!cat) cat = cats.find((x) => x.slug === "uncategorized");
   const status = confident ? "published" : "draft";
 
@@ -533,16 +558,38 @@ async function processOne(m: InMsg) {
   // the event appears at once and is rewritten in the house template seconds later.
   // Editor only for what is (or will be) on the map — not for drafts left for review.
   if (!m.light && (finalStatus === "published" || waitingForPlace)) background.push(applyEditor(ins!.id, row, text, `${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, sourceUrl(m, text), sentIso, waitingForPlace));
+  // Everything else in another language (drafts, cheap mode): a cheap Hebrew/English headline +
+  // summary, so the drafts list and the feed never show raw Arabic / Persian.
+  else if (foreignShare(`${row.title} ${text}`) > 0.4) background.push(translateRow(ins!.id, String(row.title ?? ""), text));
   const media_saved = await storeMedia(ins!.id, key, m.media, m.url);
   return { key, status: finalStatus === "published" ? "event_published" : "event_draft", event_id: ins!.id, title: row.title, media_saved };
 }
 
 const background: Promise<unknown>[] = [];
 
+async function translateRow(eventId: string, title: string, text: string) {
+  try {
+    const r = await translateBrief(title, text);
+    const update: Record<string, unknown> = {
+      translations: { he: { title: r.title_he, summary: r.summary_he }, en: { title: r.title_en, summary: r.summary_en, description: r.summary_en } },
+    };
+    if (r.title_he) update.title = clip(r.title_he, 200);
+    if (r.summary_he) update.description = clip(r.summary_he, 5000);
+    const { error } = await db.from("events").update(update).eq("id", eventId);
+    if (error) console.error("translate update failed", error.message);
+  } catch (e) {
+    console.error("translate failed", String((e as Error)?.message ?? e).slice(0, 200));
+  }
+}
+
 // Editor agent: Hebrew template, verified names, sources. The raw text stays if it fails.
 async function applyEditor(eventId: string, row: Record<string, unknown>, text: string, srcLabel: string, url: string | null, sentIso: string, publishWhenPlaced = false) {
   const edited = await runEditor(text, srcLabel, url, sentIso);
-  if (!edited) return;
+  if (!edited) {
+    // The editor failed or timed out: at least a cheap Hebrew/English headline + summary.
+    if (foreignShare(`${row.title} ${text}`) > 0.4) await translateRow(eventId, String(row.title ?? ""), text);
+    return;
+  }
   const extra = edited.sources.filter((s) => s.url !== url);
   const update: Record<string, unknown> = {
     ai_suggestions: { ...(row.ai_suggestions as object), editor_model: edited.model, countries: edited.countries },
@@ -566,7 +613,18 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     update.geocoding_confidence = 0.7;
     if (!cur?.location_name) update.location_name = clip(pt.name, 200);
   }
-  const { error } = await db.from("events").update(update).eq("id", eventId);
+  // Text first (fast: no place lookups), then the places — a slow place lookup must never
+  // leave the event in its original language.
+  const PLACE_KEYS = ["locations", "country", "latitude", "longitude", "location_precision", "geocoding_confidence", "location_name"];
+  const textPart = Object.fromEntries(Object.entries(update).filter(([k]) => !PLACE_KEYS.includes(k)));
+  const placePart = Object.fromEntries(Object.entries(update).filter(([k]) => PLACE_KEYS.includes(k)));
+  const { error: textErr } = await db.from("events").update(textPart).eq("id", eventId);
+  if (textErr) console.error("editor text update failed", textErr.message);
+  let { error } = Object.keys(placePart).length ? await db.from("events").update(placePart).eq("id", eventId) : { error: null };
+  if (error) {
+    await new Promise((r) => setTimeout(r, 3000));
+    ({ error } = await db.from("events").update(placePart).eq("id", eventId));
+  }
   if (error) return void console.error("editor update failed", error.message);
   // Was held back only for lack of a place: publish now that the database placed it.
   if (publishWhenPlaced) {

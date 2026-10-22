@@ -7,6 +7,25 @@ import { cachedExpansion, expandEvent, fetchSourceText, type ExpandedByLang } fr
 import { cn } from '@/utils/cn';
 import { previewText } from '@/utils/text';
 
+const SITE = 'https://osintfront.com';
+
+/** "Share on WhatsApp": headline (+ the expansion if there is one) and the event's link. */
+export function whatsappShareUrl(event: PublicEvent, lang: string, expanded: ExpandedByLang | null): string {
+  const { title, summary } = eventTexts(event, lang);
+  const x = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
+  const body = x?.details ? x.details : summary;
+  const text = [`*${title}*`, body, `${SITE}/?event=${event.id}`].filter(Boolean).join('\n\n');
+  return `https://wa.me/?text=${encodeURIComponent(text.slice(0, 3500))}`;
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden>
+      <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 2s.8 2.3.9 2.5c.1.2 1.6 2.5 4 3.5 1.5.6 2.1.7 2.8.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.2-.2-.5-.3Z" />
+    </svg>
+  );
+}
+
 /** Headline + short summary in the site language (falls back to the stored text). */
 export function eventTexts(event: PublicEvent, lang: string) {
   const tr = event.translations[lang] ?? {};
@@ -118,6 +137,17 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
           {busy === 'source' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : view === 'source' ? <Languages className="size-3.5" aria-hidden /> : <FileText className="size-3.5" aria-hidden />}
           {view === 'source' ? t('text.backToSummary') : t('text.source')}
         </button>
+        <a
+          href={whatsappShareUrl(event, lang, expanded ?? cachedExpansion(event))}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={btn + ' text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10'}
+          aria-label={t('text.shareWhatsapp')}
+          title={t('text.shareWhatsapp')}
+        >
+          <WhatsAppIcon />
+          {t('text.share')}
+        </a>
         {failed ? <span className="text-xs text-red-600 dark:text-red-400">{t('text.expandFailed')}</span> : null}
       </div>
     </div>

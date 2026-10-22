@@ -28,6 +28,7 @@ import { useEeis } from '@/hooks/useEeis';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/common/Toast';
 import { addEventPlace, moveEventPin, moveEventPlace } from '@/services/eventAdminService';
+import { fetchPublicEvent } from '@/services/eventService';
 import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
 
@@ -250,7 +251,27 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     },
     [toast, t, reload, can],
   );
-  const detailsEvent = detailsId ? allEvents.find((e) => e.id === detailsId) ?? null : null;
+  // A shared link (?event=<id>) opens that event — from the live list, else fetched (archive).
+  const [linkedEvent, setLinkedEvent] = useState<PublicEvent | null>(null);
+  const linkHandled = useRef(false);
+  useEffect(() => {
+    if (linkHandled.current || status !== 'ready') return;
+    const id = new URLSearchParams(window.location.search).get('event');
+    if (!id) return;
+    linkHandled.current = true;
+    const found = allEvents.find((e) => e.id === id);
+    if (found) {
+      select(id, 'feed');
+      setDetailsId(id);
+      return;
+    }
+    void fetchPublicEvent(id).then((ev) => {
+      if (!ev) return;
+      setLinkedEvent(ev);
+      setDetailsId(ev.id);
+    });
+  }, [status, allEvents, select]);
+  const detailsEvent = detailsId ? allEvents.find((e) => e.id === detailsId) ?? (linkedEvent?.id === detailsId ? linkedEvent : null) : null;
   const closeDetails = useCallback(() => setDetailsId(null), []);
   // Phones: the selected event shows as a card along the bottom of the map.
   const sheetEvent =

@@ -718,4 +718,7 @@ export const he: Record<TranslationKey, string> = {
   "move.copy": "שכפול",
   "move.copied": "הסימון שוכפל",
   "map.fires": "שריפות NASA (48 שעות)",
+  "text.share": "שיתוף",
+  "text.shareWhatsapp": "שיתוף בוואטסאפ",
+  "feed.toTop": "לראש העדכונים",
 };
