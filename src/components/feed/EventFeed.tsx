@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, Inbox, RefreshCw, Siren } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import type { FocusRequest } from '@/hooks/useMapSelection';
@@ -217,14 +217,23 @@ export function EventFeed({
           </div>
         ) : (
           <ul className="space-y-3">
-            {events.map((event, index) => (
-              <Fragment key={event.id}>
-                <li>
+            {/* One flat keyed list: the ad item has its own key, so new events move it but never
+                remount it (an ad must not reload without a user action). */}
+            {events.flatMap((event, index) => {
+              const items = [
+                <li key={event.id}>
                   <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} onOpenDetails={onOpenDetails} />
-                </li>
-                {inlineAd && index === Math.min(1, events.length - 1) ? <li className="lg:hidden">{inlineAd}</li> : null}
-              </Fragment>
-            ))}
+                </li>,
+              ];
+              if (inlineAd && index === Math.min(1, events.length - 1)) {
+                items.push(
+                  <li key="inline-ad" className="lg:hidden">
+                    {inlineAd}
+                  </li>,
+                );
+              }
+              return items;
+            })}
           </ul>
         )}
       </div>

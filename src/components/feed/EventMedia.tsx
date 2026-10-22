@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useI18n } from '@/i18n';
 import { loadEventMedia, toMediaView, type EventMediaView } from '@/services/eventMediaService';
 
 /** Photos and videos of an event, loaded lazily (batched across cards). */
@@ -6,6 +8,7 @@ const RECENT_MS = 30 * 60_000; // keep checking fresh events for late photos/vid
 const POLL_MS = 30_000;
 
 export function EventMedia({ eventId, occurredAt }: { eventId: string; occurredAt: string }) {
+  const { t } = useI18n();
   const [view, setView] = useState<EventMediaView | null>(null);
 
   useEffect(() => {
@@ -62,6 +65,12 @@ export function EventMedia({ eventId, occurredAt }: { eventId: string; occurredA
           ))}
         </div>
       ) : null}
+      <p className="text-[10px] leading-snug text-slate-400 dark:text-slate-500">
+        {t('media.copyright')}{' '}
+        <Link to="/contact" className="underline hover:text-slate-600 dark:hover:text-slate-300">
+          {t('media.copyrightContact')}
+        </Link>
+      </p>
     </div>
   );
 }

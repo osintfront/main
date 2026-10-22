@@ -8,6 +8,7 @@ import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
 import { AdSlot } from '@/components/common/AdSlot';
+import { SiteLinks } from '@/components/layout/SiteLinks';
 import { TopNav } from '@/components/layout/TopNav';
 import { EventFeed } from '@/components/feed/EventFeed';
 import { MapView } from '@/components/map/MapView';
@@ -108,6 +109,9 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim());
   const [mobilePane, setMobilePane] = useState<MobilePane>('map');
+  // Ads only on the live map with content: none in the archive or on an empty page
+  // (Google: no ads on screens without publisher content).
+  const showAds = !isArchive && events.length > 0;
   const { alerts, now: alertsNow, shapes: alertShapes, ready: alertsReady } = useHfcAlerts(!isArchive);
 
   // Sound: browsers allow audio only after an interaction, so unlock on the first one.
@@ -317,11 +321,16 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             }
             emptyText={filterCount ? t('filters.none') : isArchive ? t('archive.empty') : undefined}
             footer={
-              <div className="hidden border-t border-slate-200 p-3 lg:block [@media(max-height:720px)]:hidden dark:border-slate-800">
-                <AdSlot variant="square" slotId="feed-rectangle" />
-              </div>
+              <>
+                {showAds ? (
+                  <div className="hidden border-t border-slate-200 p-3 lg:block [@media(max-height:720px)]:hidden dark:border-slate-800">
+                    <AdSlot variant="square" slotId="feed-rectangle" />
+                  </div>
+                ) : null}
+                <SiteLinks className="justify-center border-t border-slate-200 px-3 py-2 xl:hidden dark:border-slate-800" />
+              </>
             }
-            inlineAd={<AdSlot variant="square" slotId="feed-rectangle-inline" className="py-1" />}
+            inlineAd={showAds ? <AdSlot variant="square" slotId="feed-rectangle-inline" className="py-1" /> : undefined}
           />
         </aside>
 
@@ -330,9 +339,11 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           id="main-map"
           className={cn('min-h-0 flex-col pb-16 lg:flex lg:pb-0', mobilePane === 'map' ? 'flex' : 'hidden')}
         >
-          <div className="flex shrink-0 justify-center border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
-            <AdSlot variant="banner" slotId="map-leaderboard" />
-          </div>
+          {showAds ? (
+            <div className="flex shrink-0 justify-center border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+              <AdSlot variant="banner" slotId="map-leaderboard" />
+            </div>
+          ) : null}
           <div className="relative min-h-0 flex-1">
             <MapView
               events={mapEvents}
@@ -358,7 +369,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         {/* Column 3 — legend + skyscraper (wide screens) */}
         <aside className="ofm-scroll hidden min-h-0 flex-col items-center gap-5 overflow-y-auto border-s border-slate-200 bg-white px-4 py-4 xl:flex dark:border-slate-800 dark:bg-slate-950">
           <CategoryLegend events={mapEvents} alertCount={alerts.length} />
-          <AdSlot variant="skyscraper" slotId="sidebar-skyscraper" />
+          {showAds ? <AdSlot variant="skyscraper" slotId="sidebar-skyscraper" /> : null}
+          <SiteLinks className="mt-auto justify-center" />
         </aside>
       </div>
 

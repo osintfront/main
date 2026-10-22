@@ -19,6 +19,7 @@ import { SettingsPage } from '@/pages/admin/SettingsPage';
 import { NewsAgentsPage } from '@/pages/admin/NewsAgentsPage';
 import { ModulePlaceholderPage } from '@/pages/admin/ModulePlaceholderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { SitePage } from '@/pages/public/SitePage';
 
 /** Section id → page. Sections not listed render their phase placeholder. */
 const IMPLEMENTED: Record<string, ComponentType> = {
@@ -40,6 +41,9 @@ export function App() {
             <Routes>
               {/* Public — no login required */}
               <Route path="/archive" element={<MapPage mode="archive" />} />
+              <Route path="/about" element={<SitePage page="about" />} />
+              <Route path="/privacy" element={<SitePage page="privacy" />} />
+              <Route path="/contact" element={<SitePage page="contact" />} />
               <Route path="/" element={<MapPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
