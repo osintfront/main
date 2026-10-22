@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Archive, ArrowLeft, CheckCircle2, History, Info, Lock, RotateCcw, Send, Trash2, Undo2, XCircle } from 'lucide-react';
+import { Archive, ArrowLeft, CheckCircle2, History, Info, Lock, RotateCcw, Send, Sparkles, Trash2, Undo2, XCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useI18n, type TranslationKey } from '@/i18n';
@@ -18,6 +18,7 @@ import {
   updateEvent,
 } from '@/services/eventAdminService';
 import { friendlyError } from '@/services/serviceError';
+import { composeEvent } from '@/services/composeService';
 import { getCategoryIcon } from '@/data/categoryRegistry';
 import type { GeocodeResult } from '@/services/geocodingService';
 import type { EventCategory } from '@/types/category';
@@ -115,6 +116,8 @@ export function EventEditorPage() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogKind>(null);
+  const [quickText, setQuickText] = useState('');
+  const [composing, setComposing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,6 +168,38 @@ export function EventEditorPage() {
       city: overwrite || !prev.city ? r.city : prev.city,
       address: overwrite || !prev.address ? r.address : prev.address,
     }));
+
+  /** Quick compose: the editor agent reads one free text (any language) and fills the form. */
+  const compose = async () => {
+    const text = quickText.trim();
+    if (text.length < 10) return;
+    setComposing(true);
+    try {
+      const r = await composeEvent(text, input.occurredAt || undefined);
+      setInput((prev) => ({
+        ...prev,
+        originalReportText: text,
+        title: r.title || prev.title,
+        description: r.description || prev.description,
+        categoryId: r.categoryId && categories.some((c) => c.id === r.categoryId) ? r.categoryId : prev.categoryId,
+        severity: r.severity || prev.severity,
+        isBreaking: r.isBreaking,
+        country: r.country || prev.country,
+        region: r.region || prev.region,
+        city: r.city || prev.city,
+        locationName: r.locationName || prev.locationName,
+        ...(r.latitude !== null && r.longitude !== null
+          ? { latitude: r.latitude, longitude: r.longitude, locationPrecision: r.precision ?? 'exact', geocodingConfidence: null, coordinatesManuallyCorrected: false }
+          : {}),
+      }));
+      setErrors({});
+      toast.success(r.latitude !== null ? t('compose.filled') : t('compose.filledNoPlace'));
+    } catch (err) {
+      toast.error(t('compose.failed', { error: friendlyError(err, t) }));
+    } finally {
+      setComposing(false);
+    }
+  };
 
   const errorText = (key: keyof FieldErrors) => {
     const k = errors[key];
@@ -333,6 +368,36 @@ export function EventEditorPage() {
         <Alert tone="warning" className="mb-5">
           <strong>{t('form.rejectedBecause')}</strong> <span dir="auto">{event.rejectionReason}</span>
         </Alert>
+      ) : null}
+
+      {editable && !event?.deletedAt ? (
+        <section className="mb-5 rounded-2xl border border-sky-200 bg-sky-50/60 p-4 dark:border-sky-500/30 dark:bg-sky-500/5">
+          <h2 className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-white">
+            <Sparkles className="size-4 text-sky-600 dark:text-sky-400" aria-hidden />
+            {t('compose.title')}
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">{t('compose.hint')}</p>
+          <textarea
+            value={quickText}
+            onChange={(e) => setQuickText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void compose();
+            }}
+            rows={4}
+            maxLength={8000}
+            dir="auto"
+            placeholder={t('compose.placeholder')}
+            disabled={composing}
+            className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <Button type="button" loading={composing} disabled={quickText.trim().length < 10} onClick={() => void compose()}>
+              <Sparkles className="size-4" aria-hidden />
+              {composing ? t('compose.working') : t('compose.run')}
+            </Button>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('compose.note')}</span>
+          </div>
+        </section>
       ) : null}
 
       <form

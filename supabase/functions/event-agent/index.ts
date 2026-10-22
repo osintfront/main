@@ -8,10 +8,13 @@
 //                                video of that post once (max 50 MB) and return its URL.
 //   {action:"claude_usage"}      staff (their own session) — the whole Claude API organization's daily
 //                                usage and cost (Admin API; needs the secret ANTHROPIC_ADMIN_KEY).
+//   {action:"compose", text}     staff (event.create / event.edit.any) — "quick compose" on the report
+//                                form: free text in any language → title, summary, category, place…
+//                                Nothing is saved; the form is filled for the person to check.
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { editReport, expandReport, foreignShare, formatDescription, locationsForDb, mainCountry, translateBrief, translationsFor } from "../_shared/editor.ts";
+import { editReport, expandReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor } from "../_shared/editor.ts";
 import { setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
@@ -150,6 +153,53 @@ Deno.serve(async (req) => {
   }
 });
 
+/** Quick compose: free text in any language → every field of the report form (nothing is saved). */
+async function compose(body: Record<string, unknown>) {
+  const text = String(body?.text ?? "").trim().slice(0, 8000);
+  if (text.length < 10) return json({ error: "text too short" }, 400);
+  const { data: cats } = await db.from("event_categories").select("id,slug,name").eq("is_active", true);
+  const { data: corrections } = await db.from("category_corrections").select("text,from_slug,to_slug").order("created_at", { ascending: false }).limit(25);
+  const sentAt = typeof body?.sent_at === "string" && !isNaN(Date.parse(body.sent_at)) ? body.sent_at : new Date().toISOString();
+  const r = await editReport({
+    text,
+    mode: "crawler",
+    categories: (cats ?? []).map((c: any) => ({ slug: c.slug, name: c.name })),
+    categoryLessons: formatCategoryLessons(corrections ?? []),
+    origin: { name: String(body?.source_name ?? "").slice(0, 120), url: typeof body?.source_url === "string" ? body.source_url : undefined, sentAt },
+  });
+  let point = mainPoint(r);
+  // Model/geocoder found no coordinates: try our own places database.
+  if (!point && r.locations[0]) {
+    const l = r.locations[0];
+    const { data: hit } = await db.rpc("geo_lookup", { p_name: l.name_en || l.name, p_country: l.country || null });
+    // geom comes back as GeoJSON {type:"Point", coordinates:[lng, lat]}.
+    const c = (hit as { geom?: { coordinates?: unknown } } | null)?.geom?.coordinates;
+    if (Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number") {
+      point = { lat: c[1], lng: c[0], name: (hit as any).name_he || l.name, precision: (hit as any).feature_class === "A" ? "region" : "exact" };
+    }
+  }
+  const cat = (cats ?? []).find((c: any) => c.slug === r.category_slug);
+  return json({
+    ok: true,
+    title: r.title,
+    description: formatDescription(r),
+    categoryId: cat?.id ?? null,
+    categorySlug: r.category_slug ?? null,
+    severity: r.severity,
+    isBreaking: r.is_breaking,
+    country: mainCountry(r),
+    region: r.region,
+    city: r.city,
+    locationName: point?.name || r.location_name,
+    latitude: point?.lat ?? null,
+    longitude: point?.lng ?? null,
+    precision: point?.precision ?? null,
+    locations: locationsForDb(r),
+    translations: translationsFor(r),
+    model: r.model,
+  });
+}
+
 async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -173,6 +223,24 @@ async function handle(req: Request): Promise<Response> {
       return json({ ok: true, ...(await claudeUsage(30)) });
     } catch (e) {
       return json({ ok: false, configured: true, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "compose") {
+    // Staff who may create or edit events: check the caller's own session.
+    const auth = req.headers.get("authorization") ?? "";
+    const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      auth: { persistSession: false },
+      global: { headers: { Authorization: auth } },
+    });
+    const [{ data: a }, { data: b }] = await Promise.all([
+      asUser.rpc("has_permission", { p_permission: "event.create" }),
+      asUser.rpc("has_permission", { p_permission: "event.edit.any" }),
+    ]);
+    if (a !== true && b !== true) return json({ error: "unauthorized" }, 401);
+    try {
+      return await compose(body);
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }
   }
   if (action === "video") {
