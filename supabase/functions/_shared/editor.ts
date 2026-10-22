@@ -222,13 +222,23 @@ export function foreignLetters(s: string): boolean {
   return /[A-Za-z]{2,}/.test(outside) || /[^\p{Script=Hebrew}\p{Script=Latin}\P{L}]/u.test(outside);
 }
 
+/** Models that refuse a forced tool_choice (learned at runtime): they get "auto" instead. */
+const NO_FORCED_TOOL = new Set<string>();
+
 async function call(model: string, body: Record<string, unknown>, purpose = "edit") {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const send = (b: Record<string, unknown>) => fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model, ...body }),
+    body: JSON.stringify({ model, ...b }),
   });
-  const text = await res.text();
+  const forced = (body.tool_choice as { type?: string } | undefined)?.type === "tool";
+  let res = await send(forced && NO_FORCED_TOOL.has(model) ? { ...body, tool_choice: { type: "auto" } } : body);
+  let text = await res.text();
+  if (res.status === 400 && forced && /tool_choice/.test(text)) {
+    NO_FORCED_TOOL.add(model);
+    res = await send({ ...body, tool_choice: { type: "auto" } });
+    text = await res.text();
+  }
   if (!res.ok) {
     const retryAfter = Number(res.headers.get("retry-after"));
     throw Object.assign(new Error(`Anthropic ${res.status}: ${text.slice(0, 300)}`), {
@@ -567,7 +577,9 @@ export async function expandReport(input: { text: string; title: string; summary
           tool_choice: { type: "tool", name: "expanded_report" },
           messages: [{ role: "user", content: user }],
         }, "expand");
-        const b = out.content?.find((x: any) => x.type === "tool_use")?.input ?? {};
+        const block = out.content?.find((x: any) => x.type === "tool_use");
+        if (!block) continue; // answered in text instead of the tool: ask again
+        const b = block.input ?? {};
         const none = (v: unknown, word: string) => clean(v, 1500) || word;
         return {
           he: { details: clean(b.details_he, 4000), religious: none(b.religious_he, "אין"), implications: none(b.implications_he, "אין") },
@@ -615,7 +627,9 @@ export async function translateBrief(title: string, text: string): Promise<{ tit
         tool_choice: { type: "tool", name: "translated" },
         messages: [{ role: "user", content: `HEADLINE: ${title}\nTEXT:\n"""${text.slice(0, 3000)}"""` }],
       }, "translate");
-      const b = out.content?.find((x: any) => x.type === "tool_use")?.input ?? {};
+      const block = out.content?.find((x: any) => x.type === "tool_use");
+      if (!block) throw new Error("no tool answer");
+      const b = block.input ?? {};
       return { title_he: clean(b.title_he, 200), summary_he: short(b.summary_he), title_en: clean(b.title_en, 200), summary_en: short(b.summary_en), model };
     } catch (e: any) {
       lastErr = e;
