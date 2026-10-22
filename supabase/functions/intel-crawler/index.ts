@@ -15,7 +15,7 @@
 // Body (optional): { "agent": "lebanon", "sync": true } to run one agent now.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { CHEAP_MODELS, editReport, formatDescription, isTransient, locationsForDb, mainCountry, mainPoint, type EditorSource } from "../_shared/editor.ts";
+import { CHEAP_MODELS, editReport, formatCategoryLessons, formatDescription, isTransient, locationsForDb, mainCountry, mainPoint, type EditorSource } from "../_shared/editor.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const API_KEY = (Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("Whatsapp_Key") || "").trim();
@@ -338,6 +338,9 @@ async function runAgent(agent: string, settings: Record<string, any>) {
   const { data: skipRow } = await db.from("app_settings").select("value").eq("key", "skip_categories").maybeSingle();
   const skip = new Set<string>((Array.isArray(skipRow?.value) ? skipRow!.value : ["political-event"]).map(String));
   const categories = (cats ?? []).filter((c: any) => !EXCLUDED_CATEGORIES.has(c.slug) && !skip.has(c.slug));
+  // Editors' category corrections, followed by the editor agent when it picks a category.
+  const { data: corrections } = await db.from("category_corrections").select("text,from_slug,to_slug").order("created_at", { ascending: false }).limit(25);
+  const categoryLessons = formatCategoryLessons(corrections ?? []);
   const { data: allSrc } = await db.from("intel_sources").select("url").eq("active", true);
   const allowedDomains = [...new Set((allSrc ?? []).map((s: any) => new URL(s.url).hostname.replace(/^www\./, "")))];
   const chosen = [...picks.keys()].map((i) => unique[i]);
@@ -356,7 +359,7 @@ async function runAgent(agent: string, settings: Record<string, any>) {
       const { data: candidates } = await db.from("events").select("id,title,occurred_at,description,sources,source_url")
         .is("deleted_at", null).in("status", ["published"]).gte("occurred_at", since).order("occurred_at", { ascending: false }).limit(40);
       const r = await editReport({
-        text, mode: "crawler", categories, candidates: candidates ?? [], allowedDomains,
+        text, mode: "crawler", categories, candidates: candidates ?? [], allowedDomains, categoryLessons,
         origin: { name: item.source.name, url: item.url, sentAt: articleDate ?? undefined },
         contextOnly: tooOld,
       });

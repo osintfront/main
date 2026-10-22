@@ -1,5 +1,6 @@
 import {
   FilePlus2,
+  GraduationCap,
   LayoutDashboard,
   ListChecks,
   Rss,
@@ -112,6 +113,18 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     anyOf: ['dashboard.view'],
     phase: 3,
     backend: ['intel_agents', 'intel_sources', 'intel_items', 'intel-crawler Edge Function'],
+    showInNav: true,
+  },
+  {
+    id: 'learning',
+    path: '/admin/learning',
+    route: 'learning',
+    labelKey: 'admin.nav.learning',
+    descriptionKey: 'admin.module.learning',
+    icon: GraduationCap,
+    anyOf: ['dashboard.view'],
+    phase: 3,
+    backend: ['learned_places', 'category_corrections', 'events_learn_from_correction trigger'],
     showInNav: true,
   },
   {

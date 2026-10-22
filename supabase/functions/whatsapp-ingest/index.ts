@@ -8,7 +8,7 @@
 // description as an "עדכון" (update) — and the source is recorded as well.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { CHEAP_MODELS, editReport, formatDescription, locationsForDb, mainCountry, mainPoint, type EditResult } from "../_shared/editor.ts";
+import { CHEAP_MODELS, editReport, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, type EditResult } from "../_shared/editor.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -254,10 +254,20 @@ const CLASSIFY_TOOL = {
   },
 };
 
+// Editors' category corrections, fed to the classifier as examples (refreshed every 5 minutes).
+let lessons = { text: "", at: 0 };
+async function categoryLessons(): Promise<string> {
+  if (Date.now() - lessons.at < 300_000) return lessons.text;
+  const { data } = await db.from("category_corrections").select("text,from_slug,to_slug").order("created_at", { ascending: false }).limit(25);
+  lessons = { text: formatCategoryLessons(data ?? []), at: Date.now() };
+  return lessons.text;
+}
+
 async function classify(msg: InMsg, candidates: any[]) {
+  const learned = await categoryLessons();
   const cats = (await categories()).filter((c) => c.slug !== "other");
   const system = `You triage reports posted in an OSINT WhatsApp group or Telegram channel (mostly Hebrew; Israel, Lebanon, Syria, Iran, Yemen, Iraq).
-Allowed category slugs: ${cats.map((c) => `${c.slug} (${c.name})`).join(", ")}.
+Allowed category slugs: ${cats.map((c) => `${c.slug} (${c.name})`).join(", ")}.${learned}
 Never use 'other'. Use 'uncategorized' only via decision=uncertain.
 Rules:
 - not_event: ONLY messages that are not news reports at all (appeals to group members, private-contact requests, ads, greetings, chat, questions, admin notices).

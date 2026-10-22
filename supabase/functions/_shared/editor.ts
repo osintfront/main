@@ -58,6 +58,18 @@ export interface EditInput {
   contextOnly?: boolean;
   /** "fast" = Haiku, no web search; "strong" = Sonnet + 1 search. Default: by language (editorTier). */
   tier?: "fast" | "strong";
+  /** Editors' past category corrections (formatCategoryLessons), followed when choosing category_slug. */
+  categoryLessons?: string;
+}
+
+export interface CategoryCorrection { text: string; from_slug: string; to_slug: string }
+
+/** Editors' corrections as prompt examples (newest first, one line each). Empty when none. */
+export function formatCategoryLessons(rows: CategoryCorrection[], max = 25): string {
+  const lines = rows.slice(0, max).map((r) => `- "${String(r.text).replace(/\s+/g, " ").slice(0, 160)}" → ${r.to_slug} (not ${r.from_slug})`);
+  return lines.length
+    ? `\nEditors corrected these categories before. Follow the same judgement for similar reports:\n${lines.join("\n")}`
+    : "";
 }
 
 const API_KEY = (Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("Whatsapp_Key") || "").trim();
@@ -318,7 +330,7 @@ export async function editReport(input: EditInput): Promise<EditResult> {
   if (!API_KEY) throw new Error("No Anthropic API key");
   const categories = input.categories ?? [];
   const system = SYSTEM_BASE + (input.mode === "crawler"
-    ? SYSTEM_CRAWLER + `\nקטגוריות מותרות: ${categories.map((c) => `${c.slug} (${c.name})`).join(", ")}`
+    ? SYSTEM_CRAWLER + `\nקטגוריות מותרות: ${categories.map((c) => `${c.slug} (${c.name})`).join(", ")}` + (input.categoryLessons ?? "")
     : "");
   // Strip site-name boilerplate ("| Lebanon News") before judging how much text there is.
   const substance = input.text.replace(/\|\s*[^\n|]{0,40}$/gm, "").replace(/\s+/g, " ").trim();

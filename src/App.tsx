@@ -17,6 +17,7 @@ import { ToastProvider } from '@/components/common/Toast';
 import { AccountPage } from '@/pages/admin/AccountPage';
 import { SettingsPage } from '@/pages/admin/SettingsPage';
 import { NewsAgentsPage } from '@/pages/admin/NewsAgentsPage';
+import { LearningPage } from '@/pages/admin/LearningPage';
 import { ModulePlaceholderPage } from '@/pages/admin/ModulePlaceholderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SitePage } from '@/pages/public/SitePage';
@@ -29,6 +30,7 @@ const IMPLEMENTED: Record<string, ComponentType> = {
   eventDetail: EventEditorPage,
   settings: SettingsPage,
   newsAgents: NewsAgentsPage,
+  learning: LearningPage,
 };
 
 export function App() {
