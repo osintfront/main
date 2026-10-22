@@ -52,7 +52,7 @@ interface MapViewProps {
   onMoveRequest?: (target: MoveTarget) => void;
   onMoveEnd?: () => void;
   /** Save the new pin; resolve true when stored. */
-  onMoveSave?: (target: MoveTarget, lat: number, lng: number) => Promise<boolean>;
+  onMoveSave?: (target: MoveTarget, lat: number, lng: number, mode: 'move' | 'copy') => Promise<boolean>;
 }
 
 export type DrawMode = 'polygon' | 'octagon';
@@ -368,12 +368,12 @@ export function MapView({
     };
   }, [movingId, movingPlace]);
 
-  const saveMove = useCallback(async () => {
+  const saveMove = useCallback(async (mode: 'move' | 'copy' = 'move') => {
     const pos = movePosRef.current;
     if (!movingId || !pos || !onMoveSaveRef.current) return;
     setMoveBusy(true);
     try {
-      if (await onMoveSaveRef.current({ id: movingId, place: movingPlace }, pos[0], pos[1])) onMoveEndRef.current?.();
+      if (await onMoveSaveRef.current({ id: movingId, place: movingPlace }, pos[0], pos[1], mode)) onMoveEndRef.current?.();
     } finally {
       setMoveBusy(false);
     }
@@ -391,6 +391,7 @@ export function MapView({
       html:
         `<div class="ofm-move__actions">` +
         `<button type="button" data-act="ok" class="ofm-move__ok" title="${t('move.save')}" aria-label="${t('move.save')}"${moveBusy ? ' disabled' : ''}>✓</button>` +
+        `<button type="button" data-act="copy" class="ofm-move__copy" title="${t('move.copy')}" aria-label="${t('move.copy')}"${moveBusy ? ' disabled' : ''}>⧉</button>` +
         `<button type="button" data-act="no" class="ofm-move__no" title="${t('move.cancel')}" aria-label="${t('move.cancel')}">✕</button>` +
         `</div><div class="ofm-move__pin"></div>`,
       iconSize: [0, 0],
@@ -407,7 +408,8 @@ export function MapView({
         L.DomEvent.on(b, 'mousedown touchstart dblclick', L.DomEvent.stopPropagation);
         L.DomEvent.on(b, 'click', (e) => {
           L.DomEvent.stop(e);
-          if (b.dataset.act === 'ok') void saveMoveRef.current();
+          if (b.dataset.act === 'ok') void saveMoveRef.current('move');
+          else if (b.dataset.act === 'copy') void saveMoveRef.current('copy');
           else onMoveEndRef.current?.();
         });
       });
@@ -900,12 +902,20 @@ export function MapView({
             <span>{t('move.hint')}</span>
             <button
               type="button"
-              onClick={() => void saveMove()}
+              onClick={() => void saveMove('move')}
               disabled={moveBusy}
               className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
             >
               <Check className="size-3.5" aria-hidden />
               {t('move.save')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveMove('copy')}
+              disabled={moveBusy}
+              className="inline-flex h-8 items-center gap-1 rounded-lg bg-sky-600 px-2.5 font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+            >
+              ⧉ {t('move.copy')}
             </button>
             <button
               type="button"

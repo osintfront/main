@@ -631,3 +631,6 @@
   font-size: 26px;
   text-shadow: 0 1px 6px #000;
 }
+.ofm-move__copy {
+  background: var(--color-sky-600);
+}

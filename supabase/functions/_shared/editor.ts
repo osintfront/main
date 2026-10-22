@@ -134,7 +134,7 @@ UNIFIL ← יוניפי"ל (כוח האו"ם הזמני בלבנון) | Blue Lin
 מיקומים וקואורדינטות:
 - קואורדינטות רק למקום ספציפי שאתה בטוח בו (יישוב, אתר, שכונה), בדיוק של 4–5 ספרות אחרי הנקודה.
 - מקום הכתיבה בראש ידיעה (dateline, כמו "TEL AVIV —" או "صوفيا - سبأنت") אינו מקום האירוע. אל תשים עליו נעץ, אלא אם האירוע עצמו התרחש שם.
-- ברשימת locations רשום כל מקום ספציפי שהידיעה מזכירה כמקום שבו משהו קרה או נמצא (עיר, כפר, שכונה, בסיס, נמל, מחוז, אזור, מצר וכד'), לפי סדר החשיבות — המקום העיקרי ראשון. עד 6 מקומות. לא מדינות שלמות, ולא מקום הכתיבה (dateline). אל תרשום אזור, מחוז או עיר שרק מתארים איפה נמצא מקום שכבר רשמת ("הכפר X באזור הכפרי של Y" → רק X); רשום מקום נוסף רק אם גם בו קרה משהו. מקום שמתואר ביחס למקום אחר — "X שבנפת/במחוז/בגזרת Y", "X מצפון/מדרום/ממזרח/ממערב ל-Y", "בצפון Y" — רשום רק את X, המקום עצמו (ואם אין X, רק את Y). אירוע שבין שני מקומות — "מחסום בדרך A–B", "ירי מכיוון A לעבר B", "תנועה מ-A ל-B" — רשום את שני המקומות (A ו-B), העיקרי ראשון. לכל מקום מלא name ו-name_en, וקואורדינטות רק אם אתה בטוח (אחרת null — המערכת תאתר לפי השם).
+- ברשימת locations רשום כל מקום ספציפי שהידיעה מזכירה כמקום שבו משהו קרה או נמצא (עיר, כפר, שכונה, בסיס, נמל, מחוז, אזור, מצר וכד'), לפי סדר החשיבות — המקום העיקרי ראשון. עד 10 מקומות. כשהידיעה מפרטת כמה מקומות שהותקפו, נפגעו או שבהם קרה משהו — רשום כל אחד מהם בנפרד (כל אחד יקבל סימון במפה). לא מדינות שלמות, ולא מקום הכתיבה (dateline). אל תרשום אזור, מחוז או עיר שרק מתארים איפה נמצא מקום שכבר רשמת ("הכפר X באזור הכפרי של Y" → רק X); רשום מקום נוסף רק אם גם בו קרה משהו. מקום שמתואר ביחס למקום אחר — "X שבנפת/במחוז/בגזרת Y", "X מצפון/מדרום/ממזרח/ממערב ל-Y", "בצפון Y" — רשום רק את X, המקום עצמו (ואם אין X, רק את Y). אירוע שבין שני מקומות — "מחסום בדרך A–B", "ירי מכיוון A לעבר B", "תנועה מ-A ל-B" — רשום את שני המקומות (A ו-B), העיקרי ראשון. לכל מקום מלא name ו-name_en, וקואורדינטות רק אם אתה בטוח (אחרת null — המערכת תאתר לפי השם).
 - country (באנגלית): תמיד מלא את המדינה העיקרית שהידיעה עוסקת בה, גם כשאין שום מקום ספציפי. countries: כל המדינות המעורבות, העיקרית ראשונה.
 
 כללי דיוק:
@@ -175,7 +175,7 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
     summary_en: { type: "string", description: "The summary in English, one sentence, max 100 characters" },
     locations: {
       type: "array",
-      description: "כל המקומות הספציפיים שמוזכרים (עד 6, העיקרי ראשון; לא מדינות ולא dateline); קואורדינטות רק אם אתה בטוח, אחרת null",
+      description: "כל המקומות הספציפיים שמוזכרים — כל מקום תקיפה בנפרד (עד 10, העיקרי ראשון; לא מדינות ולא dateline); קואורדינטות רק אם אתה בטוח, אחרת null",
       items: {
         type: "object",
         properties: {
@@ -288,7 +288,7 @@ const COUNTRY_HE: Record<string, string> = {
 function normalise(raw: Record<string, any>, model: string, mode: EditInput["mode"], input: EditInput): EditResult {
   const cats = new Set((input.categories ?? []).map((c) => c.slug));
   const candIds = new Set((input.candidates ?? []).map((c) => c.id));
-  const locations = (Array.isArray(raw.locations) ? raw.locations : []).slice(0, 6).map((l: any) => ({
+  const locations = (Array.isArray(raw.locations) ? raw.locations : []).slice(0, 10).map((l: any) => ({
     name: clean(l?.name, 120),
     name_en: clean(l?.name_en, 120),
     country: clean(l?.country, 60),
@@ -481,7 +481,7 @@ async function geocode(query: string): Promise<{ lat: number; lng: number; kind:
 
 async function verifyLocations(r: EditResult): Promise<void> {
   const main = r.country.split("/")[0]?.trim() ?? "";
-  for (const l of r.locations.slice(0, 4)) {
+  for (const l of r.locations.slice(0, 6)) {
     const name = (l.name_en || l.name).trim();
     const country = l.country || main;
     if (!name) continue;
@@ -514,7 +514,7 @@ export function translationsFor(r: EditResult): Record<string, { title?: string;
 
 /** Places for events.locations (the database looks up the ones without coordinates). */
 export function locationsForDb(r: EditResult): { name: string; name_en: string; lat: number | null; lng: number | null; precision?: string }[] {
-  return r.locations.slice(0, 6).map((l) => ({ name: l.name, name_en: l.name_en, lat: l.lat, lng: l.lng, ...(l.precision ? { precision: l.precision } : {}) }));
+  return r.locations.slice(0, 10).map((l) => ({ name: l.name, name_en: l.name_en, lat: l.lat, lng: l.lng, ...(l.precision ? { precision: l.precision } : {}) }));
 }
 
 /** Main country in English for the events.country column (falls back to the Hebrew list). */

@@ -10,7 +10,7 @@ const ADMIN_EVENT_COLUMNS = [
   'latitude', 'longitude', 'location_name', 'country', 'region', 'city', 'address', 'location_precision',
   'source_name', 'source_url', 'source_type', 'occurred_at', 'published_at', 'created_at', 'updated_at',
   'created_by', 'approved_by', 'is_breaking', 'is_verified', 'geocoding_confidence', 'classification_confidence',
-  'coordinates_manually_corrected', 'rejection_reason', 'duplicate_of_event_id', 'deleted_at',
+  'coordinates_manually_corrected', 'rejection_reason', 'duplicate_of_event_id', 'deleted_at', 'review_requested_at',
   // Name of the reporter. RLS on profiles returns null for staff who may not read other profiles.
   'creator:profiles!events_created_by_fkey(full_name,email)',
 ].join(',');
@@ -48,6 +48,7 @@ interface EventRow {
   rejection_reason: string | null;
   duplicate_of_event_id: string | null;
   deleted_at: string | null;
+  review_requested_at?: string | null;
   creator?: { full_name: string; email: string } | null;
 }
 
@@ -94,6 +95,7 @@ function mapRow(r: EventRow): AdminEvent {
     rejectionReason: r.rejection_reason,
     duplicateOfEventId: r.duplicate_of_event_id,
     deletedAt: r.deleted_at,
+    reviewRequestedAt: r.review_requested_at ?? null,
   };
 }
 
@@ -139,7 +141,7 @@ function client() {
 
 export interface EventFilters {
   search?: string;
-  status?: EventStatus | 'all' | 'deleted';
+  status?: EventStatus | 'all' | 'deleted' | 'review';
   categoryId?: string;
   severity?: Severity | '';
   country?: string;
@@ -168,7 +170,9 @@ export async function listEvents(filters: EventFilters, page = 0): Promise<{ eve
   if (filters.status === 'deleted') q = q.not('deleted_at', 'is', null);
   else {
     q = q.is('deleted_at', null);
-    if (filters.status && filters.status !== 'all') q = q.eq('status', filters.status);
+    // Waiting for an admin: in review, or a live event an editor changed.
+    if (filters.status === 'review') q = q.or('status.eq.pending_review,review_requested_at.not.is.null');
+    else if (filters.status && filters.status !== 'all') q = q.eq('status', filters.status);
   }
   if (filters.categoryId) q = q.eq('category_id', filters.categoryId);
   if (filters.severity) q = q.eq('severity', filters.severity);
@@ -427,5 +431,17 @@ export async function setEventCategory(id: string, slug: string): Promise<void> 
 /** Move one of an event's extra places (index in events.locations); the place is learned. */
 export async function moveEventPlace(id: string, index: number, latitude: number, longitude: number): Promise<void> {
   const { error } = await client().rpc('move_event_place', { p_id: id, p_index: index, p_lat: latitude, p_lng: longitude });
+  if (error) throw toServiceError(error);
+}
+
+/** Admin: approve an editor's change on a live event (clears the review flag). */
+export async function approveEventReview(id: string): Promise<void> {
+  const { error } = await client().rpc('approve_event_review', { p_id: id });
+  if (error) throw toServiceError(error);
+}
+
+/** Map "duplicate": keep the pin and add another one (same place name) at the new position. */
+export async function addEventPlace(id: string, latitude: number, longitude: number, fromIndex: number | null): Promise<void> {
+  const { error } = await client().rpc('add_event_place', { p_id: id, p_lat: latitude, p_lng: longitude, p_from: fromIndex });
   if (error) throw toServiceError(error);
 }

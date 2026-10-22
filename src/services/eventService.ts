@@ -123,7 +123,7 @@ function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
       longitude: lng,
       precision: (LOCATION_PRECISIONS as readonly string[]).includes(String(o.precision)) ? (o.precision as LocationPrecision) : null,
     });
-    if (out.length >= 7) break;
+    if (out.length >= 10) break;
   }
   return out;
 }

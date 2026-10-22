@@ -135,7 +135,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     labelKey: 'admin.nav.aiUsage',
     descriptionKey: 'admin.module.aiUsage',
     icon: Cpu,
-    anyOf: ['dashboard.view'],
+    anyOf: ['ai.usage.view'],
     phase: 3,
     backend: ['ai_usage', 'ai_usage_daily view'],
     showInNav: true,

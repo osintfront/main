@@ -1,5 +1,7 @@
-import type { ComponentType } from 'react';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import type { ComponentType, ReactNode } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import { ADMIN_SECTIONS } from '@/config/adminSections';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/hooks/useAuth';
@@ -19,6 +21,7 @@ import { SettingsPage } from '@/pages/admin/SettingsPage';
 import { NewsAgentsPage } from '@/pages/admin/NewsAgentsPage';
 import { LearningPage } from '@/pages/admin/LearningPage';
 import { AiUsagePage } from '@/pages/admin/AiUsagePage';
+import { UsersPage } from '@/pages/admin/UsersPage';
 import { ModulePlaceholderPage } from '@/pages/admin/ModulePlaceholderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SitePage } from '@/pages/public/SitePage';
@@ -33,7 +36,16 @@ const IMPLEMENTED: Record<string, ComponentType> = {
   newsAgents: NewsAgentsPage,
   learning: LearningPage,
   aiUsage: AiUsagePage,
+  users: UsersPage,
 };
+
+/** The back office home: the dashboard, or the events list for editors (no dashboard). */
+function AdminHome({ children }: { children: ReactNode }) {
+  const { can } = usePermissions();
+  const { status } = useAuth();
+  if (status === 'signed_in' && !can('dashboard.view') && can('admin.access')) return <Navigate to="/admin/events" replace />;
+  return <>{children}</>;
+}
 
 export function App() {
   return (
@@ -57,14 +69,20 @@ export function App() {
               <Route
                 path="/admin"
                 element={
-                  <RequireAuth anyOf={['dashboard.view']}>
+                  <RequireAuth anyOf={['admin.access']}>
                     <AdminLayout />
                   </RequireAuth>
                 }
               >
                 {ADMIN_SECTIONS.map((section) => {
                   const Page = IMPLEMENTED[section.id];
-                  const element = (
+                  const element = section.route === '' ? (
+                    <AdminHome>
+                      <RequireAuth anyOf={section.anyOf} embedded>
+                        {Page ? <Page /> : <ModulePlaceholderPage sectionId={section.id} />}
+                      </RequireAuth>
+                    </AdminHome>
+                  ) : (
                     <RequireAuth anyOf={section.anyOf} embedded>
                       {Page ? <Page /> : <ModulePlaceholderPage sectionId={section.id} />}
                     </RequireAuth>
@@ -78,7 +96,7 @@ export function App() {
                 <Route
                   path="account"
                   element={
-                    <RequireAuth anyOf={['dashboard.view']} embedded>
+                    <RequireAuth anyOf={['admin.access']} embedded>
                       <AccountPage />
                     </RequireAuth>
                   }

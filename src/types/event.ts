@@ -133,6 +133,8 @@ export interface AdminEvent {
   rejectionReason: string | null;
   duplicateOfEventId: string | null;
   deletedAt: string | null;
+  /** An editor changed this event; an admin has not approved it yet. */
+  reviewRequestedAt?: string | null;
 }
 
 /** Editable fields of an event (what the form submits). */

@@ -44,6 +44,8 @@ export function RequireAuth({ anyOf, embedded = false, children }: RequireAuthPr
   if (profile.status === 'suspended') return <AccessDenied reason="suspended" embedded={embedded} />;
   if (profile.status === 'pending') return <AccessDenied reason="pending" embedded={embedded} />;
   if (!mfa.satisfied) return <AccessDenied reason="mfa_required" embedded={embedded} />;
+  // Plain users (no back office) go to the map.
+  if (anyOf?.includes('admin.access') && !canAny(anyOf)) return <Navigate to="/" replace />;
   if (anyOf && anyOf.length > 0 && !canAny(anyOf)) {
     return <AccessDenied reason="missing_permission" permission={anyOf[0]} embedded={embedded} />;
   }

@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n';
 import { availableActions, canEditEvent, validateEvent } from '@/lib/eventWorkflow';
 import { fetchCategories } from '@/services/categoryService';
 import {
+  approveEventReview,
   duplicateEvent,
   eventToInput,
   listEvents,
@@ -46,7 +47,7 @@ export function EventsListPage() {
   const [categories, setCategories] = useState<EventCategory[]>([]);
   const [filters, setFilters] = useState<EventFilters>(() => {
     const s = params.get('status');
-    return { ...EMPTY_FILTERS, status: (EVENT_STATUSES as readonly string[]).includes(s ?? '') ? (s as EventFilters['status']) : 'all' };
+    return { ...EMPTY_FILTERS, status: s === 'review' || (EVENT_STATUSES as readonly string[]).includes(s ?? '') ? (s as EventFilters['status']) : 'all' };
   });
   const [searchDraft, setSearchDraft] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -193,7 +194,8 @@ export function EventsListPage() {
     try {
       await setEventCategory(ev.id, cat.slug);
       setRows((list) => list.map((r) => (r.id === ev.id ? { ...r, categoryId } : r)));
-      toast.success(t('list.categoryChanged'));
+      savedToast();
+      if (!can('event.publish')) void load();
     } catch (err) {
       toast.error(friendlyError(err, t));
     } finally {
@@ -216,6 +218,21 @@ export function EventsListPage() {
     }
   };
   const canMovePins = can('event.edit.any') || can('event.edit.own');
+
+  const approveChange = async (ev: AdminEvent) => {
+    setBusyId(ev.id);
+    try {
+      await approveEventReview(ev.id);
+      setRows((list) => list.map((r) => (r.id === ev.id ? { ...r, reviewRequestedAt: null } : r)));
+      toast.success(t('list.changeApproved'));
+    } catch (err) {
+      toast.error(friendlyError(err, t));
+    } finally {
+      setBusyId(null);
+    }
+  };
+  // Editors: their change waits for an admin.
+  const savedToast = () => toast.success(can('event.publish') ? t('list.categoryChanged') : t('list.sentForReview'));
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -254,6 +271,7 @@ export function EventsListPage() {
           </div>
           <select aria-label={t('list.status')} className={SELECT} value={filters.status} onChange={(e) => setFilter('status', e.target.value as EventFilters['status'])}>
             <option value="all">{t('list.allStatuses')}</option>
+            {can('event.review') ? <option value="review">{t('list.reviewQueue')}</option> : null}
             {EVENT_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {t(`status.${s}`)}
@@ -496,6 +514,23 @@ export function EventsListPage() {
                     </td>
                     <td className="mt-2 inline-block md:mt-0 md:table-cell md:px-3 md:py-3">
                       <StatusBadge status={ev.status} />
+                      {ev.reviewRequestedAt ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                            {t('list.editorChange')}
+                          </span>
+                          {can('event.review') && ev.status === 'published' ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void approveChange(ev)}
+                              className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+                            >
+                              {t('list.approveChange')}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="hidden whitespace-nowrap text-xs text-slate-500 xl:table-cell xl:px-3 xl:py-3 dark:text-slate-400">
                       <bdi>{formatDateTime(ev.occurredAt, locale)}</bdi>

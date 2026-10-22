@@ -27,7 +27,7 @@ import { HFC_CATEGORY } from '@/config/hfcThreats';
 import { useEeis } from '@/hooks/useEeis';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/common/Toast';
-import { moveEventPin, moveEventPlace } from '@/services/eventAdminService';
+import { addEventPlace, moveEventPin, moveEventPlace } from '@/services/eventAdminService';
 import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
 
@@ -235,11 +235,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const startMoveMain = useCallback((id: string) => startMove({ id, place: null }), [startMove]);
   const endMove = useCallback(() => setMoving(null), []);
   const saveMove = useCallback(
-    async (target: MoveTarget, lat: number, lng: number) => {
+    async (target: MoveTarget, lat: number, lng: number, mode: 'move' | 'copy') => {
       try {
-        if (target.place === null) await moveEventPin(target.id, lat, lng);
+        if (mode === 'copy') await addEventPlace(target.id, lat, lng, target.place);
+        else if (target.place === null) await moveEventPin(target.id, lat, lng);
         else await moveEventPlace(target.id, target.place, lat, lng);
-        toast.success(t('move.saved'));
+        toast.success(can('event.publish') ? t(mode === 'copy' ? 'move.copied' : 'move.saved') : t('list.sentForReview'));
         reload();
         return true;
       } catch (err) {
@@ -247,7 +248,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         return false;
       }
     },
-    [toast, t, reload],
+    [toast, t, reload, can],
   );
   const detailsEvent = detailsId ? allEvents.find((e) => e.id === detailsId) ?? null : null;
   const closeDetails = useCallback(() => setDetailsId(null), []);

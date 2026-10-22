@@ -23,7 +23,7 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
   const { t } = useI18n();
   const { status } = useAuth();
   const { can } = usePermissions();
-  const showAdmin = status === 'signed_in' && can('dashboard.view');
+  const showAdmin = status === 'signed_in' && can('admin.access');
   // Phones: search is an icon that opens a full-width field over the bar.
   const [searchOpen, setSearchOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);

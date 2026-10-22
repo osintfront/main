@@ -51,3 +51,53 @@ export async function updateOwnFullName(userId: string, fullName: string): Promi
   if (error) throw toServiceError(error);
   return mapProfile(data as ProfileRow);
 }
+
+// ── User management (staff who may manage users) ──────────────────────
+
+export async function listProfiles(): Promise<Profile[]> {
+  const { data, error } = await client().from('profiles').select(PROFILE_COLUMNS).order('created_at', { ascending: false });
+  if (error) throw toServiceError(error);
+  return ((data ?? []) as ProfileRow[]).map(mapProfile);
+}
+
+/** Role / status / publishing grant — the database guard decides what the caller may change. */
+export async function updateProfile(id: string, patch: { role?: AppRole; status?: UserStatus; canPublish?: boolean }): Promise<Profile> {
+  const row: Record<string, unknown> = {};
+  if (patch.role) row.role = patch.role;
+  if (patch.status) row.status = patch.status;
+  if (patch.canPublish !== undefined) row.can_publish = patch.canPublish;
+  const { data, error } = await client().from('profiles').update(row).eq('id', id).select(PROFILE_COLUMNS).single();
+  if (error) throw toServiceError(error);
+  return mapProfile(data as ProfileRow);
+}
+
+async function userAdmin(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { data, error } = await client().functions.invoke('user-admin', { body });
+  if (error) {
+    // The function answers errors as JSON { error }; surface its message.
+    let msg = error.message;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx) msg = (await ctx.json())?.error ?? msg;
+    } catch {
+      /* keep the generic message */
+    }
+    throw new ServiceError('unknown', msg);
+  }
+  return (data ?? {}) as Record<string, unknown>;
+}
+
+/** Create a user with a temporary password (returned once, to hand over). */
+export async function createUser(email: string, fullName: string, role: AppRole): Promise<string> {
+  const r = await userAdmin({ action: 'create', email, full_name: fullName, role });
+  return String(r.password ?? '');
+}
+
+export async function resetUserPassword(id: string): Promise<string> {
+  const r = await userAdmin({ action: 'reset_password', user_id: id });
+  return String(r.password ?? '');
+}
+
+export async function removeUser(id: string): Promise<void> {
+  await userAdmin({ action: 'remove', user_id: id });
+}

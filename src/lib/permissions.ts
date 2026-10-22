@@ -10,6 +10,7 @@ import type { AppRole, Profile } from '@/types/user';
  * compare role names directly.
  */
 export const PERMISSIONS = [
+  'admin.access',
   'dashboard.view',
   'event.view.operational',
   'event.view.internal',
@@ -27,11 +28,13 @@ export const PERMISSIONS = [
   'role.manage',
   'audit.view',
   'settings.manage',
+  'ai.usage.view',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
 const ADMIN_PERMISSIONS: readonly Permission[] = [
+  'admin.access',
   'dashboard.view',
   'event.view.operational',
   'event.view.internal',
@@ -51,8 +54,11 @@ const ADMIN_PERMISSIONS: readonly Permission[] = [
 const ROLE_PERMISSIONS: Record<AppRole, readonly Permission[]> = {
   super_admin: PERMISSIONS,
   admin: ADMIN_PERMISSIONS,
-  editor: ['dashboard.view', 'event.create', 'event.edit.own'],
-  viewer: ['dashboard.view', 'event.view.operational'],
+  // Back office: the events list only — edit (category, place, text), no create/publish/archive/delete.
+  // Every edit waits for an admin (database trigger events_editor_review).
+  editor: ['admin.access', 'event.view.operational', 'event.view.internal', 'event.edit.any'],
+  // "User": the public map with its filters only.
+  viewer: [],
 };
 
 type PermissionSubject = Pick<Profile, 'role' | 'status' | 'canPublish'> | null | undefined;
@@ -60,7 +66,7 @@ type PermissionSubject = Pick<Profile, 'role' | 'status' | 'canPublish'> | null 
 export function permissionsFor(subject: PermissionSubject): ReadonlySet<Permission> {
   if (!subject || subject.status !== 'active') return new Set();
   const granted = new Set<Permission>(ROLE_PERMISSIONS[subject.role] ?? []);
-  if (subject.canPublish && granted.has('event.create')) granted.add('event.publish');
+  if (subject.canPublish && subject.role === 'editor') granted.add('event.publish');
   return granted;
 }
 
