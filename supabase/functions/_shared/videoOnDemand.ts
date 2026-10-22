@@ -95,6 +95,11 @@ export async function videoForThumb(db: SupabaseClient, thumbId: string): Promis
     const { urls, why } = await postVideoUrls(thumb.source_url);
     const src = urls[Number(thumb.source_index ?? 0)] ?? urls[0];
     // No file on the web preview (Telegram leaves big videos out): watch it on Telegram.
+    if (!src && /too-big-note/.test(why)) {
+      // Telegram's web preview leaves out large videos ("Media is too big").
+      await mark("too_big");
+      return { state: "too_big", bytes: null };
+    }
     if (!src) {
       console.log("video unavailable", thumb.source_url, why);
       await mark("unavailable");
