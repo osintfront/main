@@ -20,14 +20,17 @@ begin
   update o set nn = public.normalize_places(array[name, name_ar, name_en, name_he]),
                pt = extensions.st_setsrid(extensions.st_makepoint(lng, lat), 4326);
 
+  analyze o;
+  -- Nearest GeoNames place (index KNN) within ~2.5 km that shares a name.
   create temp table m on commit drop as
-  select distinct on (o.osm_id) o.*, g.geonameid
+  select o.*, g.geonameid
   from o
-  join public.geo_places g
-    on extensions.st_dwithin(g.geom, o.pt, 0.025)          -- ~2.5 km, uses the GIST index
-   and g.country_code = v_cc
-   and g.names && o.nn
-  order by o.osm_id, extensions.st_distance(g.geom, o.pt);
+  cross join lateral (
+    select g.geonameid from public.geo_places g
+    where extensions.st_dwithin(g.geom, o.pt, 0.025) and g.country_code = v_cc and g.names && o.nn
+    order by g.geom operator(extensions.<->) o.pt
+    limit 1
+  ) g;
 
   update public.geo_places g set
     name_he = case when m.name_he is not null and (g.name_he is null or g.he_from_ai) then m.name_he else g.name_he end,
