@@ -407,6 +407,28 @@ function obviousDuplicate(text: string, sentAt: Date, pool: any[]): any | null {
   return bestScore >= SAME_TEXT ? best : null;
 }
 
+/** A place name reduced to compare spellings: "Rashaf" / "Rshaf" / "رشاف" → same key. */
+function placeKeys(...names: (string | null | undefined)[]): Set<string> {
+  const out = new Set<string>();
+  for (const raw of names) {
+    let n = String(raw ?? "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f\u064B-\u065F\u0591-\u05C7]/g, "").trim();
+    if (!n) continue;
+    n = n.replace(/^(al|el|ad|an|ar|as|at|az)[- ]/, "").replace(/^ال/, "").replace(/[^a-z\u0600-\u06FF\u05D0-\u05EA]/g, "");
+    if (/^[a-z]+$/.test(n)) n = n.replace(/[aeiouy]/g, "").replace(/(.)\1+/g, "$1"); // consonant skeleton
+    if (n.length >= 2) out.add(n);
+  }
+  return out;
+}
+const eventPlaceKeys = (e: any) => placeKeys(e.location_name, e.ai_suggestions?.place_en);
+
+/** The same place within the hour: another channel reporting the same incident. */
+function samePlaceEvent(pool: any[], keys: Set<string>, sentAt: Date, excludeId?: string): any | null {
+  if (!keys.size) return null;
+  return pool.find((e) => e.id !== excludeId &&
+    Math.abs(new Date(e.occurred_at).getTime() - sentAt.getTime()) <= 60 * 60000 &&
+    [...eventPlaceKeys(e)].some((k) => keys.has(k))) ?? null;
+}
+
 async function processOne(m: InMsg) {
   const text = String(m.text ?? "").trim();
   const sentAt = new Date(m.sent_at);
@@ -437,7 +459,7 @@ async function processOne(m: InMsg) {
   const to = new Date(sentAt.getTime() + DUP_WINDOW_MIN * 60000).toISOString();
   const { data: pool } = await db
     .from("events")
-    .select("id,title,original_report_text,occurred_at,source_name,description,sources")
+    .select("id,title,original_report_text,occurred_at,source_name,description,sources,location_name,ai_suggestions,created_at")
     .is("deleted_at", null)
     .gte("occurred_at", from)
     .lte("occurred_at", to)
@@ -471,6 +493,16 @@ async function processOne(m: InMsg) {
     return { key, status: "skipped_off_topic", reason: c.reason };
   }
   // Outside Israel / the Middle East (Ukraine, Europe, world markets…): not for this map.
+  // Same place within the hour (other channels, other wording): one event, more sources.
+  if (c.decision === "event" || c.decision === "uncertain") {
+    const near = samePlaceEvent(pool ?? [], placeKeys(c.location_name, c.location_name_en), sentAt);
+    if (near) {
+      if (!candidates.some((x) => x.id === near.id)) candidates.push(near);
+      c.decision = "duplicate";
+      c.duplicate_of = near.id;
+      c.reason = `same place within the hour — ${c.reason ?? ""}`;
+    }
+  }
   if (c.decision !== "duplicate" && !inRegion([c.country], text)) {
     c.reason = `outside the region (${c.country}) — ${c.reason ?? ""}`;
     await log("skipped_off_topic", null);
@@ -548,8 +580,28 @@ async function processOne(m: InMsg) {
   const pub = { published_at: row.published_at, approved_by: row.approved_by };
   delete row.published_at;
   delete row.approved_by;
-  let { data: ins, error } = await db.from("events").insert({ ...row, status: "draft" }).select("id,status,latitude").single();
+  let { data: ins, error } = await db.from("events").insert({ ...row, status: "draft" }).select("id,status,latitude,created_at").single();
   if (error) throw error;
+  // Race: several channels post the same incident within seconds and are processed in
+  // parallel. The later one folds into the earlier one (as a source) and is removed.
+  {
+    const since = new Date(sentAt.getTime() - 60 * 60000).toISOString();
+    const { data: twins } = await db.from("events")
+      .select("id,occurred_at,created_at,location_name,ai_suggestions,sources")
+      .is("deleted_at", null).gte("occurred_at", since).lt("created_at", ins!.created_at).neq("id", ins!.id)
+      .order("created_at").limit(60);
+    const twin = samePlaceEvent(twins ?? [], placeKeys(c.location_name, c.location_name_en), sentAt, ins!.id);
+    if (twin) {
+      const entry = { name: clip(srcLabel, 200), url: sourceUrl(m, text), at: sentIso };
+      const current: any[] = Array.isArray(twin.sources) ? twin.sources : [];
+      const known = current.some((x) => (x?.url && entry.url ? x.url === entry.url : x?.name === entry.name));
+      if (!known) await db.from("events").update({ sources: [...current, entry].slice(-MAX_SOURCES) }).eq("id", twin.id);
+      await db.from("events").delete().eq("id", ins!.id);
+      await log("merged_duplicate", twin.id);
+      const media_saved = await storeMedia(twin.id, key, m.media, m.url);
+      return { key, status: "merged_duplicate", event_id: twin.id, race: true, media_saved };
+    }
+  }
   let waitingForPlace = false;
   if (status === "published") {
     if (ins!.latitude == null) waitingForPlace = true;
