@@ -9,7 +9,6 @@
 // Body: { "country": "IL" }   (IL SY LB IQ YE SA IR); big countries: { "country": "IR", "part": 0, "parts": 4 }
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { Unzip, UnzipInflate } from "npm:fflate@0.8.2";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const BASE = "https://download.geonames.org/export/dump";
@@ -32,57 +31,59 @@ function normalize(s: string): string {
 }
 const clean = (s: string) => (s || "").replace(/[֑-ׇ]/g, "").replace(/[\t\n|]/g, " ").trim();
 
-/** Streams one member of a remote zip, line by line: download, inflate and decode
- *  chunk by chunk, so even the biggest country (IR) never sits whole in memory. */
+/** Streams one member of a remote zip, line by line. The zip (a few MB) is read from
+ *  its central directory; the member is inflated by the runtime's native
+ *  DecompressionStream and decoded as a stream, so the unzipped text never sits whole
+ *  in memory and the small per-call CPU budget is spent on our filtering, not on
+ *  inflating in JavaScript. */
 async function zipLines(url: string, member: string, onLine: (line: string) => void): Promise<void> {
   const res = await fetch(url, { headers: { "User-Agent": "Osintfront geonames importer" } });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} for ${url}`);
-  const decoder = new TextDecoder();
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  const zip = new Uint8Array(await res.arrayBuffer());
+  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  // End of central directory record.
+  let eocd = -1;
+  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 65557); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error(`not a zip: ${url}`);
+  const entries = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const enc = new TextDecoder();
+  let local = -1, size = 0, method = 0;
+  for (let n = 0; n < entries; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error(`bad central directory: ${url}`);
+    const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), commentLen = dv.getUint16(p + 32, true);
+    if (enc.decode(zip.subarray(p + 46, p + 46 + nameLen)) === member) {
+      method = dv.getUint16(p + 10, true);
+      size = dv.getUint32(p + 20, true);
+      local = dv.getUint32(p + 42, true);
+      break;
+    }
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  if (local < 0) throw new Error(`${member} not in ${url}`);
+  const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+  let stream: ReadableStream<Uint8Array> = new Blob([zip.subarray(start, start + size)]).stream();
+  if (method === 8) stream = stream.pipeThrough(new DecompressionStream("deflate-raw"));
+  else if (method !== 0) throw new Error(`zip method ${method} not supported`);
+  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
   let rest = "";
-  let found = false;
-  let failure: unknown = null;
-  const emit = (text: string, final: boolean) => {
-    rest += text;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    rest += value;
     let i = 0;
     for (let j = rest.indexOf("\n"); j >= 0; j = rest.indexOf("\n", i)) {
       onLine(rest.slice(i, j));
       i = j + 1;
     }
     rest = rest.slice(i);
-    if (final && rest) {
-      onLine(rest);
-      rest = "";
-    }
-  };
-  const unzip = new Unzip((file) => {
-    if (file.name !== member) return;
-    found = true;
-    file.ondata = (err, data, final) => {
-      if (err) {
-        failure = err;
-        return;
-      }
-      try {
-        emit(decoder.decode(data, { stream: !final }), final);
-      } catch (e) {
-        failure = e;
-      }
-    };
-    file.start();
-  });
-  unzip.register(UnzipInflate);
-  const reader = res.body.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      unzip.push(new Uint8Array(0), true);
-      break;
-    }
-    unzip.push(value);
-    if (failure) throw failure;
   }
-  if (failure) throw failure;
-  if (!found) throw new Error(`${member} not in ${url}`);
+  if (rest) onLine(rest);
 }
 
 async function importCountry(cc: string, part = 0, parts = 1) {
