@@ -64,7 +64,10 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
     }
   };
 
-  const x = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
+  const raw = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
+  // "None" answers are not shown.
+  const real = (v: string) => (/^\s*(אין|none|n\/a|no)\.?\s*$/i.test(v ?? '') ? '' : v);
+  const x = raw ? { details: raw.details, religious: real(raw.religious), implications: real(raw.implications) } : null;
   const btn =
     'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-500 disabled:opacity-60 dark:text-sky-400 dark:hover:bg-sky-500/10';
 
