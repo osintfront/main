@@ -53,6 +53,10 @@ interface MapViewProps {
   onMoveEnd?: () => void;
   /** Save the new pin; resolve true when stored. */
   onMoveSave?: (target: MoveTarget, lat: number, lng: number, mode: 'move' | 'copy') => Promise<boolean>;
+  /** Shown at the top centre, under the alerts banner (e.g. "ask the map"). */
+  topSlot?: ReactNode;
+  /** Zoom the map to these points whenever key changes (e.g. search results). */
+  fitTo?: { key: number; points: [number, number][] } | null;
 }
 
 export type DrawMode = 'polygon' | 'octagon';
@@ -131,6 +135,8 @@ export function MapView({
   onMoveRequest,
   onMoveEnd,
   onMoveSave,
+  topSlot,
+  fitTo = null,
 }: MapViewProps) {
   const { theme } = useTheme();
   const { t, dir, locale, lang, categoryLabel } = useI18n();
@@ -244,6 +250,17 @@ export function MapView({
     layer.addTo(map);
     baseLayerRef.current = layer;
   }, [theme, baseStyle]);
+
+  // 2a. Zoom to a set of points (search results).
+  const fitKey = fitTo?.key ?? 0;
+  useEffect(() => {
+    const map = mapRef.current;
+    const pts = fitTo?.points ?? [];
+    if (!map || !fitKey || !pts.length) return;
+    if (pts.length === 1) map.setView(pts[0], Math.max(map.getZoom(), 10));
+    else map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 11 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey]);
 
   // 2b. NASA FIRMS fires overlay (visitor's choice).
   useEffect(() => {
@@ -759,16 +776,19 @@ export function MapView({
     // so they can't cover the top bar, menus or the phone pane switcher.
     <div className="relative isolate h-full w-full">
       <div ref={containerRef} className="ofm-map h-full w-full" role="region" aria-label={t('map.label')} />
-      {alerts.length > 0 ? (
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-[500] flex justify-center px-16">
-          <button
-            type="button"
-            onClick={fitAlerts}
-            className="ofm-hfc-banner pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-full bg-red-600 px-3.5 py-1.5 text-sm font-bold text-white shadow-lg ring-2 ring-red-300/60 hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          >
-            <Siren className="size-4 shrink-0" aria-hidden />
-            <span className="truncate">{t('hfc.banner', { count: alerts.length })}</span>
-          </button>
+      {alerts.length > 0 || topSlot ? (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-[500] flex flex-col items-center gap-2 px-16">
+          {alerts.length > 0 ? (
+            <button
+              type="button"
+              onClick={fitAlerts}
+              className="ofm-hfc-banner pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-full bg-red-600 px-3.5 py-1.5 text-sm font-bold text-white shadow-lg ring-2 ring-red-300/60 hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <Siren className="size-4 shrink-0" aria-hidden />
+              <span className="truncate">{t('hfc.banner', { count: alerts.length })}</span>
+            </button>
+          ) : null}
+          {topSlot}
         </div>
       ) : null}
       <div className="pointer-events-none absolute start-3 top-3 z-[500] flex flex-col gap-2">

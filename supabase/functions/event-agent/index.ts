@@ -11,6 +11,8 @@
 //   {action:"compose", text}     staff (event.create / event.edit.any) — "quick compose" on the report
 //                                form: free text in any language → title, summary, category, place…
 //                                Nothing is saved; the form is filled for the person to check.
+//   {action:"ask", question}     signed-in users — "ask the map": a free-text question about our events
+//                                → answer + event ids (shown on the map). 40 questions / hour / user.
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -18,6 +20,7 @@ import { editReport, expandReport, foreignShare, formatCategoryLessons, formatDe
 import { setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
+import { askMap } from "../_shared/ask.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -239,6 +242,34 @@ async function handle(req: Request): Promise<Response> {
     if (a !== true && b !== true) return json({ error: "unauthorized" }, 401);
     try {
       return await compose(body);
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "ask") {
+    const question = String(body?.question ?? "").trim().slice(0, 500);
+    if (question.length < 3) return json({ error: "question too short" }, 400);
+    const auth = req.headers.get("authorization") ?? "";
+    const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      auth: { persistSession: false },
+      global: { headers: { Authorization: auth } },
+    });
+    // Signed-in active users (40 / hour); the cron secret too (internal checks).
+    let uid: string | null = null;
+    if (!(await cronOk(req))) {
+      const { data: who } = await asUser.auth.getUser();
+      uid = who?.user?.id ?? null;
+      if (!uid) return json({ error: "sign in required" }, 401);
+      const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
+      if (prof?.status !== "active") return json({ error: "unauthorized" }, 401);
+      const { count } = await db.from("ai_search_log").select("id", { count: "exact", head: true })
+        .eq("user_id", uid).gte("at", new Date(Date.now() - 3600_000).toISOString());
+      if ((count ?? 0) >= 40) return json({ error: "rate_limited" }, 429);
+    }
+    try {
+      const r = await askMap(db, question);
+      await db.from("ai_search_log").insert({ user_id: uid, question, results: r.ids.length });
+      return json({ ok: true, ...r });
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }

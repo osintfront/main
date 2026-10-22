@@ -31,6 +31,9 @@ import { addEventPlace, moveEventPin, moveEventPlace } from '@/services/eventAdm
 import { fetchPublicEvent } from '@/services/eventService';
 import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
+import { useAuth } from '@/hooks/useAuth';
+import { AskMap } from '@/components/map/AskMap';
+import type { AskAnswer } from '@/services/askService';
 
 type MobilePane = 'map' | 'feed';
 
@@ -94,6 +97,7 @@ function ArchiveDayPicker({ day, onChange }: { day: string; onChange: (day: stri
 
 
 const ADS_ENABLED = false;
+const NO_ALERTS: never[] = [];
 export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const { t, categoryLabel } = useI18n();
   const isArchive = mode === 'archive';
@@ -159,11 +163,23 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const effectiveFilters = useMemo(() => (isArchive ? { ...filters, preset: 'live' as const } : filters), [filters, isArchive]);
   const archiveRange = useMemo(() => (isArchive ? null : needsArchive(filters)), [filters, isArchive]);
   const older = useArchiveRange(archiveRange);
+  // "Ask the map" (signed-in users): a free-text question → answer + only the matching events.
+  const { profile } = useAuth();
+  const canAsk = !isArchive && !isDemo && profile?.status === 'active';
+  const [ask, setAsk] = useState<AskAnswer | null>(null);
+  const [askFit, setAskFit] = useState<{ key: number; points: [number, number][] } | null>(null);
+  const handleAskResult = useCallback((r: AskAnswer | null) => {
+    setAsk(r);
+    if (r?.events.length) setAskFit({ key: Date.now(), points: r.events.filter(isOnMap).map((e) => [e.latitude, e.longitude]) });
+  }, []);
   const allEvents = useMemo(() => {
-    if (!older.events.length) return events;
+    const extra = [...older.events, ...(ask?.events ?? [])];
+    if (!extra.length) return events;
     const ids = new Set(events.map((e) => e.id));
-    return [...events, ...older.events.filter((e) => !ids.has(e.id))];
-  }, [events, older.events]);
+    const out = [...events];
+    for (const e of extra) if (!ids.has(e.id)) (ids.add(e.id), out.push(e));
+    return out;
+  }, [events, older.events, ask]);
   const filterCount = activeFilterCount(effectiveFilters);
   // צי"ח: saved keyword queries; an event passes if it matches any query that is on.
   const { eeis, add: addEei, remove: removeEei } = useEeis();
@@ -184,12 +200,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
 
   const visibleEvents = useMemo(
     () =>
-      allEvents
+      (ask ? ask.events : allEvents)
         .filter((e) => matchesQuery(e, deferredQuery, categoryLabel(e.category.slug, e.category.name)))
         .filter((e) => matchesFilters(e, effectiveFilters))
         .filter((e) => !eeiMatchers.length || eeiMatchers.some((m) => matchesEei(e, m)))
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()),
-    [allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers],
+    [ask, allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers],
   );
   // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
   const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
@@ -341,14 +357,29 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             onLocate={handleLocate}
             newIds={newIds}
             onOpenDetails={handleViewEvent}
-            alerts={alerts}
+            alerts={ask ? NO_ALERTS : alerts}
             alertsNow={alertsNow}
             onLocateAlert={handleLocateAlert}
             title={isArchive ? t('archive.title') : undefined}
             live={!isArchive}
             toolbar={
-              isArchive || filterCount ? (
+              isArchive || filterCount || ask ? (
                 <div className="space-y-2">
+                  {ask ? (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-violet-600 px-3 text-xs font-semibold text-white">
+                        {t('ask.feedTitle')}
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{t('feed.count', { count: visibleEvents.length })}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAsk(null)}
+                        className="ms-auto h-8 rounded-lg px-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
+                      >
+                        {t('ask.clear')}
+                      </button>
+                    </div>
+                  ) : null}
                   {isArchive ? <ArchiveDayPicker day={day} onChange={setDay} /> : null}
                   {filterCount ? (
                     <div className="flex items-center gap-2">
@@ -422,6 +453,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               onMoveRequest={canMove ? startMove : undefined}
               onMoveEnd={endMove}
               onMoveSave={saveMove}
+              topSlot={canAsk ? <AskMap result={ask} onResult={handleAskResult} onCite={handleLocate} /> : undefined}
+              fitTo={askFit}
             />
           </div>
         </main>

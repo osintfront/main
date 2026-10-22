@@ -213,6 +213,24 @@ export async function fetchArchivedEvents(fromIso: string, toIso: string, limit 
     .filter((e): e is PublicEvent => e !== null);
 }
 
+/** Several public events by id (live and archived), e.g. the results of "ask the map". */
+export async function fetchPublicEventsByIds(ids: string[]): Promise<PublicEvent[]> {
+  const clean = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200);
+  if (!supabase || !clean.length) return [];
+  const out = new Map<string, PublicEvent>();
+  for (const view of ['published_events', 'archived_events']) {
+    const missing = clean.filter((id) => !out.has(id));
+    if (!missing.length) break;
+    const { data, error } = await supabase.from(view).select(PUBLIC_EVENT_COLUMNS).in('id', missing);
+    if (error) throw toServiceError(error);
+    for (const row of (data ?? []) as unknown as PublishedEventRow[]) {
+      const ev = mapPublishedEventRow(row);
+      if (ev) out.set(ev.id, ev);
+    }
+  }
+  return clean.map((id) => out.get(id)).filter((e): e is PublicEvent => !!e);
+}
+
 /** One event for a shared link (?event=<id>): live first, then the archive. */
 export async function fetchPublicEvent(id: string): Promise<PublicEvent | null> {
   if (!supabase || !/^[0-9a-f-]{36}$/i.test(id)) return null;

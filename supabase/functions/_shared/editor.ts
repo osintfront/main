@@ -641,3 +641,6 @@ export async function translateBrief(title: string, text: string): Promise<{ tit
   }
   throw lastErr ?? new Error("translate failed");
 }
+
+// Shared with the "ask the map" search (_shared/ask.ts).
+export { call as callClaude, FAST_MODELS, STRONG_MODELS };
