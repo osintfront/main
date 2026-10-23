@@ -3,6 +3,7 @@ import { Bell, BellOff, Volume2 } from 'lucide-react';
 import { DEFAULT_CATEGORIES, getCategoryIcon } from '@/data/categoryRegistry';
 import {
   setAllCategoriesAudible,
+  setSoundScope,
   setCategoryAudible,
   setSoundMuted,
   useAudioReady,
@@ -108,6 +109,24 @@ export function SoundMenu() {
           {needsClick ? (
             <p className="bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">{t('sound.needsClick')}</p>
           ) : null}
+
+          <fieldset disabled={sound.muted} className={cn('border-b border-slate-100 px-4 py-2.5 dark:border-slate-800', sound.muted && 'opacity-50')}>
+            <legend className="sr-only">{t('sound.scope')}</legend>
+            <p className="pb-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t('sound.scope')}</p>
+            {(['filtered', 'all'] as const).map((id) => (
+              <label key={id} className="flex cursor-pointer items-start gap-2.5 rounded-lg py-1 text-sm text-slate-700 dark:text-slate-200">
+                <input
+                  type="radio"
+                  name="sound-scope"
+                  className="mt-0.5 size-4 accent-sky-600"
+                  checked={sound.scope === id}
+                  onChange={() => setSoundScope(id)}
+                />
+                <span>{t(id === 'filtered' ? 'sound.scopeFiltered' : 'sound.scopeAll')}</span>
+              </label>
+            ))}
+            <p className="pt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{t('sound.scopeHint')}</p>
+          </fieldset>
 
           <fieldset disabled={sound.muted} className={cn('px-2 py-2', sound.muted && 'opacity-50')}>
             <legend className="sr-only">{t('sound.categories')}</legend>

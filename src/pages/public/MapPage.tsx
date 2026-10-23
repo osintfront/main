@@ -18,11 +18,12 @@ import { MobileEventSheet } from '@/components/map/MobileEventSheet';
 import { FilterPanel } from '@/components/filters/FilterPanel';
 import type { DrawMode, MoveTarget } from '@/components/map/MapView';
 import { useArchiveRange } from '@/hooks/useArchiveRange';
-import { EMPTY_FILTERS, activeFilterCount, isOnMap, matchesFilters, needsArchive, type EventFilters, type LatLng } from '@/lib/eventFilters';
+import { EMPTY_FILTERS, activeFilterCount, isOnMap, matchesFilters, needsArchive, pointInPolygon, type EventFilters, type LatLng } from '@/lib/eventFilters';
+import type { HfcAlert } from '@/types/hfcAlert';
 import { SlidersHorizontal } from 'lucide-react';
 import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 import { installAudioUnlock, playChime } from '@/lib/notifySound';
-import { isCategoryAudible } from '@/hooks/useSoundSetting';
+import { isCategoryAudible, soundScope } from '@/hooks/useSoundSetting';
 import { HFC_CATEGORY } from '@/config/hfcThreats';
 import { useEeis } from '@/hooks/useEeis';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -129,6 +130,16 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   // Sound: browsers allow audio only after an interaction, so unlock on the first one.
   useEffect(() => installAudioUnlock(), []);
 
+  // Sound with a filter on: only for what the filter shows (visitor's choice, see SoundMenu).
+  // Filled further down, once the filtered list is known (same render).
+  const soundFilterRef = useRef<{ active: boolean; ids: Set<string>; alert: (a: HfcAlert) => boolean }>({
+    active: false,
+    ids: new Set(),
+    alert: () => true,
+  });
+  const inSoundScope = (id: string) => soundScope() === 'all' || !soundFilterRef.current.active || soundFilterRef.current.ids.has(id);
+  const alertInSoundScope = (a: HfcAlert) => soundScope() === 'all' || !soundFilterRef.current.active || soundFilterRef.current.alert(a);
+
   // Chime when a new event arrives by push (not on the first load).
   const heardEvents = useRef(new Set<string>());
   useEffect(() => {
@@ -136,7 +147,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     const fresh = [...newIds].filter((id) => !heardEvents.current.has(id));
     fresh.forEach((id) => heardEvents.current.add(id));
     // Only if at least one new event is in a category the visitor wants to hear.
-    const audible = events.some((e) => fresh.includes(e.id) && isCategoryAudible(e.category.slug));
+    const audible = events.some((e) => fresh.includes(e.id) && isCategoryAudible(e.category.slug) && inSoundScope(e.id));
     if (audible) playChime('event');
   }, [newIds, isArchive, events]);
 
@@ -146,7 +157,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     if (isArchive || !alertsReady) return;
     const seen = heardAlerts.current;
     const next = new Map(alerts.map((a) => [a.id, a.lastAlertAt]));
-    if (seen && alerts.some((a) => seen.get(a.id) !== a.lastAlertAt) && isCategoryAudible(HFC_CATEGORY.slug)) playChime('alert');
+    if (seen && alerts.some((a) => seen.get(a.id) !== a.lastAlertAt && alertInSoundScope(a)) && isCategoryAudible(HFC_CATEGORY.slug)) playChime('alert');
     heardAlerts.current = next;
   }, [alerts, alertsReady, isArchive]);
   const [alertFocus, setAlertFocus] = useState<{ id: string; nonce: number } | null>(null);
@@ -207,6 +218,22 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()),
     [ask, allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers],
   );
+  {
+    const f = effectiveFilters;
+    soundFilterRef.current = {
+      active: !!ask || !!deferredQuery || filterCount > 0,
+      ids: new Set(visibleEvents.map((e) => e.id)),
+      alert: (a) => {
+        if (f.categories.length && !f.categories.includes(HFC_CATEGORY.slug)) return false;
+        if (f.areas.length && !f.areas.includes('israel')) return false;
+        if (f.polygon && f.polygon.length >= 3) {
+          const pts: LatLng[] = [...(a.center ? [a.center] : []), ...a.areaPoints.map((p) => [p.lat, p.lng] as LatLng)];
+          if (!pts.some((p) => pointInPolygon(p, f.polygon!))) return false;
+        }
+        return true;
+      },
+    };
+  }
   // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
   const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
 

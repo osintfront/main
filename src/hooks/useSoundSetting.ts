@@ -8,10 +8,15 @@ import { useSyncExternalStore } from 'react';
  */
 const KEY_MASTER = 'ofm.sound';
 const KEY_CATEGORIES = 'ofm.sound.mutedCategories';
+const KEY_SCOPE = 'ofm.sound.scope';
+
+/** With a filter on: sound only for what the filter shows, or for everything. */
+export type SoundScope = 'filtered' | 'all';
 
 interface SoundState {
   muted: boolean;
   mutedCategories: ReadonlySet<string>;
+  scope: SoundScope;
 }
 
 const listeners = new Set<() => void>();
@@ -19,23 +24,26 @@ const listeners = new Set<() => void>();
 function load(): SoundState {
   let muted = false;
   let cats: string[] = [];
+  let scope: SoundScope = 'filtered';
   try {
+    if (window.localStorage.getItem(KEY_SCOPE) === 'all') scope = 'all';
     muted = window.localStorage.getItem(KEY_MASTER) === 'off';
     const raw = JSON.parse(window.localStorage.getItem(KEY_CATEGORIES) ?? '[]');
     if (Array.isArray(raw)) cats = raw.filter((x): x is string => typeof x === 'string').slice(0, 100);
   } catch {
     // ignore unreadable storage
   }
-  return { muted, mutedCategories: new Set(cats) };
+  return { muted, mutedCategories: new Set(cats), scope };
 }
 
-let state: SoundState = typeof window !== 'undefined' ? load() : { muted: false, mutedCategories: new Set() };
+let state: SoundState = typeof window !== 'undefined' ? load() : { muted: false, mutedCategories: new Set(), scope: 'filtered' };
 
 function commit(next: SoundState) {
   state = next;
   try {
     window.localStorage.setItem(KEY_MASTER, next.muted ? 'off' : 'on');
     window.localStorage.setItem(KEY_CATEGORIES, JSON.stringify([...next.mutedCategories]));
+    window.localStorage.setItem(KEY_SCOPE, next.scope);
   } catch {
     // Private mode / blocked storage
   }
@@ -56,6 +64,14 @@ export function isSoundMuted(): boolean {
 /** Should an event of this category make a sound? (master switch + per-category choice) */
 export function isCategoryAudible(slug: string): boolean {
   return !state.muted && !state.mutedCategories.has(slug);
+}
+
+export function soundScope(): SoundScope {
+  return state.scope;
+}
+
+export function setSoundScope(scope: SoundScope) {
+  commit({ ...state, scope });
 }
 
 export function setSoundMuted(muted: boolean) {
