@@ -18,7 +18,7 @@
 import { logUsage } from "./usage.ts";
 
 export interface EditorSource { name: string; url: string | null }
-export interface EditorLocation { name: string; name_en: string; country: string; lat: number | null; lng: number | null; precision?: "exact" | "region" }
+export interface EditorLocation { name: string; name_en: string; country: string; lat: number | null; lng: number | null; precision?: "exact" | "region"; category_slug?: string }
 
 export interface EditResult {
   relevant: boolean;
@@ -59,6 +59,9 @@ export interface EditInput {
   tier?: "fast" | "strong";
   /** Editors' past category corrections (formatCategoryLessons), followed when choosing category_slug. */
   categoryLessons?: string;
+  /** Quick compose ("Report event"): list every place (up to maxPlaces), each with the category of what happened there. */
+  detailedPlaces?: boolean;
+  maxPlaces?: number;
 }
 
 export interface CategoryCorrection { text: string; from_slug: string; to_slug: string }
@@ -167,7 +170,15 @@ const SYSTEM_CRAWLER = `
 - is_current: true רק אם הידיעה מדווחת על התפתחות חדשה מהיממה-יומיים האחרונים ביחס לתאריך היום. false אם זו כתבת רקע, ניתוח, סקירה, ראיון או דיווח על אירועים ישנים (גם אם פורסמה עכשיו). ידיעה עם is_current=false לעולם לא תהפוך לאירוע — היא רק עשויה להתווסף כמקור רקע לאירוע קיים.
 - category_slug: אחד מהקטגוריות המותרות.`;
 
-function tool(mode: EditInput["mode"], categories: { slug: string; name: string }[]) {
+const SYSTEM_DETAILED_PLACES = `
+מצב דיווח מפורט (הזנה ידנית של עורך):
+- locations: כל מקום שמוזכר בדיווח, בלי לדלג (עד המגבלה), בסדר הופעתם. לכל מקום category_slug של מה שקרה בו לפי הכותרת שתחתיה הוא מופיע (למשל "الغارات الحربية" → airstrike, "القصف المدفعي" → artillery-shelling, "التفجيرات" → explosion, "القنابل الصوتية"/"القنابل المضيئة" → military-activity, כטב"ם → uav, ירי → shooting-gunfire).
+- "أطراف X" / "اطراف X" / "خراج X" / "محيط X" (פאתי X) → המקום הוא X. "وادي X" → ואדי X (מקום בפני עצמו). "سهل X" → מישור X. "بين بلدتي A و B" → שני המקומות A ו-B. "بحر X" / "شاطئ X" → X (חוף/ים).
+- מקום שמופיע פעמיים (תחת שתי כותרות) — פעם אחת, עם הקטגוריה החמורה יותר.
+- category_slug של הדיווח כולו: סוג האירוע הדומיננטי (החמור או השכיח ביותר).
+- הכותרת והתמצית מסכמות את הכול (למשל "סיכום תקיפות ישראליות בדרום לבנון: X תקיפות אוויר, Y הפגזות…").`;
+
+function tool(mode: EditInput["mode"], categories: { slug: string; name: string }[], detailed = false, maxPlaces = 10) {
   const props: Record<string, unknown> = {
     countries: { type: "array", items: { type: "string" }, description: "מדינות מעורבות בעברית, למשל [\"לבנון\"] או [\"ישראל\",\"איראן\"]" },
     title: { type: "string", description: "כותרת בעברית, עד 120 תווים" },
@@ -176,7 +187,7 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
     summary_en: { type: "string", description: "The summary in English, one sentence, max 100 characters" },
     locations: {
       type: "array",
-      description: "כל המקומות הספציפיים שמוזכרים — כל מקום תקיפה בנפרד (עד 10, העיקרי ראשון; לא מדינות ולא dateline); קואורדינטות רק אם אתה בטוח, אחרת null",
+      description: `כל המקומות הספציפיים שמוזכרים — כל מקום תקיפה בנפרד (עד ${maxPlaces}, העיקרי ראשון; לא מדינות ולא dateline); קואורדינטות רק אם אתה בטוח, אחרת null`,
       items: {
         type: "object",
         properties: {
@@ -185,8 +196,9 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
           country: { type: "string", description: "Country the place is in, in English" },
           lat: { type: ["number", "null"] },
           lng: { type: ["number", "null"] },
+          ...(detailed && categories.length ? { category_slug: { type: "string", enum: categories.map((c) => c.slug), description: "What happened at this place (its own category)" } } : {}),
         },
-        required: ["name", "name_en"],
+        required: detailed && categories.length ? ["name", "name_en", "category_slug"] : ["name", "name_en"],
       },
     },
     sources: {
@@ -289,13 +301,21 @@ const COUNTRY_HE: Record<string, string> = {
 function normalise(raw: Record<string, any>, model: string, mode: EditInput["mode"], input: EditInput): EditResult {
   const cats = new Set((input.categories ?? []).map((c) => c.slug));
   const candIds = new Set((input.candidates ?? []).map((c) => c.id));
-  const locations = (Array.isArray(raw.locations) ? raw.locations : []).slice(0, 10).map((l: any) => ({
+  const seenPlace = new Set<string>();
+  const locations = (Array.isArray(raw.locations) ? raw.locations : []).slice(0, input.maxPlaces ?? 10).map((l: any) => ({
     name: clean(l?.name, 120),
     name_en: clean(l?.name_en, 120),
     country: clean(l?.country, 60),
     lat: num(l?.lat, -90, 90),
     lng: num(l?.lng, -180, 180),
-  })).filter((l: EditorLocation) => l.name);
+    ...(typeof l?.category_slug === "string" && cats.has(l.category_slug) ? { category_slug: l.category_slug } : {}),
+  })).filter((l: EditorLocation) => {
+    // The same place listed twice (e.g. under two headings): keep the first.
+    const k = (l.name_en || l.name).toLowerCase();
+    if (!l.name || seenPlace.has(k)) return false;
+    seenPlace.add(k);
+    return true;
+  });
   return {
     relevant: mode === "whatsapp" ? true : raw.relevant === true,
     duplicate_of: typeof raw.duplicate_of === "string" && candIds.has(raw.duplicate_of) ? raw.duplicate_of : null,
@@ -330,7 +350,7 @@ export async function editReport(input: EditInput): Promise<EditResult> {
   const categories = input.categories ?? [];
   const system = SYSTEM_BASE + (input.mode === "crawler"
     ? SYSTEM_CRAWLER + `\nקטגוריות מותרות: ${categories.map((c) => `${c.slug} (${c.name})`).join(", ")}` + (input.categoryLessons ?? "")
-    : "");
+    : "") + (input.detailedPlaces ? SYSTEM_DETAILED_PLACES : "");
   // Strip site-name boilerplate ("| Lebanon News") before judging how much text there is.
   const substance = input.text.replace(/\|\s*[^\n|]{0,40}$/gm, "").replace(/\s+/g, " ").trim();
   const thin = substance.length < 300;
@@ -346,7 +366,7 @@ ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשע
   // The long system prompt + tools are the same on every call: cache them (cache reads cost
   // ~10% of normal input). The cache breakpoint on the system block covers the tools too.
   const systemBlocks = [{ type: "text", text: system, cache_control: { type: "ephemeral" } }];
-  const editorTool = tool(input.mode, categories);
+  const editorTool = tool(input.mode, categories, !!input.detailedPlaces, input.maxPlaces ?? 10);
   const tier = input.tier ?? editorTier(input.text);
   const MODELS = tier === "strong" ? STRONG_MODELS : FAST_MODELS;
   const webSearch = tier === "strong" && input.allowedDomains?.length
@@ -514,8 +534,12 @@ export function translationsFor(r: EditResult): Record<string, { title?: string;
 }
 
 /** Places for events.locations (the database looks up the ones without coordinates). */
-export function locationsForDb(r: EditResult): { name: string; name_en: string; lat: number | null; lng: number | null; precision?: string }[] {
-  return r.locations.slice(0, 10).map((l) => ({ name: l.name, name_en: l.name_en, lat: l.lat, lng: l.lng, ...(l.precision ? { precision: l.precision } : {}) }));
+export function locationsForDb(r: EditResult, max = 10): { name: string; name_en: string; lat: number | null; lng: number | null; precision?: string; category_slug?: string }[] {
+  return r.locations.slice(0, max).map((l) => ({
+    name: l.name, name_en: l.name_en, lat: l.lat, lng: l.lng,
+    ...(l.precision ? { precision: l.precision } : {}),
+    ...(l.category_slug ? { category_slug: l.category_slug } : {}),
+  }));
 }
 
 /** Main country in English for the events.country column (falls back to the Hebrew list). */

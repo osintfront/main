@@ -47,6 +47,18 @@ export interface EventPlace {
   latitude: number;
   longitude: number;
   precision: LocationPrecision | null;
+  /** What happened at this place, when it differs from the event's category (detailed reports). */
+  categorySlug?: string | null;
+}
+
+/** A place in events.locations as written by the report form (quick compose). */
+export interface PlaceInput {
+  name: string;
+  name_en: string;
+  lat: number | null;
+  lng: number | null;
+  precision?: string;
+  category_slug?: string;
 }
 
 /** Per-language text: headline, ≤100-char summary, and the expanded report (written on "expand"). */
@@ -139,6 +151,8 @@ export interface AdminEvent {
 
 /** Editable fields of an event (what the form submits). */
 export interface EventInput {
+  /** Further places (quick compose); undefined = leave the event's places as they are. */
+  locations?: PlaceInput[];
   title: string;
   description: string;
   originalReportText: string;

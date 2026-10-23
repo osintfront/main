@@ -16,6 +16,7 @@ import { formatEventTime } from '@/utils/time';
 import { buildHfcPopup } from './hfcPopup';
 import { BASE_STYLES, createBaseLayer, createFiresLayer, loadBaseStyle, loadFiresOn, saveBaseStyle, saveFiresOn, type BaseStyle } from './baseLayer';
 import { createMarkerIcon } from './markerIcon';
+import { DEFAULT_CATEGORIES } from '@/data/categoryRegistry';
 import { buildPopupContent } from './popupContent';
 import { IconButton } from '@/components/common/IconButton';
 
@@ -390,8 +391,9 @@ export function MapView({
       if (markersRef.current.has(event.id)) continue; // unchanged: keep its pins
       const selected = event.id === selectedRef.current;
       const places = [
-        { lat: event.latitude, lng: event.longitude, label: event.title, place: null as number | null },
+        { lat: event.latitude, lng: event.longitude, label: event.title, place: null as number | null, categorySlug: null as string | null },
         ...(event.places ?? []).map((p) => ({
+          categorySlug: p.categorySlug ?? null,
           place: p.index as number | null,
           lat: p.latitude,
           lng: p.longitude,
@@ -400,10 +402,12 @@ export function MapView({
       ];
       const markers: L.Marker[] = [];
       places.forEach((place, index) => {
+        // A place of a detailed report may have its own kind (airstrike / shelling / …).
+        const own = place.categorySlug && place.categorySlug !== event.category.slug ? DEFAULT_CATEGORIES.find((c) => c.slug === place.categorySlug) : undefined;
         const marker = L.marker([place.lat, place.lng], {
           icon: createMarkerIcon({
-            iconName: event.category.icon,
-            color: event.category.markerColor,
+            iconName: own?.icon ?? event.category.icon,
+            color: own?.color ?? event.category.markerColor,
             severity: event.severity,
             selected,
             breaking: event.isBreaking,
@@ -415,7 +419,7 @@ export function MapView({
           riseOnHover: true,
           zIndexOffset: selected ? 1000 : event.severity === 'critical' ? 400 : 0,
         });
-        Object.assign(marker.options, { ofmColor: event.category.markerColor, ofmSeverity: event.severity });
+        Object.assign(marker.options, { ofmColor: own?.color ?? event.category.markerColor, ofmSeverity: event.severity, ofmIcon: own?.icon ?? event.category.icon });
         if (!compact) {
           marker.bindPopup(
             () =>
@@ -663,8 +667,8 @@ export function MapView({
       markers.forEach((marker, index) => {
         marker.setIcon(
           createMarkerIcon({
-            iconName: event.category.icon,
-            color: event.category.markerColor,
+            iconName: (marker.options as { ofmIcon?: string }).ofmIcon ?? event.category.icon,
+            color: (marker.options as { ofmColor?: string }).ofmColor ?? event.category.markerColor,
             severity: event.severity,
             selected,
             breaking: event.isBreaking,

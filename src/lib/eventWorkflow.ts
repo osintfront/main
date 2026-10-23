@@ -60,7 +60,9 @@ export function availableActions(event: Pick<AdminEvent, 'createdBy' | 'status' 
     const target = ACTION_TARGET[action];
     if (target === event.status || !canTransition(event.status, target)) return;
     const needed = TARGET_PERMISSION[target];
-    if (needed && !who.can(needed)) return;
+    // Editors publish drafts and reports waiting for review (event.publish.draft).
+    const draftPublish = target === 'published' && (event.status === 'draft' || event.status === 'pending_review') && who.can('event.publish.draft');
+    if (needed && !who.can(needed) && !draftPublish) return;
     // Editors (edit.own only) may only move between draft and pending review.
     if (!who.can('event.edit.any') && !(target === 'pending_review' || target === 'draft' || (target === 'published' && who.can('event.publish')))) return;
     actions.push(action);

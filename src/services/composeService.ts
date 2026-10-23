@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { PlaceInput } from '@/types/event';
 
 /** What the editor agent made of a free-text report (nothing is saved). */
 export interface ComposeResult {
@@ -15,6 +16,8 @@ export interface ComposeResult {
   latitude: number | null;
   longitude: number | null;
   precision: 'exact' | 'region' | null;
+  /** Every place of the report (main first), each with what happened there. */
+  locations: PlaceInput[];
 }
 
 /** Quick compose: one text in any language → the report form's fields. */

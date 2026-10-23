@@ -129,6 +129,18 @@ function toRow(input: EventInput) {
     is_verified: input.isVerified,
     geocoding_confidence: input.geocodingConfidence,
     coordinates_manually_corrected: input.coordinatesManuallyCorrected,
+    ...(input.locations
+      ? {
+          locations: input.locations.slice(0, 30).map((l) => ({
+            name: clean(l.name, 120),
+            name_en: clean(l.name_en, 120),
+            lat: l.lat,
+            lng: l.lng,
+            ...(l.precision ? { precision: l.precision } : {}),
+            ...(l.category_slug ? { category_slug: l.category_slug } : {}),
+          })),
+        }
+      : {}),
   };
 }
 

@@ -108,6 +108,7 @@ export function EventsListPage() {
   const activeFilterCount = (['categoryId', 'severity', 'country', 'verified', 'breaking', 'from', 'to'] as const).filter((k) => !!filters[k]).length + (filters.mine ? 1 : 0);
 
   const act = async (event: AdminEvent, kind: 'publish' | 'archive' | 'duplicate' | 'delete') => {
+    if (kind === 'duplicate' && !can('event.publish')) return; // editors: no duplicating
     if (busyId) return;
     if (kind === 'publish') {
       const v = validateEvent(eventToInput(event), 'published');
@@ -219,7 +220,7 @@ export function EventsListPage() {
   };
   const canMovePins = can('event.edit.any') || can('event.edit.own');
   // Bulk approve / delete: admins only (editors only edit).
-  const canBulk = can('event.publish') || can('event.delete');
+  const canBulk = can('event.publish') || can('event.publish.draft') || can('event.delete');
 
   const approveChange = async (ev: AdminEvent) => {
     setBusyId(ev.id);
@@ -560,7 +561,7 @@ export function EventsListPage() {
                             <Archive className="size-4" aria-hidden />
                           </IconButton>
                         ) : null}
-                        {can('event.create') && !ev.deletedAt ? (
+                        {can('event.create') && can('event.publish') && !ev.deletedAt ? (
                           <IconButton label={t('list.duplicate')} onClick={() => void act(ev, 'duplicate')} disabled={busy} tooltipSide="bottom-end">
                             <Copy className="size-4" aria-hidden />
                           </IconButton>

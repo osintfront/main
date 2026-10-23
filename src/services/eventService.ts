@@ -109,7 +109,7 @@ function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
   const out: EventPlace[] = [];
   for (const [index, p] of v.entries()) {
     if (!p || typeof p !== 'object') continue;
-    const o = p as { name?: unknown; name_en?: unknown; lat?: unknown; lng?: unknown; precision?: unknown };
+    const o = p as { name?: unknown; name_en?: unknown; lat?: unknown; lng?: unknown; precision?: unknown; category_slug?: unknown };
     const lat = toNumber(typeof o.lat === 'number' || typeof o.lat === 'string' ? o.lat : null);
     const lng = toNumber(typeof o.lng === 'number' || typeof o.lng === 'string' ? o.lng : null);
     if (lat === null || lng === null || lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
@@ -122,8 +122,9 @@ function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
       latitude: lat,
       longitude: lng,
       precision: (LOCATION_PRECISIONS as readonly string[]).includes(String(o.precision)) ? (o.precision as LocationPrecision) : null,
+      categorySlug: typeof o.category_slug === 'string' ? o.category_slug.slice(0, 60) : null,
     });
-    if (out.length >= 10) break;
+    if (out.length >= 30) break;
   }
   return out;
 }

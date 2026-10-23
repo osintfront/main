@@ -172,7 +172,24 @@ async function compose(body: Record<string, unknown>) {
     categories: (cats ?? []).map((c: any) => ({ slug: c.slug, name: c.name })),
     categoryLessons: formatCategoryLessons(corrections ?? []),
     origin: { name: String(body?.source_name ?? "").slice(0, 120), url: typeof body?.source_url === "string" ? body.source_url : undefined, sentAt },
+    detailedPlaces: true,
+    maxPlaces: 30,
   });
+  // Every place: our own places database first (villages the geocoder misses), then the
+  // geocoder's / model's coordinates.
+  await Promise.all(r.locations.map(async (l) => {
+    for (const name of [l.name_en, l.name].filter(Boolean)) {
+      const { data: hit } = await db.rpc("geo_lookup", { p_name: name, p_country: l.country || r.country || null });
+      const c = (hit as { geom?: { coordinates?: unknown } } | null)?.geom?.coordinates;
+      if (Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number") {
+        l.lat = Math.round(c[1] * 1e5) / 1e5;
+        l.lng = Math.round(c[0] * 1e5) / 1e5;
+        l.precision = (hit as any).feature_class === "A" ? "region" : "exact";
+        if ((hit as any).name_he && !/[\u0590-\u05FF]/.test(l.name)) l.name = (hit as any).name_he;
+        return;
+      }
+    }
+  }));
   let point = mainPoint(r);
   // Model/geocoder found no coordinates: try our own places database.
   if (!point && r.locations[0]) {
@@ -200,7 +217,7 @@ async function compose(body: Record<string, unknown>) {
     latitude: point?.lat ?? null,
     longitude: point?.lng ?? null,
     precision: point?.precision ?? null,
-    locations: locationsForDb(r),
+    locations: locationsForDb(r, 30),
     translations: translationsFor(r),
     model: r.model,
   });
@@ -256,7 +273,7 @@ async function handle(req: Request): Promise<Response> {
       asUser.rpc("has_permission", { p_permission: "event.create" }),
       asUser.rpc("has_permission", { p_permission: "event.edit.any" }),
     ]);
-    if (a !== true && b !== true) return json({ error: "unauthorized" }, 401);
+    if (a !== true && b !== true && !(await cronOk(req))) return json({ error: "unauthorized" }, 401);
     try {
       return await compose(body);
     } catch (e) {

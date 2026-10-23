@@ -19,6 +19,7 @@ export const PERMISSIONS = [
   'event.edit.any',
   'event.review',
   'event.publish',
+  'event.publish.draft',
   'event.archive',
   'event.delete',
   'category.manage',
@@ -43,6 +44,7 @@ const ADMIN_PERMISSIONS: readonly Permission[] = [
   'event.edit.any',
   'event.review',
   'event.publish',
+  'event.publish.draft',
   'event.archive',
   'event.delete',
   'category.manage',
@@ -54,9 +56,10 @@ const ADMIN_PERMISSIONS: readonly Permission[] = [
 const ROLE_PERMISSIONS: Record<AppRole, readonly Permission[]> = {
   super_admin: PERMISSIONS,
   admin: ADMIN_PERMISSIONS,
-  // Back office: events list + "Report event" (create), edit (category, place, text); no publish/archive/delete.
-  // A new report is a draft or goes for review; every edit waits for an admin (trigger events_editor_review).
-  editor: ['admin.access', 'event.view.operational', 'event.view.internal', 'event.create', 'event.edit.own', 'event.edit.any'],
+  // Back office: events list + "Report event"; may publish drafts / reports waiting for review
+  // (event.publish.draft); a change to a live event waits for an admin (trigger events_editor_review).
+  // No archive/delete/duplicate.
+  editor: ['admin.access', 'event.view.operational', 'event.view.internal', 'event.create', 'event.edit.own', 'event.edit.any', 'event.publish.draft'],
   // "User": the public map with its filters only.
   viewer: [],
 };

@@ -188,6 +188,7 @@ export function EventEditorPage() {
         region: r.region || prev.region,
         city: r.city || prev.city,
         locationName: r.locationName || prev.locationName,
+        locations: Array.isArray(r.locations) ? r.locations : prev.locations,
         ...(r.latitude !== null && r.longitude !== null
           ? { latitude: r.latitude, longitude: r.longitude, locationPrecision: r.precision ?? 'exact', geocodingConfidence: null, coordinatesManuallyCorrected: false }
           : {}),
@@ -390,6 +391,38 @@ export function EventEditorPage() {
             disabled={composing}
             className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
           />
+          {input.locations?.length ? (
+            <div className="mt-3">
+              <p className="mb-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">{t('compose.places', { count: input.locations.length })}</p>
+              <ul className="flex flex-wrap gap-1.5">
+                {input.locations.map((l, i) => {
+                  const cat = categories.find((c) => c.slug === l.category_slug);
+                  return (
+                    <li
+                      key={`${l.name}-${i}`}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white py-1 pe-1 ps-2.5 text-xs ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700"
+                      title={l.lat === null ? t('compose.noCoords') : `${l.lat}, ${l.lng}`}
+                    >
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: cat?.markerColor ?? '#94a3b8' }} aria-hidden />
+                      <span dir="auto" className={l.lat === null ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}>
+                        {l.name}
+                      </span>
+                      {cat ? <span className="text-slate-400">· {categoryLabel(cat.slug, cat.name)}</span> : null}
+                      <button
+                        type="button"
+                        onClick={() => set('locations', input.locations!.filter((_, j) => j !== i))}
+                        aria-label={t('compose.removePlace', { name: l.name })}
+                        className="inline-flex size-5 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{t('compose.placesHint')}</p>
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <Button type="button" loading={composing} disabled={quickText.trim().length < 10} onClick={() => void compose()}>
               <Sparkles className="size-4" aria-hidden />
@@ -668,7 +701,7 @@ export function EventEditorPage() {
         {/* Sticky action bar */}
         <div className="fixed inset-x-0 bottom-0 z-[1100] border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:start-[68px] lg:start-64 dark:border-slate-800 dark:bg-slate-950/95">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2">
-            <Button variant="ghost" onClick={() => navigate('/admin/events')} disabled={!!busy}>
+            <Button variant="danger" onClick={() => navigate('/admin/events')} disabled={!!busy}>
               {t('common.cancel')}
             </Button>
             {event?.deletedAt ? (
@@ -696,7 +729,7 @@ export function EventEditorPage() {
                       <Send className="size-4" aria-hidden />
                       {t('form.submitReview')}
                     </Button>
-                    {can('event.publish') ? (
+                    {can('event.publish') || can('event.publish.draft') ? (
                       <Button onClick={() => void run('publish', 'published')} loading={busy === 'publish'} disabled={!!busy && busy !== 'publish'}>
                         <CheckCircle2 className="size-4" aria-hidden />
                         {t('form.publish')}
