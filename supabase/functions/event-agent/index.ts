@@ -13,6 +13,8 @@
 //                                Nothing is saved; the form is filled for the person to check.
 //   {action:"ask", question}     signed-in users — "ask the map": a free-text question about our events
 //                                → answer + event ids (shown on the map). 40 questions / hour / user.
+//   {action:"dedupe", minutes?}  cron secret — fold duplicate reports of one incident into one event
+//                                (events created since the last run vs. the last 12 hours).
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -21,6 +23,7 @@ import { setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
+import { dedupeRecent } from "../_shared/dedupe.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -283,6 +286,14 @@ async function handle(req: Request): Promise<Response> {
   if (action === "edit") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
+  }
+  if (action === "dedupe") {
+    const m = Number(body?.minutes);
+    try {
+      return json({ ok: true, ...(await dedupeRecent(db, Number.isFinite(m) && m > 0 ? Math.min(m, 48 * 60) : undefined)) });
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
   }
   if (action === "translate") return await translate(Math.min(Math.max(Number(body?.limit ?? 20) | 0, 1), 60), body?.drafts === true);
   return json({ error: "unknown action" }, 400);
