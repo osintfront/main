@@ -112,7 +112,7 @@ async function merge(db: Db, keep: Row, dup: Row): Promise<void> {
  * sinceMinutes: events created in this window are "new" (default: since the last run).
  * Returns the merges done.
  */
-export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): Promise<{ checked: number; merged: { keep: string; dup: string; keep_title: string; dup_title: string; incident?: string }[] }> {
+export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): Promise<{ checked: number; considered?: number; proposed?: unknown; merged: { keep: string; dup: string; keep_title: string; dup_title: string; incident?: string }[] }> {
   const { data: st } = await db.from("intel_config").select("value").eq("key", "dedupe_last_run").maybeSingle();
   const now = new Date();
   const lastRun = st?.value ? new Date(st.value) : new Date(now.getTime() - 30 * 60000);
@@ -150,6 +150,7 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   }).join("\n");
 
   const pairs = await ask(lines);
+  if (dry) console.log(JSON.stringify({ lines: list.length, pairs }));
   const merged: { keep: string; dup: string; keep_title: string; dup_title: string; incident?: string }[] = [];
   const gone = new Set<string>();
   // Union of pairs → groups; keep the earliest-created event of each group.
@@ -162,5 +163,5 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
     gone.add(dup.id);
     merged.push({ keep: keep.id, dup: dup.id, keep_title: keep.title.slice(0, 120), dup_title: dup.title.slice(0, 120), incident: String(p.incident ?? "").slice(0, 200) });
   }
-  return { checked: fresh.size, merged };
+  return { checked: fresh.size, merged, ...(dry ? { considered: list.length, proposed: pairs } : {}) };
 }
