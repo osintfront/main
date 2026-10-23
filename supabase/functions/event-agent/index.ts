@@ -290,7 +290,7 @@ async function handle(req: Request): Promise<Response> {
   if (action === "dedupe") {
     const m = Number(body?.minutes);
     try {
-      return json({ ok: true, ...(await dedupeRecent(db, Number.isFinite(m) && m > 0 ? Math.min(m, 48 * 60) : undefined)) });
+      return json({ ok: true, ...(await dedupeRecent(db, Number.isFinite(m) && m > 0 ? Math.min(m, 48 * 60) : undefined, body?.dry === true)) });
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }
