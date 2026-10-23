@@ -334,7 +334,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         />
       ) : null}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(340px,380px)_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)_196px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(340px,380px)_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]">
         {/* Column 1 — live feed (inline-start: left in English, right in Hebrew) */}
         <aside
           className={cn(
@@ -414,7 +414,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                     <AdSlot variant="square" slotId="feed-rectangle" />
                   </div>
                 ) : null}
-                <SiteLinks className="justify-center border-t border-slate-200 px-3 py-2 xl:hidden dark:border-slate-800" />
+                <SiteLinks className="justify-center border-t border-slate-200 px-3 py-2 dark:border-slate-800" />
               </>
             }
             inlineAd={showAds ? <AdSlot variant="square" slotId="feed-rectangle-inline" className="py-1" /> : undefined}
@@ -459,12 +459,6 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           </div>
         </main>
 
-        {/* Column 3 — legend + skyscraper (wide screens) */}
-        <aside className="ofm-scroll hidden min-h-0 flex-col items-center gap-5 overflow-y-auto border-s border-slate-200 bg-white px-4 py-4 xl:flex dark:border-slate-800 dark:bg-slate-950">
-          <CategoryLegend events={mapEvents} alertCount={alerts.length} />
-          {showAds ? <AdSlot variant="skyscraper" slotId="sidebar-skyscraper" /> : null}
-          <SiteLinks className="mt-auto justify-center" />
-        </aside>
       </div>
 
       {sheetEvent ? (

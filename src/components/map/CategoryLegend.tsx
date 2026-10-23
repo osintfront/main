@@ -4,7 +4,7 @@ import { useI18n } from '@/i18n';
 import type { PublicEvent } from '@/types/event';
 import { HFC_CATEGORY } from '@/config/hfcThreats';
 
-/** Categories present on the map with event counts. Becomes the layer control in Phase 6. */
+/** Map legend: what the symbols on the map mean (categories on the map, with counts). Explains only — filtering is in the filter panel. */
 export function CategoryLegend({ events, alertCount = 0 }: { events: PublicEvent[]; alertCount?: number }) {
   const { t, categoryLabel } = useI18n();
   const rows = useMemo(() => {
@@ -25,6 +25,7 @@ export function CategoryLegend({ events, alertCount = 0 }: { events: PublicEvent
       <h2 id="legend-heading" className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         {t('map.legend')}
       </h2>
+      <p className="mb-2 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{t('map.legendFilterHint')}</p>
       {rows.length === 0 ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('map.legendEmpty')}</p>
       ) : (
@@ -47,6 +48,18 @@ export function CategoryLegend({ events, alertCount = 0 }: { events: PublicEvent
           })}
         </ul>
       )}
+      <ul className="mt-3 space-y-1.5 border-t border-slate-200 pt-2 text-[11px] leading-snug text-slate-600 dark:border-slate-700 dark:text-slate-400">
+        <li className="flex items-start gap-2">
+          <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-bold text-slate-800 ring-2 ring-sky-500 dark:bg-slate-800 dark:text-white" aria-hidden>
+            5
+          </span>
+          <span>{t('map.legendCluster')}</span>
+        </li>
+        <li className="flex items-start gap-2">
+          <span className="mt-0.5 inline-block size-5 shrink-0 rounded border-2 border-red-600 bg-red-500/30" aria-hidden />
+          <span>{t('map.legendAlerts')}</span>
+        </li>
+      </ul>
     </section>
   );
 }

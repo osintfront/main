@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
-import { Check, Globe2, Layers, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
+import { BookOpen, Check, Globe2, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
 import { octagon, type LatLng } from '@/lib/eventFilters';
 import type { Severity } from '@/types/event';
 import { mapConfig } from '@/config/map';
@@ -180,6 +180,7 @@ export function MapView({
   movePosRef.current = movePos;
   const [moveBusy, setMoveBusy] = useState(false);
   const [baseStyle, setBaseStyle] = useState<BaseStyle>(loadBaseStyle);
+  const [styleFailed, setStyleFailed] = useState<BaseStyle | null>(null);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [firesOn, setFiresOn] = useState(loadFiresOn);
   const firesLayerRef = useRef<L.Layer | null>(null);
@@ -249,6 +250,24 @@ export function MapView({
     const layer = createBaseLayer(theme, undefined, baseStyle);
     layer.addTo(map);
     baseLayerRef.current = layer;
+    // A style whose tile server refuses us shows an empty map: fall back to the standard map.
+    if (baseStyle === 'standard') return;
+    let loaded = 0;
+    let failed = 0;
+    const onLoad = () => (loaded += 1);
+    const onError = () => {
+      failed += 1;
+      if (failed >= 6 && loaded === 0) {
+        setStyleFailed(baseStyle);
+        setBaseStyle('standard');
+      }
+    };
+    layer.on('tileload', onLoad);
+    layer.on('tileerror', onError);
+    return () => {
+      layer.off('tileload', onLoad);
+      layer.off('tileerror', onError);
+    };
   }, [theme, baseStyle]);
 
   // 2a. Zoom to a set of points (search results).
@@ -816,17 +835,7 @@ export function MapView({
         >
           <MapIcon className="size-4" aria-hidden />
         </IconButton>
-        {legend ? (
-          <IconButton
-            label={t('map.showLegend')}
-            onClick={() => setLegendOpen((v) => !v)}
-            aria-expanded={legendOpen}
-            className="pointer-events-auto shadow-md xl:hidden"
-            variant="map"
-          >
-            <Layers className="size-4" aria-hidden />
-          </IconButton>
-        ) : null}
+
       </div>
       {drawMode ? (
         <div className="pointer-events-none absolute inset-x-0 top-3 z-[700] flex justify-center px-3">
@@ -919,6 +928,7 @@ export function MapView({
               role="menuitemradio"
               aria-checked={baseStyle === id}
               onClick={() => {
+                setStyleFailed(null);
                 setBaseStyle(id);
                 saveBaseStyle(id);
                 setStylesOpen(false);
@@ -929,7 +939,10 @@ export function MapView({
               }
             >
               {baseStyle === id ? <Check className="size-4" aria-hidden /> : <span className="size-4" aria-hidden />}
-              {t(`map.style.${id}`)}
+              <span className="min-w-0 flex-1">
+                {t(`map.style.${id}`)}
+                {styleFailed === id ? <span className="block text-[11px] font-normal text-amber-700 dark:text-amber-400">{t('map.styleFailed')}</span> : null}
+              </span>
             </button>
           ))}
           <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-slate-100 px-2.5 pt-2 pb-1.5 text-sm text-slate-700 dark:border-slate-800 dark:text-slate-200">
@@ -977,8 +990,24 @@ export function MapView({
           </div>
         </div>
       ) : null}
+      {legend && !drawMode && !moving ? (
+        <button
+          type="button"
+          onClick={() => setLegendOpen((v) => !v)}
+          aria-expanded={legendOpen}
+          className={
+            'absolute bottom-6 start-3 z-[600] inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold shadow-lg ring-1 backdrop-blur ' +
+            (legendOpen
+              ? 'bg-sky-600 text-white ring-sky-700'
+              : 'bg-white/95 text-slate-800 ring-slate-900/10 hover:bg-white dark:bg-slate-900/95 dark:text-white dark:ring-white/10')
+          }
+        >
+          <BookOpen className="size-4" aria-hidden />
+          {t('map.showLegend')}
+        </button>
+      ) : null}
       {legend && legendOpen ? (
-        <div className="ofm-scroll absolute start-14 top-3 z-[600] max-h-[min(60vh,420px)] w-56 overflow-y-auto rounded-xl bg-white/95 p-3 shadow-xl ring-1 ring-slate-900/10 backdrop-blur xl:hidden dark:bg-slate-900/95 dark:ring-white/10">
+        <div className="ofm-scroll absolute bottom-16 start-3 z-[600] max-h-[min(60vh,460px)] w-64 overflow-y-auto rounded-xl bg-white/95 p-3 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10">
           <button
             type="button"
             onClick={() => setLegendOpen(false)}

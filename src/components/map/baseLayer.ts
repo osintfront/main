@@ -24,13 +24,15 @@ const STYLE_SPECS: Record<Exclude<BaseStyle, 'standard'>, TileLayerSpec> = {
 };
 
 const STORAGE_KEY = 'ofm.mapStyle';
+/** What a visitor sees before choosing: the topographic map. */
+export const DEFAULT_STYLE: BaseStyle = 'topo';
 
 export function loadBaseStyle(): BaseStyle {
   try {
     const v = window.localStorage.getItem(STORAGE_KEY);
-    return (BASE_STYLES as readonly string[]).includes(v ?? '') ? (v as BaseStyle) : 'standard';
+    return (BASE_STYLES as readonly string[]).includes(v ?? '') ? (v as BaseStyle) : DEFAULT_STYLE;
   } catch {
-    return 'standard';
+    return DEFAULT_STYLE;
   }
 }
 
@@ -42,7 +44,7 @@ export function saveBaseStyle(style: BaseStyle): void {
   }
 }
 
-function tileLayer(spec: TileLayerSpec): L.Layer {
+function tileLayer(spec: TileLayerSpec, cors = true): L.Layer {
   return L.tileLayer(spec.url, {
     attribution: spec.attribution,
     // Zoom past the style's last level by scaling its tiles instead of showing nothing.
@@ -52,7 +54,8 @@ function tileLayer(spec: TileLayerSpec): L.Layer {
     className: spec.className,
     // No detectRetina: CARTO's {r} placeholder already serves @2x tiles on high-DPI
     // screens. Using both shrinks map labels to half size on retina displays.
-    crossOrigin: true,
+    // Only for servers that send CORS headers; others (CyclOSM) then load nothing at all.
+    ...(cors ? { crossOrigin: true } : {}),
   });
 }
 
@@ -61,7 +64,7 @@ function tileLayer(spec: TileLayerSpec): L.Layer {
  * single integration point for swapping map vendors (see src/config/map.ts).
  */
 export function createBaseLayer(theme: MapTheme, provider: TileProviderId = mapConfig.provider, style: BaseStyle = 'standard'): L.Layer {
-  if (style !== 'standard') return tileLayer(STYLE_SPECS[style]);
+  if (style !== 'standard') return tileLayer(STYLE_SPECS[style], false);
   if (provider === 'google') {
     // Google Maps requires leaflet.gridlayer.googlemutant + the Maps JS API.
     // Until that is wired in, fall back to OpenStreetMap so the map never renders blank.
