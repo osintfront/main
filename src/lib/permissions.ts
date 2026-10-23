@@ -54,9 +54,9 @@ const ADMIN_PERMISSIONS: readonly Permission[] = [
 const ROLE_PERMISSIONS: Record<AppRole, readonly Permission[]> = {
   super_admin: PERMISSIONS,
   admin: ADMIN_PERMISSIONS,
-  // Back office: the events list only — edit (category, place, text), no create/publish/archive/delete.
-  // Every edit waits for an admin (database trigger events_editor_review).
-  editor: ['admin.access', 'event.view.operational', 'event.view.internal', 'event.edit.any'],
+  // Back office: events list + "Report event" (create), edit (category, place, text); no publish/archive/delete.
+  // A new report is a draft or goes for review; every edit waits for an admin (trigger events_editor_review).
+  editor: ['admin.access', 'event.view.operational', 'event.view.internal', 'event.create', 'event.edit.own', 'event.edit.any'],
   // "User": the public map with its filters only.
   viewer: [],
 };
