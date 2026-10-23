@@ -634,3 +634,9 @@
 .ofm-move__copy {
   background: var(--color-sky-600);
 }
+
+/* A selected event with several places: other events' clusters fade (MapView 6c). */
+.ofm-dim-clusters .marker-cluster,
+.ofm-dim-clusters .ofm-hfc-area {
+  opacity: 0.3;
+}

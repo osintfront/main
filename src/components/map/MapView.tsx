@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import { BookOpen, Check, Globe2, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
-import { octagon, type LatLng } from '@/lib/eventFilters';
+import { octagon, pointInPolygon, type LatLng } from '@/lib/eventFilters';
 import type { Severity } from '@/types/event';
 import { mapConfig } from '@/config/map';
 import { useTheme } from '@/context/ThemeContext';
@@ -203,6 +203,22 @@ export function MapView({
       maxZoom: mapConfig.maxZoom,
       zoomControl: false,
       worldCopyJump: true,
+    });
+    // A popup opened near the map's edge (or growing as its photo loads) is panned fully
+    // into view, and never taller than the map (it scrolls inside instead).
+    map.on('popupopen', (e: L.PopupEvent) => {
+      const popup = e.popup as L.Popup & { _adjustPan?: () => void };
+      const fit = () => {
+        if (!map.hasLayer(popup)) return;
+        popup.options.maxHeight = Math.max(160, map.getSize().y - 90);
+        popup.options.autoPanPaddingTopLeft = L.point(24, 24);
+        popup.options.autoPanPaddingBottomRight = L.point(24, 24);
+        popup.update();
+        popup._adjustPan?.();
+      };
+      window.setTimeout(fit, 0);
+      window.setTimeout(fit, 350);
+      popup.getElement()?.querySelectorAll('img').forEach((img) => img.addEventListener('load', fit, { once: true }));
     });
     alertLayerRef.current = L.layerGroup().addTo(map);
     linkLayerRef.current = L.layerGroup().addTo(map);
@@ -647,6 +663,30 @@ export function MapView({
     }
   }, [selectedId, markersVersion]);
 
+  // 6c. Dimming. A selected event with several places: its pins stay bright, every other
+  // pin (and cluster) fades. A drawn area: the pins of a matching event that lie outside
+  // the area fade (the event is shown because another of its places is inside).
+  useEffect(() => {
+    const container = containerRef.current;
+    const focus = selectedId ? markersRef.current.get(selectedId) : undefined;
+    const focusOn = !!focus && focus.markers.length > 1;
+    const areaOn = !!area && area.length >= 3 && !drawMode;
+    container?.classList.toggle('ofm-dim-clusters', focusOn);
+    markersRef.current.forEach(({ markers }, id) => {
+      markers.forEach((marker) => {
+        let o = 1;
+        if (focusOn && id !== selectedId) o = 0.25;
+        else if (areaOn) {
+          const ll = marker.getLatLng();
+          if (!pointInPolygon([ll.lat, ll.lng], area!)) o = 0.35;
+        }
+        marker.setOpacity(o);
+      });
+    });
+    // Home Front Command alert pins fade with the other events.
+    alertLayerRef.current?.eachLayer((l) => (l as L.Marker).setOpacity?.(focusOn ? 0.25 : 1));
+  }, [selectedId, markersVersion, area, drawMode, alerts]);
+
   // 7. Drawn-area filter. Drawing: each tap adds a corner (free shape), or centre then
   //    edge (octagon). The applied area stays outlined while the filter is on.
   const draftRef = useRef<LatLng[]>([]);
@@ -720,6 +760,15 @@ export function MapView({
 
     const main = entry.markers[0];
     if (focusRequest.source === 'map' || focusRequest.source === 'popup') {
+      // Several places: zoom out (never in) so all of them are in view.
+      if (focusRequest.source === 'map' && entry.markers.length > 1) {
+        const bounds = L.latLngBounds(eventPoints(entry.event));
+        const pad = L.point(64, 64);
+        if (!map.getBounds().pad(-0.05).contains(bounds)) {
+          const z = Math.min(map.getZoom(), map.getBoundsZoom(bounds, false, pad));
+          map.flyTo(bounds.getCenter(), z, { duration: prefersReducedMotion() ? 0 : 0.6 });
+        }
+      }
       if (!compact && !main.isPopupOpen() && !entry.markers.some((m) => m.isPopupOpen())) main.openPopup();
       return;
     }
