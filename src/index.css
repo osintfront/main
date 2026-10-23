@@ -636,10 +636,12 @@
 }
 
 /* A selected event with several places: other events' clusters fade (MapView 6c). */
+/* filter (not opacity): the cluster plugin writes an inline opacity on every cluster icon,
+   which would override a class rule; filter: opacity() combines with it instead. */
 .ofm-dim-clusters .marker-cluster,
 .ofm-dim-clusters .ofm-cluster-wrap,
 .ofm-dim-clusters .ofm-hfc-area {
-  opacity: 0.3;
+  filter: opacity(0.25);
 }
 
 /* ─── Sign-in page (members-only site) ─────────────────────────────── */
