@@ -26,7 +26,7 @@ $$;
 
 create or replace function public.gaza_strip()
 returns extensions.geometry language sql immutable set search_path = '' as $$
-  select extensions.st_geomfromtext('POLYGON((34.2166 31.3236,34.267 31.22,34.356 31.289,34.382 31.356,34.44 31.43,34.472 31.468,34.505 31.5,34.545 31.53,34.5664 31.5586,34.49 31.596,34.2166 31.3236))', 4326);
+  select extensions.st_geomfromtext('POLYGON((34.2166 31.3236,34.267 31.22,34.356 31.289,34.382 31.356,34.44 31.43,34.472 31.468,34.505 31.5,34.545 31.53,34.5664 31.5586,34.53 31.564,34.49 31.596,34.2166 31.3236))', 4326);
 $$;
 
 -- Hebrew names: matched by an English/Arabic name of a PS place inside the Strip.

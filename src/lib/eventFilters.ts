@@ -121,7 +121,7 @@ const PALESTINE = new Set(['palestine', 'palestinian territories', 'palestinian 
  *  communities next to the fence (Kissufim, Nahal Oz, Netiv HaAsara…) stay in Israel. */
 const GAZA_POLYGON: [number, number][] = [
   [34.2166, 31.3236], [34.267, 31.22], [34.356, 31.289], [34.382, 31.356], [34.44, 31.43], [34.472, 31.468],
-  [34.505, 31.5], [34.545, 31.53], [34.5664, 31.5586], [34.49, 31.596],
+  [34.505, 31.5], [34.545, 31.53], [34.5664, 31.5586], [34.53, 31.564], [34.49, 31.596],
 ];
 export function inGazaStrip(lat: number, lng: number): boolean {
   if (lat < 31.2 || lat > 31.61 || lng < 34.2 || lng > 34.58) return false;
