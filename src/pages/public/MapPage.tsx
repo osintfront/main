@@ -27,7 +27,7 @@ import { HFC_CATEGORY } from '@/config/hfcThreats';
 import { useEeis } from '@/hooks/useEeis';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/common/Toast';
-import { addEventPlace, moveEventPin, moveEventPlace } from '@/services/eventAdminService';
+import { addEventPlace, moveEventPin, moveEventPlace, removeEventPin } from '@/services/eventAdminService';
 import { fetchPublicEvent } from '@/services/eventService';
 import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
@@ -252,12 +252,13 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const startMoveMain = useCallback((id: string) => startMove({ id, place: null }), [startMove]);
   const endMove = useCallback(() => setMoving(null), []);
   const saveMove = useCallback(
-    async (target: MoveTarget, lat: number, lng: number, mode: 'move' | 'copy') => {
+    async (target: MoveTarget, lat: number, lng: number, mode: 'move' | 'copy' | 'remove') => {
       try {
-        if (mode === 'copy') await addEventPlace(target.id, lat, lng, target.place);
+        if (mode === 'remove') await removeEventPin(target.id, target.place);
+        else if (mode === 'copy') await addEventPlace(target.id, lat, lng, target.place);
         else if (target.place === null) await moveEventPin(target.id, lat, lng);
         else await moveEventPlace(target.id, target.place, lat, lng);
-        toast.success(can('event.publish') ? t(mode === 'copy' ? 'move.copied' : 'move.saved') : t('list.sentForReview'));
+        toast.success(can('event.publish') ? t(mode === 'copy' ? 'move.copied' : mode === 'remove' ? 'move.removed' : 'move.saved') : t('list.sentForReview'));
         reload();
         return true;
       } catch (err) {
@@ -453,6 +454,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               onMoveRequest={canMove ? startMove : undefined}
               onMoveEnd={endMove}
               onMoveSave={saveMove}
+              canRemovePin={!isDemo && can('event.edit.any')}
               topSlot={canAsk ? <AskMap result={ask} onResult={handleAskResult} onCite={handleLocate} /> : undefined}
               fitTo={askFit}
             />

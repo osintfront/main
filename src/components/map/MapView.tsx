@@ -52,7 +52,9 @@ interface MapViewProps {
   onMoveRequest?: (target: MoveTarget) => void;
   onMoveEnd?: () => void;
   /** Save the new pin; resolve true when stored. */
-  onMoveSave?: (target: MoveTarget, lat: number, lng: number, mode: 'move' | 'copy') => Promise<boolean>;
+  onMoveSave?: (target: MoveTarget, lat: number, lng: number, mode: 'move' | 'copy' | 'remove') => Promise<boolean>;
+  /** Editors/admins: the move bar also offers "remove from map". */
+  canRemovePin?: boolean;
   /** Shown at the top centre, under the alerts banner (e.g. "ask the map"). */
   topSlot?: ReactNode;
   /** Zoom the map to these points whenever key changes (e.g. search results). */
@@ -135,6 +137,7 @@ export function MapView({
   onMoveRequest,
   onMoveEnd,
   onMoveSave,
+  canRemovePin = false,
   topSlot,
   fitTo = null,
 }: MapViewProps) {
@@ -422,12 +425,14 @@ export function MapView({
     };
   }, [movingId, movingPlace]);
 
-  const saveMove = useCallback(async (mode: 'move' | 'copy' = 'move') => {
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  useEffect(() => setConfirmRemove(false), [movingId, movingPlace]);
+  const saveMove = useCallback(async (mode: 'move' | 'copy' | 'remove' = 'move') => {
     const pos = movePosRef.current;
-    if (!movingId || !pos || !onMoveSaveRef.current) return;
+    if (!movingId || !onMoveSaveRef.current || (!pos && mode !== 'remove')) return;
     setMoveBusy(true);
     try {
-      if (await onMoveSaveRef.current({ id: movingId, place: movingPlace }, pos[0], pos[1], mode)) onMoveEndRef.current?.();
+      if (await onMoveSaveRef.current({ id: movingId, place: movingPlace }, pos?.[0] ?? 0, pos?.[1] ?? 0, mode)) onMoveEndRef.current?.();
     } finally {
       setMoveBusy(false);
     }
@@ -980,6 +985,20 @@ export function MapView({
             >
               ⧉ {t('move.copy')}
             </button>
+            {canRemovePin ? (
+              <button
+                type="button"
+                onClick={() => (confirmRemove ? void saveMove('remove') : setConfirmRemove(true))}
+                disabled={moveBusy}
+                className={
+                  'inline-flex h-8 items-center gap-1 rounded-lg px-2.5 font-semibold disabled:opacity-50 ' +
+                  (confirmRemove ? 'bg-red-600 text-white hover:bg-red-500' : 'text-red-700 ring-1 ring-red-300 hover:bg-red-50 dark:text-red-400 dark:ring-red-500/40 dark:hover:bg-red-500/10')
+                }
+                title={t('move.removeHint')}
+              >
+                🗑 {confirmRemove ? t('move.removeConfirm') : t('move.remove')}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => onMoveEnd?.()}

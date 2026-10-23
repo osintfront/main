@@ -434,6 +434,13 @@ export async function moveEventPlace(id: string, index: number, latitude: number
   if (error) throw toServiceError(error);
 }
 
+/** Editors/admins: take a pin off the map. index = an extra place; null = the main pin
+ *  (the next place becomes the main pin; with none, the event stays in the feed only). */
+export async function removeEventPin(id: string, index: number | null): Promise<void> {
+  const { error } = await client().rpc('remove_event_pin', { p_id: id, p_index: index });
+  if (error) throw toServiceError(error);
+}
+
 /** Admin: approve an editor's change on a live event (clears the review flag). */
 export async function approveEventReview(id: string): Promise<void> {
   const { error } = await client().rpc('approve_event_review', { p_id: id });
