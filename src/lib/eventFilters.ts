@@ -70,9 +70,12 @@ export function israelMidnight(now = Date.now()): number {
   return now - elapsed;
 }
 
-/** The time window a filter asks for ("live" = since midnight, Israel time), or null for no limit. */
+/** "Live" = the last 12 hours. */
+export const LIVE_HOURS = 12;
+
+/** The time window a filter asks for, or null for no limit. */
 export function timeWindow(f: EventFilters, now = Date.now()): { from: number; to: number } | null {
-  if (f.preset === 'live') return { from: israelMidnight(now), to: now + 60_000 };
+  if (f.preset === 'live') return { from: now - LIVE_HOURS * 3600_000, to: now + 60_000 };
   if (f.preset === 'custom') {
     const from = f.from ? new Date(f.from).getTime() : NaN;
     const to = f.to ? new Date(f.to).getTime() : NaN;
@@ -308,4 +311,35 @@ export function needsArchive(f: EventFilters, now = Date.now()): { from: string;
   const win = timeWindow(f, now);
   if (!win || win.from >= now - 24 * 3600_000) return null;
   return { from: new Date(win.from).toISOString(), to: new Date(Math.min(win.to, now + 60_000)).toISOString() };
+}
+
+// ─── Remembered filters ─────────────────────────────────────────────
+/** The visitor's last filters, kept in this browser so a refresh keeps them. */
+const FILTERS_KEY = 'ofm.filters.v1';
+
+export function loadFilters(): EventFilters {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(FILTERS_KEY) ?? 'null');
+    if (!raw || typeof raw !== 'object') return EMPTY_FILTERS;
+    const f = { ...EMPTY_FILTERS } as Record<string, unknown>;
+    for (const [k, v] of Object.entries(EMPTY_FILTERS)) {
+      const got = (raw as Record<string, unknown>)[k];
+      if (got === undefined) continue;
+      if (Array.isArray(v) && Array.isArray(got)) f[k] = got.filter((x) => typeof x === 'string');
+      else if (k === 'polygon') f[k] = Array.isArray(got) && got.length >= 3 && got.every((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)) ? got : null;
+      else if (typeof v === typeof got) f[k] = got;
+    }
+    if (!TIME_PRESETS.some((p) => p.id === f.preset)) f.preset = 'live';
+    return f as unknown as EventFilters;
+  } catch {
+    return EMPTY_FILTERS;
+  }
+}
+
+export function saveFilters(f: EventFilters): void {
+  try {
+    window.localStorage.setItem(FILTERS_KEY, JSON.stringify(f));
+  } catch {
+    /* storage blocked: filters last for this page */
+  }
 }

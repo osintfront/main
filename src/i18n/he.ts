@@ -54,7 +54,7 @@ export const he: Record<TranslationKey, string> = {
   'filters.button': 'סינון',
   'filters.title': 'סינון אירועים',
   'filters.time': 'זמן',
-  'filters.preset.live': 'חי',
+  'filters.preset.live': 'חי (12 ש׳)',
   'filters.preset.1h': 'שעה אחרונה',
   'filters.preset.6h': '6 שעות',
   'filters.preset.24h': '24 שעות',

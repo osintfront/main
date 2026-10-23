@@ -18,7 +18,7 @@ import { MobileEventSheet } from '@/components/map/MobileEventSheet';
 import { FilterPanel } from '@/components/filters/FilterPanel';
 import type { DrawMode, MoveTarget } from '@/components/map/MapView';
 import { useArchiveRange } from '@/hooks/useArchiveRange';
-import { EMPTY_FILTERS, activeFilterCount, isOnMap, matchesFilters, needsArchive, pointInPolygon, type EventFilters, type LatLng } from '@/lib/eventFilters';
+import { EMPTY_FILTERS, activeFilterCount, loadFilters, saveFilters, isOnMap, matchesFilters, needsArchive, pointInPolygon, type EventFilters, type LatLng } from '@/lib/eventFilters';
 import type { HfcAlert } from '@/types/hfcAlert';
 import { SlidersHorizontal } from 'lucide-react';
 import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
@@ -168,7 +168,9 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
 
   // Filters (time, areas, types, … and a drawn area). A time range reaching past the
   // live 24 hours also loads those archived events.
-  const [filters, setFilters] = useState<EventFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<EventFilters>(loadFilters);
+  // Remember the visitor's choices: a refresh keeps every filter they set.
+  useEffect(() => saveFilters(filters), [filters]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [drawMode, setDrawMode] = useState<DrawMode | null>(null);
   const effectiveFilters = useMemo(() => (isArchive ? { ...filters, preset: 'live' as const } : filters), [filters, isArchive]);

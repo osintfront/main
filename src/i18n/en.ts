@@ -52,7 +52,7 @@ export const en = {
   'filters.button': 'Filters',
   'filters.title': 'Filter events',
   'filters.time': 'Time',
-  'filters.preset.live': 'Live',
+  'filters.preset.live': 'Live (12h)',
   'filters.preset.1h': 'Last hour',
   'filters.preset.6h': '6 hours',
   'filters.preset.24h': '24 hours',
