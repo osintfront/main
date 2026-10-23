@@ -5,7 +5,7 @@ Build Osintfront's local place database from GeoNames (one-time, no API, no AI).
   python3 tools/geonames/build_places.py            # download + build
   python3 tools/geonames/build_places.py --offline  # build from files already in --work
 
-Countries: IL SY LB IQ YE SA IR. Languages kept: he, ar, en.
+Countries: IL SY LB IQ YE SA IR PS (Gaza + West Bank). Languages kept: he, ar, en.
 
 Steps
   1. Download the country dumps   https://download.geonames.org/export/dump/XX.zip
@@ -35,7 +35,7 @@ import zipfile
 from collections import defaultdict
 from pathlib import Path
 
-COUNTRIES = ["IL", "SY", "LB", "IQ", "YE", "SA", "IR"]
+COUNTRIES = ["IL", "SY", "LB", "IQ", "YE", "SA", "IR", "PS"]
 LANGS = ("he", "ar", "en")
 BASE = "https://download.geonames.org/export/dump"
 

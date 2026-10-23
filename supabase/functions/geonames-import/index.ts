@@ -6,7 +6,7 @@
 //   3b. keep only he/ar/en alternate names of those IDs (no historic/colloquial)
 //   3c. merge → TSV rows → public.load_geo_places_tsv() in chunks
 // No AI and no paid API. Auth: header x-cron-secret (public.intel_config.cron_secret).
-// Body: { "country": "IL" }   (IL SY LB IQ YE SA IR)
+// Body: { "country": "IL" }   (IL SY LB IQ YE SA IR PS)
 // Too big for the CPU budget (IR): { "country": "IR", "stage": true } then
 //   select public.import_staged_geonames('IR');
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -14,7 +14,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const BASE = "https://download.geonames.org/export/dump";
-const COUNTRIES = new Set(["IL", "SY", "LB", "IQ", "YE", "SA", "IR"]);
+const COUNTRIES = new Set(["IL", "SY", "LB", "IQ", "YE", "SA", "IR", "PS"]);
 const LANGS = new Set(["he", "ar", "en"]);
 const KEEP_CLASSES = new Set(["P", "A", "T", "L"]);
 const KEEP_CODES = new Set([
@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
   if (!secret || req.headers.get("x-cron-secret") !== secret) return json({ error: "unauthorized" }, 401);
   const body = await req.json().catch(() => ({}));
   const cc = String(body?.country ?? "").toUpperCase();
-  if (!COUNTRIES.has(cc)) return json({ error: "country must be one of IL SY LB IQ YE SA IR" }, 400);
+  if (!COUNTRIES.has(cc)) return json({ error: "country must be one of IL SY LB IQ YE SA IR PS" }, 400);
   try {
     if (body?.stage) return json({ ok: true, ...(await stageCountry(cc)) });
     const parts = Math.min(Math.max(Number(body?.parts ?? 1) | 0, 1), 16);
