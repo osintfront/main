@@ -232,6 +232,12 @@ export const he: Record<TranslationKey, string> = {
   'perm.audit.view': 'צפייה ביומן הביקורת',
   'perm.settings.manage': 'ניהול הגדרות מערכת',
 
+  'login.tagline': "מפת אירועים חיה · המזרח התיכון",
+  'login.title': "כניסה למערכת",
+  'login.subtitle': "האתר פתוח למשתמשים רשומים בלבד. התחברו עם הדוא\"ל והסיסמה שלכם.",
+  'login.about': "אודות",
+  'login.privacy': "פרטיות",
+  'login.contact': "יצירת קשר",
   'auth.signInTitle': 'כניסת צוות',
   'auth.signInSubtitle': 'הגישה בהזמנה בלבד.',
   'auth.email': 'דוא״ל',
@@ -273,7 +279,7 @@ export const he: Record<TranslationKey, string> = {
   'auth.verifying': 'מאמת התחברות…',
   'auth.signOut': 'התנתקות',
   'auth.accountSettings': 'הגדרות חשבון',
-  'auth.inviteOnly': 'אין הרשמה ציבורית. אנשי צוות חדשים מצטרפים בהזמנת מנהל.',
+  'auth.inviteOnly': 'אין הרשמה ציבורית. משתמשים חדשים מצטרפים בהזמנת מנהל.',
 
   'unauth.title': 'אין לך הרשאה לאזור הזה',
   'unauth.missingPermission': 'התפקיד שלך ({role}) אינו כולל את ההרשאה „{permission}”. אפשר לפנות למנהל המערכת.',

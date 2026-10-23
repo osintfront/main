@@ -56,11 +56,12 @@ export function App() {
           <BrowserRouter>
             <Routes>
               {/* Public — no login required */}
-              <Route path="/archive" element={<MapPage mode="archive" />} />
+              {/* Members only: the map and the archive need a signed-in, active account. */}
+              <Route path="/archive" element={<RequireAuth><MapPage mode="archive" /></RequireAuth>} />
               <Route path="/about" element={<SitePage page="about" />} />
               <Route path="/privacy" element={<SitePage page="privacy" />} />
               <Route path="/contact" element={<SitePage page="contact" />} />
-              <Route path="/" element={<MapPage />} />
+              <Route path="/" element={<RequireAuth><MapPage /></RequireAuth>} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />

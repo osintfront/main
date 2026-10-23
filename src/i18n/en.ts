@@ -230,6 +230,12 @@ export const en = {
   'perm.audit.view': 'View audit log',
   'perm.settings.manage': 'Manage system settings',
 
+  'login.tagline': "Live event map · Middle East",
+  'login.title': "Sign in",
+  'login.subtitle': "The site is for registered users only. Sign in with your email and password.",
+  'login.about': "About",
+  'login.privacy': "Privacy",
+  'login.contact': "Contact",
   'auth.signInTitle': 'Staff sign-in',
   'auth.signInSubtitle': 'Access is by invitation only.',
   'auth.email': 'Email',

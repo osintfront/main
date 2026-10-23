@@ -640,3 +640,48 @@
 .ofm-dim-clusters .ofm-hfc-area {
   opacity: 0.3;
 }
+
+/* ─── Sign-in page (members-only site) ─────────────────────────────── */
+.ofm-login__grid {
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+}
+.ofm-login__glow {
+  background:
+    radial-gradient(60rem 40rem at 50% 45%, rgba(14, 165, 233, 0.18), transparent 60%),
+    radial-gradient(30rem 20rem at 80% 15%, rgba(244, 63, 94, 0.12), transparent 70%),
+    radial-gradient(30rem 20rem at 15% 85%, rgba(168, 85, 247, 0.1), transparent 70%);
+}
+.ofm-login__radar {
+  background: conic-gradient(from 0deg, rgba(56, 189, 248, 0.16), rgba(56, 189, 248, 0) 18%, rgba(56, 189, 248, 0) 100%);
+  border-radius: 9999px;
+  mask-image: radial-gradient(circle, #000 0%, transparent 55%);
+  animation: ofm-radar 9s linear infinite;
+}
+@keyframes ofm-radar {
+  to {
+    rotate: 360deg;
+  }
+}
+.ofm-login__pin {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  animation: ofm-login-pin 2.8s ease-out infinite;
+}
+@keyframes ofm-login-pin {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); opacity: 1; }
+  80% { box-shadow: 0 0 0 18px transparent; opacity: 0.6; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ofm-login__radar,
+  .ofm-login__pin {
+    animation: none;
+  }
+}

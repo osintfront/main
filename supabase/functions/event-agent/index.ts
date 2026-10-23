@@ -1,10 +1,10 @@
 // event-agent: on-demand AI work for one event.
-//   {action:"expand", id}        public — the "expand" button. Writes the full text, religious
+//   {action:"expand", id}        signed-in users — the "expand" button. Writes the full text, religious
 //                                meaning and other implications (Hebrew + English) once per event
 //                                and caches them in events.translations; later readers get the cache.
 //   {action:"edit", id}          cron secret — a foreign-language draft a person published:
 //                                run the editor agent (Hebrew headline + summary, English, places).
-//   {action:"video", id}         public — play pressed on a video thumbnail (id = thumbnail): fetch the
+//   {action:"video", id}         signed-in users — play pressed on a video thumbnail (id = thumbnail): fetch the
 //                                video of that post once (max 50 MB) and return its URL.
 //   {action:"claude_usage"}      staff (their own session) — the whole Claude API organization's daily
 //                                usage and cost (Admin API; needs the secret ANTHROPIC_ADMIN_KEY).
@@ -212,6 +212,20 @@ async function handle(req: Request): Promise<Response> {
   const body = await req.json().catch(() => ({}));
   const action = String(body?.action ?? "");
   const id = String(body?.id ?? "");
+  // Members-only site: the reader actions need a signed-in, active account (or the cron secret).
+  if (action === "expand" || action === "video") {
+    if (!(await cronOk(req))) {
+      const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        auth: { persistSession: false },
+        global: { headers: { Authorization: req.headers.get("authorization") ?? "" } },
+      });
+      const { data: who } = await asUser.auth.getUser();
+      const uid = who?.user?.id;
+      if (!uid) return json({ error: "sign in required" }, 401);
+      const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
+      if (prof?.status !== "active") return json({ error: "unauthorized" }, 401);
+    }
+  }
   if (action === "expand") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await expand(id);
