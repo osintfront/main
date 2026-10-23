@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { clearSessionClock, startSessionClock } from '@/lib/sessionClock';
 import type { Session, User } from '@supabase/supabase-js';
 import { authConfig } from '@/config/auth';
 import { supabase } from '@/integrations/supabase/client';
@@ -121,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const failure = await authService.signInWithPassword(email, password);
     if (!failure) {
       setSessionExpired(false);
+      startSessionClock();
       void recordLogin();
     }
     return failure;
@@ -129,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     explicitSignOut.current = true;
     setSessionExpired(false);
+    clearSessionClock();
     await authService.signOut();
   }, []);
 

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, SlidersHorizontal, History, LayoutDashboard, LogIn, Radio, Search, X } from 'lucide-react';
+import { ArrowLeft, SlidersHorizontal, History, LayoutDashboard, Radio, Search, X } from 'lucide-react';
 import { SoundMenu } from './SoundMenu';
+import { UserMenu } from './UserMenu';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -154,20 +155,13 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
         {showAdmin ? (
           <Link
             to="/admin"
-            className="ms-1 hidden h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 sm:inline-flex dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            className="ms-1 hidden h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 lg:inline-flex dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
           >
             <LayoutDashboard className="size-4" aria-hidden />
             {t('nav.admin')}
           </Link>
-        ) : (
-          <Link
-            to="/login"
-            className="ms-1 hidden h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 lg:inline-flex dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
-          >
-            <LogIn className="size-4 rtl:-scale-x-100" aria-hidden />
-            {t('nav.signIn')}
-          </Link>
-        )}
+        ) : null}
+        <UserMenu />
       </nav>
     </header>
   );

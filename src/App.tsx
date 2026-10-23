@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/hooks/useAuth';
 import { I18nProvider } from '@/i18n';
 import { RequireAuth } from '@/components/auth/RequireAuth';
+import { SessionTimeout } from '@/components/auth/SessionTimeout';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { MapPage } from '@/pages/public/MapPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
@@ -107,6 +108,7 @@ export function App() {
 
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            <SessionTimeout />
           </BrowserRouter>
           </ToastProvider>
         </AuthProvider>
