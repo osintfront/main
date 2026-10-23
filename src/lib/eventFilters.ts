@@ -92,7 +92,7 @@ export const AREAS: AreaDef[] = [
     id: 'westbank',
     en: 'West Bank',
     he: 'יהודה ושומרון',
-    names: ['west bank', 'judea and samaria', 'palestine', 'palestinian territories', 'יהודה ושומרון', 'הגדה המערבית', 'הרשות הפלסטינית', 'איו"ש'],
+    names: ['west bank', 'judea and samaria', 'יהודה ושומרון', 'הגדה המערבית', 'איו"ש'],
     bbox: [31.34, 34.88, 32.55, 35.57],
   },
   { id: 'lebanon', en: 'Lebanon', he: 'לבנון', names: ['lebanon', 'לבנון'], bbox: [33.05, 35.1, 34.7, 36.62] },
@@ -114,12 +114,36 @@ export const AREAS: AreaDef[] = [
 
 const NAME_TO_AREA = new Map<string, string>();
 for (const a of AREAS) for (const n of a.names) NAME_TO_AREA.set(n, a.id);
+/** "Palestine" is either Gaza or the West Bank: decided by the pin (or the text). */
+const PALESTINE = new Set(['palestine', 'palestinian territories', 'palestinian territory', 'state of palestine', 'פלסטין', 'הרשות הפלסטינית', 'השטחים', 'فلسطين']);
+
+/** The Gaza Strip border, roughly (lng, lat) — tighter than a box, so the Israeli
+ *  communities next to the fence (Kissufim, Nahal Oz, Netiv HaAsara…) stay in Israel. */
+const GAZA_POLYGON: [number, number][] = [
+  [34.2166, 31.3236], [34.267, 31.22], [34.356, 31.289], [34.382, 31.356], [34.44, 31.43], [34.472, 31.468],
+  [34.505, 31.5], [34.545, 31.53], [34.5664, 31.5586], [34.49, 31.596],
+];
+export function inGazaStrip(lat: number, lng: number): boolean {
+  if (lat < 31.2 || lat > 31.61 || lng < 34.2 || lng > 34.58) return false;
+  let inside = false;
+  for (let i = 0, j = GAZA_POLYGON.length - 1; i < GAZA_POLYGON.length; j = i++) {
+    const [xi, yi] = GAZA_POLYGON[i];
+    const [xj, yj] = GAZA_POLYGON[j];
+    if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Gaza Strip places (Hebrew / English / Arabic) for events with no usable pin. */
+const GAZA_WORDS =
+  /עזה|חאן יונס|רפיח|ג'באליה|ג׳באליה|בית להיא|בית חאנון|דיר אל-?בלח|נוסייראת|נוציראת|בורייג|מע'אזי|שג'אעייה|שג׳אעייה|זייתון|מוואסי|gaza|khan y[ou]nis|rafah|jabalia|jabaliya|beit lahia|beit hanoun|deir al-?balah|deir el-?balah|nuseirat|bureij|maghazi|shuja[i']y+a|zeitoun|mawasi|غزة|خان ?يونس|رفح|جباليا|بيت لاهيا|بيت حانون|دير البلح|النصيرات|البريج|المغازي|الشجاعية|المواسي/i;
 
 const inBox = (lat: number, lng: number, b: [number, number, number, number]) => lat >= b[0] && lat <= b[2] && lng >= b[1] && lng <= b[3];
 
 function areaAt(lat: number, lng: number): string {
-  // Small areas first, so Gaza / the West Bank win over Israel's box.
-  for (const id of ['gaza', 'westbank', 'lebanon', 'israel', 'jordan', 'bahrain', 'qatar', 'kuwait', 'uae', 'syria', 'iraq', 'yemen', 'oman', 'iran', 'saudi', 'egypt', 'cyprus', 'turkey']) {
+  if (inGazaStrip(lat, lng)) return 'gaza';
+  // Small areas first, so the West Bank wins over Israel's box.
+  for (const id of ['westbank', 'lebanon', 'israel', 'jordan', 'bahrain', 'qatar', 'kuwait', 'uae', 'syria', 'iraq', 'yemen', 'oman', 'iran', 'saudi', 'egypt', 'cyprus', 'turkey']) {
     const a = AREAS.find((x) => x.id === id)!;
     if (a.bbox && inBox(lat, lng, a.bbox)) return id;
   }
@@ -136,11 +160,22 @@ export function eventAreas(e: PublicEvent): Set<string> {
   const cached = areaCache.get(e);
   if (cached) return cached;
   const out = new Set<string>();
+  const pinned = !!e.locationPrecision && e.locationPrecision !== 'country' && Number.isFinite(e.latitude) && Number.isFinite(e.longitude);
+  const pinInGaza = pinned && inGazaStrip(e.latitude, e.longitude);
   for (const part of (e.country || '').split(/\s*[/,;|]\s*/)) {
     const key = part.trim().toLowerCase();
     if (!key) continue;
+    if (PALESTINE.has(key)) {
+      // Gaza or the West Bank: the pin decides; without a pin, the place names in the text.
+      if (pinInGaza) out.add('gaza');
+      else if (pinned && inBox(e.latitude, e.longitude, AREAS.find((a) => a.id === 'westbank')!.bbox!)) out.add('westbank');
+      else out.add(GAZA_WORDS.test(`${e.locationName} ${e.title}`) ? 'gaza' : 'westbank');
+      continue;
+    }
     out.add(NAME_TO_AREA.get(key) ?? COUNTRY_AREA_PREFIX + part.trim());
   }
+  // A pin inside the Strip is a Gaza event whatever country the report named (e.g. "Israel").
+  if (pinInGaza) out.add('gaza');
   if (out.size === 0 && e.locationPrecision) {
     const a = areaAt(e.latitude, e.longitude);
     if (a) out.add(a);
