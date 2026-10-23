@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, List, Map as MapIcon } from 'lucide-react';
 import { isValidDay, shiftDay, toDayString, useArchivedEvents } from '@/hooks/useArchivedEvents';
 import { useI18n } from '@/i18n';
 import { usePublicEvents } from '@/hooks/useEvents';
-import { useMapSelection } from '@/hooks/useMapSelection';
+import { PAGE_RELOADED, useMapSelection } from '@/hooks/useMapSelection';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -298,11 +298,13 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   // A shared link (?event=<id>) opens that event — from the live list, else fetched (archive).
   const [linkedEvent, setLinkedEvent] = useState<PublicEvent | null>(null);
   const linkHandled = useRef(false);
+  // Only the link the page was opened with — not ?event= that a later click puts in the URL.
+  const openedWith = useRef(PAGE_RELOADED ? null : new URLSearchParams(window.location.search).get('event'));
   useEffect(() => {
     if (linkHandled.current || status !== 'ready') return;
-    const id = new URLSearchParams(window.location.search).get('event');
-    if (!id) return;
     linkHandled.current = true;
+    const id = openedWith.current;
+    if (!id) return;
     const found = allEvents.find((e) => e.id === id);
     if (found) {
       select(id, 'feed');

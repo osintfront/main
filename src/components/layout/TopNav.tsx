@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, SlidersHorizontal, History, LayoutDashboard, Radio, Search, X } from 'lucide-react';
 import { SoundMenu } from './SoundMenu';
 import { UserMenu } from './UserMenu';
+import { useToast } from '@/components/common/Toast';
+import { consumeSearchQuota } from '@/services/searchQuotaService';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -22,7 +24,7 @@ interface TopNavProps {
 
 export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, filtersOpen = false, onToggleFilters }: TopNavProps) {
   const { t } = useI18n();
-  const { status } = useAuth();
+  const { status, profile } = useAuth();
   const { can } = usePermissions();
   const showAdmin = status === 'signed_in' && can('admin.access');
   // Phones: search is an icon that opens a full-width field over the bar.
@@ -32,6 +34,30 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
     if (searchOpen) inputRef.current?.focus();
   }, [searchOpen]);
   const closeSearch = () => setSearchOpen(false);
+  // The search runs on Enter (not while typing): each new search uses the daily quota.
+  const toast = useToast();
+  const [draft, setDraft] = useState(query);
+  const [checking, setChecking] = useState(false);
+  useEffect(() => setDraft(query), [query]);
+  const runSearch = async () => {
+    const q = draft.trim();
+    if (!q) return onQueryChange('');
+    if (q === query.trim()) return;
+    setChecking(true);
+    try {
+      const r = await consumeSearchQuota(q);
+      if (!r.ok) {
+        toast.error(t('search.quotaReached', { limit: r.limit ?? 3 }));
+        return;
+      }
+      onQueryChange(q);
+      if (!r.unlimited && typeof r.remaining === 'number') toast.success(t('search.quotaLeft', { count: r.remaining }));
+    } catch {
+      toast.error(t('search.failed'));
+    } finally {
+      setChecking(false);
+    }
+  };
   const iconBtn =
     'inline-flex size-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-900/5 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-sky-500 sm:size-9 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white';
   return (
@@ -73,6 +99,7 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
         onSubmit={(e) => {
           e.preventDefault();
           inputRef.current?.blur();
+          void runSearch();
         }}
       >
         <button type="button" onClick={closeSearch} aria-label={t('common.close')} className={cn(iconBtn, 'shrink-0 sm:hidden')}>
@@ -87,8 +114,13 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
             id="global-search"
             ref={inputRef}
             type="search"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              if (!e.target.value) onQueryChange('');
+            }}
+            disabled={checking}
+            title={profile?.role === 'super_admin' ? undefined : t('search.quotaHint')}
             onKeyDown={(e) => e.key === 'Escape' && closeSearch()}
             enterKeyHint="search"
             placeholder={t('nav.searchPlaceholder')}
@@ -96,10 +128,13 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
             autoComplete="off"
             className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 ps-9 pe-8 text-base text-slate-900 sm:h-9 sm:text-sm placeholder:text-slate-400 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:focus:bg-slate-900 [&::-webkit-search-cancel-button]:hidden"
           />
-          {query ? (
+          {draft || query ? (
             <button
               type="button"
-              onClick={() => onQueryChange('')}
+              onClick={() => {
+                setDraft('');
+                onQueryChange('');
+              }}
               aria-label={t('feed.clearSearch')}
               className="absolute end-1.5 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
             >

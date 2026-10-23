@@ -23,6 +23,8 @@ function isReload(): boolean {
 // Evaluated once per page load: a reload starts at the newest events, a shared link still opens its event.
 const RELOADED = typeof window !== 'undefined' && isReload();
 let reloadHandled = false;
+/** The page was reloaded (F5): a selected event in the URL is not reopened. */
+export const PAGE_RELOADED = RELOADED;
 
 /**
  * Shared selection state between the feed and the map, mirrored into the

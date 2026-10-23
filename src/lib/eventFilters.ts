@@ -62,9 +62,17 @@ export const TIME_PRESETS: { id: TimePreset; hours: number | null }[] = [
   { id: 'custom', hours: null },
 ];
 
-/** The time window a filter asks for, or null for "whatever is live". */
+/** Today's midnight in Israel (Asia/Jerusalem), as a timestamp. */
+export function israelMidnight(now = Date.now()): number {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(now));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const elapsed = (get('hour') * 3600 + get('minute') * 60 + get('second')) * 1000 + (now % 1000);
+  return now - elapsed;
+}
+
+/** The time window a filter asks for ("live" = since midnight, Israel time), or null for no limit. */
 export function timeWindow(f: EventFilters, now = Date.now()): { from: number; to: number } | null {
-  if (f.preset === 'live') return null;
+  if (f.preset === 'live') return { from: israelMidnight(now), to: now + 60_000 };
   if (f.preset === 'custom') {
     const from = f.from ? new Date(f.from).getTime() : NaN;
     const to = f.to ? new Date(f.to).getTime() : NaN;

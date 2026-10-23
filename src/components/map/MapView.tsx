@@ -150,6 +150,11 @@ export function MapView({
   const drawLayerRef = useRef<L.LayerGroup | null>(null);
   const [draft, setDraft] = useState<LatLng[]>([]);
   const linkLayerRef = useRef<L.LayerGroup | null>(null);
+  /** The focused event's pins, taken out of the clusters so they stay visible at any zoom. */
+  const focusLayerRef = useRef<L.LayerGroup | null>(null);
+  const focusedRef = useRef<{ id: string; markers: L.Marker[] } | null>(null);
+  /** Moving pins between layers closes their popup: that close must not end the focus. */
+  const relayeringRef = useRef(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const alertLayerRef = useRef<L.LayerGroup | null>(null);
   const alertEntriesRef = useRef(new Map<string, AlertEntry>());
@@ -236,6 +241,7 @@ export function MapView({
       chunkedLoading: true,
       iconCreateFunction: clusterIcon,
     }).addTo(map);
+    focusLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     map.on('click', (e: L.LeafletMouseEvent) => {
       if (drawClickRef.current) drawClickRef.current([e.latlng.lat, e.latlng.lng]);
@@ -245,7 +251,9 @@ export function MapView({
       }
     });
     // Closing the event's window (✕) ends the focus; opening one (re)starts it.
-    map.on('popupclose', () => setUndimmedId(selectedRef.current));
+    map.on('popupclose', () => {
+      if (!relayeringRef.current) setUndimmedId(selectedRef.current);
+    });
     map.on('popupopen', () => setUndimmedId(null));
 
     // Keeps tiles correct when the column is resized or shown on mobile.
@@ -353,6 +361,17 @@ export function MapView({
     builtWithRef.current = deps;
     const wanted = new Map(events.map((e) => [e.id, e]));
     const gone: L.Marker[] = [];
+    // Pins held out of the clusters go back first (they may be rebuilt below).
+    const held = focusedRef.current;
+    if (held) {
+      relayeringRef.current = true;
+      focusLayerRef.current?.clearLayers();
+      relayeringRef.current = false;
+      focusedRef.current = null;
+      if (markersRef.current.get(held.id)?.markers === held.markers && sameDeps && wanted.get(held.id) === markersRef.current.get(held.id)?.event) {
+        layer.addLayers(held.markers);
+      }
+    }
     if (!sameDeps) {
       layer.clearLayers();
       markersRef.current.clear();
@@ -427,7 +446,7 @@ export function MapView({
       markersRef.current.set(event.id, { markers, event });
     }
     if (all.length) layer.addLayers(all);
-    if (all.length || gone.length || !sameDeps) setMarkersVersion((v) => v + 1);
+    if (all.length || gone.length || !sameDeps || held) setMarkersVersion((v) => v + 1);
   }, [events, t, dir, locale, lang, categoryLabel, compact, canMove]);
 
   // 4c. Staff: move a pin. Drag the pin or tap the map; ✓ saves, ✗ cancels.
@@ -671,6 +690,32 @@ export function MapView({
       }
     }
   }, [selectedId, focusId, markersVersion]);
+
+  // 6b. The focused event's pins leave the clusters (they stay visible, with their links,
+  // when the map zooms out) and go back when the focus ends.
+  useEffect(() => {
+    const group = markerLayerRef.current;
+    const holder = focusLayerRef.current;
+    if (!group || !holder) return;
+    const entry = focusId ? markersRef.current.get(focusId) : undefined;
+    const cur = focusedRef.current;
+    if (cur && (cur.id !== focusId || entry?.markers !== cur.markers)) {
+      relayeringRef.current = true;
+      holder.clearLayers();
+      relayeringRef.current = false;
+      if (markersRef.current.get(cur.id)?.markers === cur.markers) group.addLayers(cur.markers);
+      focusedRef.current = null;
+    }
+    if (entry && focusId && !focusedRef.current) {
+      const open = entry.markers.find((m) => m.isPopupOpen());
+      relayeringRef.current = true;
+      group.removeLayers(entry.markers);
+      entry.markers.forEach((m) => holder.addLayer(m));
+      relayeringRef.current = false;
+      focusedRef.current = { id: focusId, markers: entry.markers };
+      if (open && !compact) open.openPopup();
+    }
+  }, [focusId, markersVersion, compact]);
 
   // 6c. Dimming. A selected event with several places: its pins stay bright, every other
   // pin (and cluster) fades. A drawn area: the pins of a matching event that lie outside
