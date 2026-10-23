@@ -160,6 +160,9 @@ export function MapView({
   const markersRef = useRef(new Map<string, MarkerEntry>());
   const handledFocusRef = useRef<number | null>(null);
   const [markersVersion, setMarkersVersion] = useState(0);
+  /** The selected event whose focus (faded others, link lines) was ended by the visitor. */
+  const [undimmedId, setUndimmedId] = useState<string | null>(null);
+  const focusId = selectedId && selectedId !== undimmedId ? selectedId : null;
 
   // Latest callbacks/selection without re-binding every marker.
   const selectedRef = useRef(selectedId);
@@ -236,8 +239,14 @@ export function MapView({
     mapRef.current = map;
     map.on('click', (e: L.LeafletMouseEvent) => {
       if (drawClickRef.current) drawClickRef.current([e.latlng.lat, e.latlng.lng]);
-      else onBackgroundClickRef.current?.();
+      else {
+        setUndimmedId(selectedRef.current); // a tap on the empty map ends the focus
+        onBackgroundClickRef.current?.();
+      }
     });
+    // Closing the event's window (✕) ends the focus; opening one (re)starts it.
+    map.on('popupclose', () => setUndimmedId(selectedRef.current));
+    map.on('popupopen', () => setUndimmedId(null));
 
     // Keeps tiles correct when the column is resized or shown on mobile.
     const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
@@ -648,7 +657,7 @@ export function MapView({
     });
     const links = linkLayerRef.current;
     links?.clearLayers();
-    const entry = selectedId ? markersRef.current.get(selectedId) : undefined;
+    const entry = focusId ? markersRef.current.get(focusId) : undefined;
     if (links && entry && entry.markers.length > 1) {
       const [main, ...rest] = eventPoints(entry.event);
       for (const point of rest) {
@@ -661,21 +670,21 @@ export function MapView({
         }).addTo(links);
       }
     }
-  }, [selectedId, markersVersion]);
+  }, [selectedId, focusId, markersVersion]);
 
   // 6c. Dimming. A selected event with several places: its pins stay bright, every other
   // pin (and cluster) fades. A drawn area: the pins of a matching event that lie outside
   // the area fade (the event is shown because another of its places is inside).
   useEffect(() => {
     const container = containerRef.current;
-    const focus = selectedId ? markersRef.current.get(selectedId) : undefined;
+    const focus = focusId ? markersRef.current.get(focusId) : undefined;
     const focusOn = !!focus && focus.markers.length > 1;
     const areaOn = !!area && area.length >= 3 && !drawMode;
     container?.classList.toggle('ofm-dim-clusters', focusOn);
     markersRef.current.forEach(({ markers }, id) => {
       markers.forEach((marker) => {
         let o = 1;
-        if (focusOn && id !== selectedId) o = 0.25;
+        if (focusOn && id !== focusId) o = 0.25;
         else if (areaOn) {
           const ll = marker.getLatLng();
           if (!pointInPolygon([ll.lat, ll.lng], area!)) o = 0.35;
@@ -685,7 +694,7 @@ export function MapView({
     });
     // Home Front Command alert pins fade with the other events.
     alertLayerRef.current?.eachLayer((l) => (l as L.Marker).setOpacity?.(focusOn ? 0.25 : 1));
-  }, [selectedId, markersVersion, area, drawMode, alerts]);
+  }, [focusId, markersVersion, area, drawMode, alerts]);
 
   // 7. Drawn-area filter. Drawing: each tap adds a corner (free shape), or centre then
   //    edge (octagon). The applied area stays outlined while the filter is on.
