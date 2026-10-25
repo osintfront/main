@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // POST /api/translate — server-side translation with automatic fallback and a Supabase cache.
 //
 // Request:  { "text": "…" } or { "texts": ["…", "…"] }, "target": "he" | "en", optional "source"

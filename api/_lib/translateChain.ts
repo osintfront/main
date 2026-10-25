@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // Translation with automatic fallback. Server-side only (Vercel function): every API key is
 // read from environment variables and never reaches the browser.
 //
