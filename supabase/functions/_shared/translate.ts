@@ -5,7 +5,9 @@
 // or if the site cannot be reached, it falls back to the old direct Claude call (logged).
 import { translateBrief } from "./editor.ts";
 
-const API_URL = Deno.env.get("TRANSLATE_API_URL") ?? "";
+// Tolerant of a pasted Markdown link ("[https://…](https://…)"): the first plain URL is used.
+export const TRANSLATE_API_URL = (Deno.env.get("TRANSLATE_API_URL") ?? "").match(/https?:\/\/[^\s\]\)\[(]+/)?.[0] ?? "";
+const API_URL = TRANSLATE_API_URL;
 const SECRET = Deno.env.get("TRANSLATE_SECRET") ?? "";
 
 export interface Brief { title_he: string; summary_he: string; title_en: string; summary_en: string; model: string }

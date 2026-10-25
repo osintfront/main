@@ -27,7 +27,7 @@ import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { dedupeRecent } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
-import { translateBriefChain } from "../_shared/translate.ts";
+import { TRANSLATE_API_URL, translateBriefChain } from "../_shared/translate.ts";
 import { AGENT_EXCLUDED_CATEGORIES } from "../_shared/categoryRules.ts";
 import { classifyChannels } from "../_shared/channels.ts";
 import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
@@ -413,7 +413,7 @@ async function handle(req: Request): Promise<Response> {
   }
   if (action === "translate_test") {
     // Health check of the site's translation chain (each free provider on its own).
-    const url = Deno.env.get("TRANSLATE_API_URL") ?? "", secret = Deno.env.get("TRANSLATE_SECRET") ?? "";
+    const url = TRANSLATE_API_URL, secret = Deno.env.get("TRANSLATE_SECRET") ?? "";
     if (!url || !secret) return json({ ok: false, error: "TRANSLATE_API_URL / TRANSLATE_SECRET not set in Supabase" });
     const chainReq = body?.chain === true
       ? fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-translate-secret": secret }, body: JSON.stringify({ texts: [String(body?.text ?? "")], target: body?.target === "en" ? "en" : "he" }) })
