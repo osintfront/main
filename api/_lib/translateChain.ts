@@ -216,6 +216,31 @@ const PROVIDERS: Provider[] = [
   },
 ];
 
+/** Health check: run every provider that has a key on its own (no fallback, no cache). */
+export async function testProviders(text: string, target: Lang, source: Lang) {
+  const out: { name: string; model: string; paid: boolean; configured: boolean; ok: boolean; ms: number; result?: string; error?: string }[] = [];
+  for (const p of PROVIDERS) {
+    if (!p.enabled()) {
+      out.push({ name: p.name, model: p.model(), paid: !!p.paid, configured: false, ok: false, ms: 0 });
+      continue;
+    }
+    // The paid fallback is reported but never called by the health check.
+    if (p.paid) {
+      out.push({ name: p.name, model: p.model(), paid: true, configured: true, ok: false, ms: 0, error: 'not called (paid)' });
+      continue;
+    }
+    const started = Date.now();
+    try {
+      const r = await p.run(text, target, source);
+      const t = r.text.trim();
+      out.push({ name: p.name, model: p.model(), paid: false, configured: true, ok: !!t, ms: Date.now() - started, result: t.slice(0, 200), ...(t ? {} : { error: 'empty answer' }) });
+    } catch (e: any) {
+      out.push({ name: p.name, model: p.model(), paid: false, configured: true, ok: false, ms: Date.now() - started, error: String(e?.message ?? e).slice(0, 300) });
+    }
+  }
+  return out;
+}
+
 /** The providers that would be tried now (keys present), in order. */
 export const activeProviders = () => PROVIDERS.filter((p) => p.enabled()).map((p) => ({ name: p.name, model: p.model(), paid: !!p.paid }));
 

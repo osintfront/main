@@ -411,6 +411,16 @@ async function handle(req: Request): Promise<Response> {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
   }
+  if (action === "translate_test") {
+    // Health check of the site's translation chain (each free provider on its own).
+    const url = Deno.env.get("TRANSLATE_API_URL") ?? "", secret = Deno.env.get("TRANSLATE_SECRET") ?? "";
+    if (!url || !secret) return json({ ok: false, error: "TRANSLATE_API_URL / TRANSLATE_SECRET not set in Supabase" });
+    const chainReq = body?.chain === true
+      ? fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-translate-secret": secret }, body: JSON.stringify({ texts: [String(body?.text ?? "")], target: body?.target === "en" ? "en" : "he" }) })
+      : fetch(`${url}?test=1`, { headers: { "x-translate-secret": secret } });
+    const res = await chainReq;
+    return json({ ok: res.ok, status: res.status, body: await res.json().catch(() => null) });
+  }
   if (action === "split") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return json({ ok: true, created: await splitEventByCategory(db, id) });

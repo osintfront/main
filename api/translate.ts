@@ -7,7 +7,7 @@
 // or our own Supabase functions (header x-translate-secret = TRANSLATE_SECRET).
 // Never fails because of the providers: if every one of them fails, the original text comes back.
 import { createHash } from 'node:crypto';
-import { activeProviders, translateWithFallback, type ChainResult, type Lang } from './_lib/translateChain.js';
+import { activeProviders, testProviders, translateWithFallback, type ChainResult, type Lang } from './_lib/translateChain.js';
 
 const env = (k: string) => (process.env[k] ?? '').trim();
 const SUPABASE_URL = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
@@ -173,5 +173,10 @@ export async function POST(req: Request): Promise<Response> {
 /** GET /api/translate — which providers are configured (names only, never keys). Members only. */
 export async function GET(req: Request): Promise<Response> {
   if (!(await authorized(req))) return json({ error: 'unauthorized' }, 401);
+  // ?test=1 — run every free provider separately on a sample (Arabic → Hebrew).
+  if (new URL(req.url).searchParams.get('test') === '1') {
+    const sample = 'قصف مدفعي إسرائيلي استهدف أطراف بلدة الخيام جنوب لبنان صباح اليوم';
+    return json({ sample, results: await testProviders(sample, 'he', 'ar'), cache: !!(SUPABASE_URL() && SERVICE_KEY()) });
+  }
   return json({ providers: activeProviders(), cache: !!(SUPABASE_URL() && SERVICE_KEY()) });
 }
