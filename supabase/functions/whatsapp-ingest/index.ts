@@ -762,7 +762,20 @@ const TG_MAX_PER_POLL = 10;
 async function pollTelegram(dry: boolean) {
   const { data: channels } = await db.from("telegram_channels").select("*").eq("active", true);
   const out: Record<string, unknown>[] = [];
-  for (const ch of channels ?? []) {
+  // Many channels: read a few at a time so one minute's poll ends within the minute.
+  const queue = [...(channels ?? [])];
+  const worker = async () => {
+    for (let ch = queue.shift(); ch; ch = queue.shift()) await pollChannel(ch, dry, out);
+  };
+  await Promise.all(Array.from({ length: Math.min(TG_PARALLEL, queue.length) }, worker));
+  return out;
+}
+
+const TG_PARALLEL = 6;
+
+// deno-lint-ignore no-explicit-any
+async function pollChannel(ch: any, dry: boolean, out: Record<string, unknown>[]) {
+  {
     const now = new Date().toISOString();
     // One poll per channel at a time (a slow poll must not overlap the next minute's).
     if (!dry) {
@@ -771,7 +784,7 @@ async function pollTelegram(dry: boolean) {
         .eq("username", ch.username).or(`locked_until.is.null,locked_until.lt.${now}`).select("username");
       if (!claimed?.length) {
         out.push({ channel: ch.username, skipped: "previous poll still running" });
-        continue;
+        return;
       }
     }
     try {
@@ -780,7 +793,7 @@ async function pollTelegram(dry: boolean) {
       const { title, posts } = await fetchChannel(name);
       if (dry) {
         out.push({ channel: name, title, count: posts.length, last: posts.slice(-3) });
-        continue;
+        return;
       }
       const last = Number(ch.last_post_id ?? 0);
       const maxId = posts.length ? posts[posts.length - 1].id : last;
@@ -788,7 +801,7 @@ async function pollTelegram(dry: boolean) {
         // First read: remember where the channel is now; publish only what comes next.
         await db.from("telegram_channels").update({ title, last_post_id: maxId, baseline_done: true, last_run_at: now, last_ok_at: now, last_error: null, locked_until: null }).eq("username", ch.username);
         out.push({ channel: name, baseline: posts.length, last_post_id: maxId });
-        continue;
+        return;
       }
       const fresh = posts.filter((p) => p.id > last).slice(0, TG_MAX_PER_POLL);
       let done = last;
@@ -826,7 +839,6 @@ async function pollTelegram(dry: boolean) {
       out.push({ channel: ch.username, error: msg });
     }
   }
-  return out;
 }
 
 let cronSecret: string | null = null;
