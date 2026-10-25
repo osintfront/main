@@ -86,7 +86,14 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
 
   // The original keeps its own category's places (+ untagged ones); move its pin if it pointed elsewhere.
   const keep = [...(groups.get(keepSlug) ?? []), ...untagged];
+  const keepCat = bySlug.get(keepSlug);
+  const heKeep = `${HE[keepSlug] ?? keepCat?.name ?? ""}: ${names(keep, "name")}`.slice(0, 200);
+  const enKeep = `${EN[keepSlug] ?? (keepCat?.name ?? "").replace(/\s*\(.*\)$/, "")}: ${names(keep, "name_en")}`.slice(0, 200);
+  const tr0 = (ev.translations ?? {}) as Record<string, any>;
   const update: Record<string, unknown> = {
+    // The report's own headline covered every kind; now it is only one of them.
+    title: heKeep,
+    translations: { ...tr0, he: { ...(tr0.he ?? {}), title: heKeep }, en: { ...(tr0.en ?? {}), title: enKeep } },
     locations: keep,
     category_id: bySlug.get(keepSlug)?.id ?? ev.category_id,
     ai_suggestions: { ...(ev.ai_suggestions ?? {}), split_into: ids },
