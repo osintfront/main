@@ -124,6 +124,9 @@ export function TelegramChannelsSection() {
                         <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100" dir="auto">
                           {c.title || c.username}
                         </span>
+                        {c.pinned ? (
+                          <span className="shrink-0 text-xs" title={t('telegram.pinned')} aria-label={t('telegram.pinned')}>📌</span>
+                        ) : null}
                         <a
                           href={`https://t.me/${c.username}`}
                           target="_blank"

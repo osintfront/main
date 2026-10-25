@@ -181,7 +181,8 @@ export function EventEditorPage() {
       const r = await composeEvent(text, input.occurredAt || undefined);
       setInput((prev) => ({
         ...prev,
-        originalReportText: r.link?.text ? `${text}\n\n${r.link.text}`.slice(0, 10000) : text,
+        // A link: the original report is the post / page itself, not the pasted link.
+        originalReportText: r.link?.text ? r.link.text.slice(0, 10000) : text,
         ...(r.link?.url ? { sourceUrl: r.link.url } : {}),
         ...(r.link?.sourceName ? { sourceName: r.link.sourceName } : {}),
         ...(r.link?.occurredAt ? { occurredAt: r.link.occurredAt } : {}),
@@ -489,6 +490,9 @@ export function EventEditorPage() {
                 </p>
               ) : null}
             </div>
+          ) : null}
+          {linkUrl && !linkMedia.length ? (
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{t('compose.noMedia')}</p>
           ) : null}
           {linkMedia.length ? (
             <div className="mt-3">

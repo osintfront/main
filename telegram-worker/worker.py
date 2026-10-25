@@ -149,6 +149,7 @@ async def load_folders(client: TelegramClient) -> list[dict]:
             continue
         ids: list[int] = []
         pinned = list(getattr(f, "pinned_peers", []) or [])
+        pinned_ids = {p.channel_id for p in pinned if isinstance(p, types.InputPeerChannel)}
         peers = pinned if PINNED_ONLY else pinned + list(getattr(f, "include_peers", []) or [])
         for p in peers:
             if isinstance(p, types.InputPeerChannel):
@@ -167,7 +168,8 @@ async def load_folders(client: TelegramClient) -> list[dict]:
             if not e.broadcast and not INCLUDE_GROUPS:
                 continue  # groups/chats are skipped unless INCLUDE_GROUPS=1
             info = {"id": str(cid), "title": e.title or "", "username": e.username or ""}
-            chans.append(info)
+            # The server reads only pinned channels (each read post costs AI tokens).
+            chans.append({**info, "pinned": cid in pinned_ids})
             by_id.setdefault(cid, {**info, "folder": name, "broadcast": bool(e.broadcast)})
         folders.append({"name": name, "channels": chans})
     CHANNELS.by_id = by_id

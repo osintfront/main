@@ -191,7 +191,35 @@ async function syncTelegramFolders(folders: any[]) {
   if (!rows.length) return { synced: 0 };
   const { error } = await db.from("telegram_agents").upsert(rows, { onConflict: "folder" });
   if (error) throw error;
-  return { synced: rows.length };
+  return { synced: rows.length, ...(await syncPinnedChannels(folders)) };
+}
+
+// The server reads a worker channel only while it is pinned at the top of a Telegram tab
+// (each post read costs an AI classification + edit). Channels added by hand are not touched.
+async function syncPinnedChannels(folders: any[]) {
+  const pinned = new Map<string, { username: string; title: string; folder: string }>();
+  for (const f of Array.isArray(folders) ? folders : []) {
+    const folder = String(f?.name ?? "").trim().slice(0, 100);
+    for (const c of Array.isArray(f?.channels) ? f.channels : []) {
+      const u = String(c?.username ?? "");
+      // Older workers send pinned channels only (no flag); newer ones flag them.
+      if (!/^[A-Za-z0-9_]{4,64}$/.test(u) || c?.pinned === false) continue;
+      if (!pinned.has(u.toLowerCase())) pinned.set(u.toLowerCase(), { username: u, title: clip(c?.title, 200), folder });
+    }
+  }
+  const synced = [...new Set((Array.isArray(folders) ? folders : []).map((f) => String(f?.name ?? "").trim()).filter(Boolean))];
+  const { data: known } = await db.from("telegram_channels").select("username,origin,pinned,active");
+  const byName = new Map<string, any>((known ?? []).map((k: any) => [String(k.username).toLowerCase(), k]));
+  const add = [...pinned.values()].filter((p) => !byName.has(p.username.toLowerCase()))
+    .map((p) => ({ username: p.username, title: p.title, folder: p.folder, origin: "worker", pinned: true, active: true }));
+  if (add.length) await db.from("telegram_channels").insert(add);
+  const on = [...pinned.keys()].map((k) => byName.get(k)).filter((k) => k && (!k.pinned || (k.origin === "worker" && !k.active))).map((k) => k.username);
+  if (on.length) await db.from("telegram_channels").update({ pinned: true, active: true }).in("username", on).eq("origin", "worker");
+  if (on.length) await db.from("telegram_channels").update({ pinned: true }).in("username", on).neq("origin", "worker");
+  // Unpinned (in a tab this sync reported, no longer pinned anywhere): stop reading it.
+  const off = (known ?? []).filter((k: any) => k.origin === "worker" && k.pinned && !pinned.has(String(k.username).toLowerCase())).map((k: any) => k.username);
+  if (off.length && synced.length) await db.from("telegram_channels").update({ pinned: false, active: false }).in("username", off).in("folder", synced);
+  return { pinned: pinned.size, added: add.length, switched_on: on.length, switched_off: off.length };
 }
 
 async function countAgentMessages(results: { agent?: string; status?: string }[]) {
