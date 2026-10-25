@@ -26,6 +26,7 @@ import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { dedupeRecent } from "../_shared/dedupe.ts";
+import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { classifyChannels } from "../_shared/channels.ts";
 import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
 import { imageAsBase64 } from "../whatsapp-ingest/telegram.ts";
@@ -401,6 +402,10 @@ async function handle(req: Request): Promise<Response> {
   if (action === "edit") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
+  }
+  if (action === "split") {
+    if (!UUID.test(id)) return json({ error: "bad id" }, 400);
+    return json({ ok: true, created: await splitEventByCategory(db, id) });
   }
   if (action === "classify_channels") {
     try {

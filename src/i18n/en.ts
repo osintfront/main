@@ -246,6 +246,8 @@ export const en = {
   'search.quotaLeft': "{count} searches left today",
   'search.failed': "Search failed, please try again.",
   'search.quotaHint': "Press Enter to search · 3 searches a day",
+  'update.available': "A new version of the site is available",
+  'update.reload': "Reload",
   'compose.splitDone': "{count} events created — one per kind (strikes, shelling, explosions…)",
   'compose.andMore': "and {count} more",
   'compose.splitHint': "Saving creates a separate event for each kind: {kinds}",

@@ -248,6 +248,8 @@ export const he: Record<TranslationKey, string> = {
   'search.quotaLeft': "נותרו {count} חיפושים היום",
   'search.failed': "החיפוש נכשל, נסו שוב.",
   'search.quotaHint': "לחצו Enter כדי לחפש · 3 חיפושים ביום",
+  'update.available': "יש גרסה חדשה של האתר",
+  'update.reload': "רענן",
   'compose.splitDone': "נוצרו {count} אירועים — אחד לכל סוג (תקיפות, הפגזות, פיצוצים…)",
   'compose.andMore': "ועוד {count}",
   'compose.splitHint': "בשמירה ייווצר אירוע נפרד לכל סוג: {kinds}",
