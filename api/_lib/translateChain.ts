@@ -194,7 +194,6 @@ const PROVIDERS: Provider[] = [
         {
           model: 'claude-haiku-5-5',
           max_tokens: Math.min(4000, 200 + text.length * 2),
-          temperature: 0,
           system: instructions(target, source),
           messages: [{ role: 'user', content: text }],
         },
