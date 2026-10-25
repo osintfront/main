@@ -18,7 +18,7 @@
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { editReport, expandReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor } from "../_shared/editor.ts";
+import { EXPAND_VERSION, editReport, expandReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor } from "../_shared/editor.ts";
 import { setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
@@ -66,7 +66,9 @@ async function expand(id: string) {
   const others = (merged ?? []).filter((m: any) => m.message_text && m.message_text !== ev.original_report_text);
   const cached = expandedView(tr);
   // Cached unless more reports were merged since it was written.
-  if (cached.he && Number(ev.ai_suggestions?.expanded_sources ?? 0) >= others.length) return json({ ok: true, cached: true, ...cached });
+  if (cached.he && Number(ev.ai_suggestions?.expanded_sources ?? 0) >= others.length && Number(ev.ai_suggestions?.expand_version ?? 1) >= EXPAND_VERSION) {
+    return json({ ok: true, cached: true, ...cached });
+  }
   // One writer at a time: a second reader within a minute waits for the first.
   const started = Date.parse(String(ev.ai_suggestions?.expanding_at ?? ""));
   if (Number.isFinite(started) && Date.now() - started < 90_000) return json({ ok: true, pending: true }, 202);
@@ -83,7 +85,7 @@ async function expand(id: string) {
       en: { ...(tr.en ?? {}), details: r.en.details, religious: r.en.religious, implications: r.en.implications },
     };
     const { data: cur } = await db.from("events").select("ai_suggestions").eq("id", id).maybeSingle();
-    const ai = { ...(cur?.ai_suggestions ?? {}), expand_model: r.model, expanded_sources: others.length };
+    const ai = { ...(cur?.ai_suggestions ?? {}), expand_model: r.model, expanded_sources: others.length, expand_version: EXPAND_VERSION };
     delete (ai as Record<string, unknown>).expanding_at;
     await db.from("events").update({ translations: next, ai_suggestions: ai }).eq("id", id);
     return json({ ok: true, cached: false, ...expandedView(next) });

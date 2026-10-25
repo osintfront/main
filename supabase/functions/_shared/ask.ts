@@ -5,7 +5,7 @@
 //   2. search — ai_search_candidates() returns the best-matching public events (≤120).
 //   3. answer — the model reads only those events and answers (names, places, times),
 //               citing them by number. It never invents facts beyond the events.
-import { callClaude, CHEAP_MODELS, FAST_MODELS, isTransient } from "./editor.ts";
+import { callClaude, CHEAP_MODELS, isTransient, OPUS_MODELS } from "./editor.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -134,7 +134,7 @@ Pick ALL categories that could hold the answer (e.g. launch sites → missile-ro
     const places = Array.isArray(r.locations) ? r.locations.map((l: any) => l?.name).filter(Boolean).slice(0, 6).join(", ") : "";
     return `[${i + 1}] ${ilTime(r.occurred_at)} | ${r.category_slug ?? "-"} | ${r.country ?? "-"} | ${r.location_name ?? "-"}${places && places !== r.location_name ? ` (${places})` : ""} | ${r.title} — ${String(r.description ?? "").replace(/\s+/g, " ").slice(0, 260)}`;
   }).join("\n");
-  const ans = await tool<{ answer?: string; items?: unknown }>(FAST_MODELS, {
+  const ans = await tool<{ answer?: string; items?: unknown }>(OPUS_MODELS, {
     max_tokens: 1800,
     system: [{
       type: "text",
