@@ -9,10 +9,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { inRegion } from "../_shared/region.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor, type EditResult } from "../_shared/editor.ts";
+import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor, type EditResult } from "../_shared/editor.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
+import { translateBriefChain } from "../_shared/translate.ts";
 import { AGENT_EXCLUDED_CATEGORIES, CATEGORY_RULES } from "../_shared/categoryRules.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -687,7 +688,9 @@ const background: Promise<unknown>[] = [];
 
 async function translateRow(eventId: string, title: string, text: string) {
   try {
-    const r = await translateBrief(title, text);
+    // Free providers first (site translation chain); Claude only as the last fallback.
+    const r = await translateBriefChain(title, text);
+    if (!r) return; // nothing could translate it: the original stays
     const update: Record<string, unknown> = {
       translations: { he: { title: r.title_he, summary: r.summary_he }, en: { title: r.title_en, summary: r.summary_en, description: r.summary_en } },
     };

@@ -20,13 +20,14 @@
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { EXPAND_VERSION, countryCode, editReport, expandReport, geocode, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor } from "../_shared/editor.ts";
+import { EXPAND_VERSION, countryCode, editReport, expandReport, geocode, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor } from "../_shared/editor.ts";
 import { setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { dedupeRecent } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
+import { translateBriefChain } from "../_shared/translate.ts";
 import { AGENT_EXCLUDED_CATEGORIES } from "../_shared/categoryRules.ts";
 import { classifyChannels } from "../_shared/channels.ts";
 import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
@@ -141,7 +142,9 @@ async function translate(limit: number, drafts = false) {
   const errors: string[] = [];
   for (const e of todo) {
     try {
-      const r = await translateBrief(e.title, e.description || e.original_report_text || "");
+      // Free providers first (site translation chain); Claude only as the last fallback.
+      const r = await translateBriefChain(e.title, e.description || e.original_report_text || "");
+      if (!r) continue; // nothing could translate it now
       const tr = asTr(e.translations);
       const next: Tr = {
         ...tr,
