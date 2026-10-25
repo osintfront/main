@@ -18,7 +18,7 @@ import {
   updateEvent,
 } from '@/services/eventAdminService';
 import { friendlyError } from '@/services/serviceError';
-import { composeEvent } from '@/services/composeService';
+import { attachComposeMedia, composeEvent, type ComposeMedia } from '@/services/composeService';
 import { getCategoryIcon } from '@/data/categoryRegistry';
 import type { GeocodeResult } from '@/services/geocodingService';
 import type { EventCategory } from '@/types/category';
@@ -117,6 +117,9 @@ export function EventEditorPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [quickText, setQuickText] = useState('');
+  /** Pictures from a composed link: saved with the report. */
+  const [linkMedia, setLinkMedia] = useState<ComposeMedia[]>([]);
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
 
   const load = useCallback(async () => {
@@ -178,7 +181,10 @@ export function EventEditorPage() {
       const r = await composeEvent(text, input.occurredAt || undefined);
       setInput((prev) => ({
         ...prev,
-        originalReportText: text,
+        originalReportText: r.link?.text ? `${text}\n\n${r.link.text}`.slice(0, 10000) : text,
+        ...(r.link?.url ? { sourceUrl: r.link.url } : {}),
+        ...(r.link?.sourceName ? { sourceName: r.link.sourceName } : {}),
+        ...(r.link?.occurredAt ? { occurredAt: r.link.occurredAt } : {}),
         title: r.title || prev.title,
         description: r.description || prev.description,
         categoryId: r.categoryId && categories.some((c) => c.id === r.categoryId) ? r.categoryId : prev.categoryId,
@@ -193,6 +199,8 @@ export function EventEditorPage() {
           ? { latitude: r.latitude, longitude: r.longitude, locationPrecision: r.precision ?? 'exact', geocodingConfidence: null, coordinatesManuallyCorrected: false }
           : {}),
       }));
+      setLinkMedia(r.link?.media ?? []);
+      setLinkUrl(r.link?.url ?? null);
       setErrors({});
       toast.success(r.latitude !== null ? t('compose.filled') : t('compose.filledNoPlace'));
     } catch (err) {
@@ -257,13 +265,18 @@ export function EventEditorPage() {
       if (isNew) {
         // A report with places of several kinds (strikes, shelling, explosions…): one event per kind.
         const parts = splitByCategory(input);
+        const tgPost = linkUrl && /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{3,}\/\d+$/.test(linkUrl) ? linkUrl : null;
         if (parts.length > 1) {
-          for (const part of parts) await createEvent(part, target, notes);
+          for (const part of parts) {
+            const ev = await createEvent(part, target, notes);
+            if (linkMedia.length) await attachComposeMedia(ev.id, linkMedia, tgPost);
+          }
           toast.success(t('compose.splitDone', { count: parts.length }));
           navigate('/admin/events', { replace: true });
           return;
         }
         const created = await createEvent(input, target, notes);
+        if (linkMedia.length) await attachComposeMedia(created.id, linkMedia, tgPost);
         toast.success(t(target === 'published' ? 'form.toastPublished' : target === 'pending_review' ? 'form.toastSubmitted' : 'form.toastDraft'));
         navigate(`/admin/events/${created.id}`, { replace: true });
         return;
@@ -475,6 +488,27 @@ export function EventEditorPage() {
                   })}
                 </p>
               ) : null}
+            </div>
+          ) : null}
+          {linkMedia.length ? (
+            <div className="mt-3">
+              <p className="mb-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">{t('compose.media', { count: linkMedia.length })}</p>
+              <div className="flex flex-wrap gap-2">
+                {linkMedia.map((m, i) => (
+                  <div key={m.url} className="relative">
+                    <img src={m.url} alt="" referrerPolicy="no-referrer" className="h-20 w-28 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700" />
+                    {m.kind === 'video_thumb' ? <span className="absolute inset-0 grid place-items-center text-xl text-white drop-shadow">▶</span> : null}
+                    <button
+                      type="button"
+                      onClick={() => setLinkMedia((list) => list.filter((_, j) => j !== i))}
+                      aria-label={t('compose.removeMedia')}
+                      className="absolute -end-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-white text-xs text-slate-600 shadow ring-1 ring-slate-200 hover:text-red-600 dark:bg-slate-900"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-3">

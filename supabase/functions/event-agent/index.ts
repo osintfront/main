@@ -16,6 +16,7 @@
 //   {action:"classify_channels"} cron secret — region of public Telegram channels without one (batch of 120).
 //   {action:"dedupe", minutes?}  cron secret — fold duplicate reports of one incident into one event
 //                                (events created since the last run vs. the last 12 hours).
+//   {action:"attach_media", event_id, media, post_url?}  staff — save a composed link's pictures to the event.
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -26,6 +27,9 @@ import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { dedupeRecent } from "../_shared/dedupe.ts";
 import { classifyChannels } from "../_shared/channels.ts";
+import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
+import { imageAsBase64 } from "../whatsapp-ingest/telegram.ts";
+import { makeRoom } from "../_shared/videoOnDemand.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -165,17 +169,27 @@ Deno.serve(async (req) => {
 
 /** Quick compose: free text in any language → every field of the report form (nothing is saved). */
 async function compose(body: Record<string, unknown>) {
-  const text = String(body?.text ?? "").trim().slice(0, 8000);
+  let text = String(body?.text ?? "").trim().slice(0, 8000);
+  // A link in the text: read the page (article or public Telegram post) — its text, date
+  // and pictures join the report.
+  const link = firstUrl(text);
+  let page: LinkContent | null = null;
+  if (link) {
+    page = await fetchLink(link).catch(() => null);
+    const own = text.replace(link, "").trim();
+    if (page?.text) text = [own, page.text].filter(Boolean).join("\n\n").slice(0, 9000);
+    else if (own.length < 10) return json({ error: "link_unreadable" }, 422);
+  }
   if (text.length < 10) return json({ error: "text too short" }, 400);
   const { data: cats } = await db.from("event_categories").select("id,slug,name").eq("is_active", true);
   const { data: corrections } = await db.from("category_corrections").select("text,from_slug,to_slug").order("created_at", { ascending: false }).limit(25);
-  const sentAt = typeof body?.sent_at === "string" && !isNaN(Date.parse(body.sent_at)) ? body.sent_at : new Date().toISOString();
+  const sentAt = page?.date ?? (typeof body?.sent_at === "string" && !isNaN(Date.parse(body.sent_at)) ? body.sent_at : new Date().toISOString());
   const r = await editReport({
     text,
     mode: "crawler",
     categories: (cats ?? []).map((c: any) => ({ slug: c.slug, name: c.name })),
     categoryLessons: formatCategoryLessons(corrections ?? []),
-    origin: { name: String(body?.source_name ?? "").slice(0, 120), url: typeof body?.source_url === "string" ? body.source_url : undefined, sentAt },
+    origin: { name: (page?.sourceName ?? String(body?.source_name ?? "")).slice(0, 120), url: page?.url ?? (typeof body?.source_url === "string" ? body.source_url : undefined), sentAt },
     detailedPlaces: true,
     maxPlaces: 30,
   });
@@ -224,7 +238,40 @@ async function compose(body: Record<string, unknown>) {
     locations: locationsForDb(r, 30),
     translations: translationsFor(r),
     model: r.model,
+    ...(page
+      ? { link: { url: page.url, sourceName: page.sourceName, occurredAt: page.date, media: page.media, text: page.text.slice(0, 6000) } }
+      : link ? { link: { url: link, sourceName: "", occurredAt: null, media: [], text: "" } } : {}),
   });
+}
+
+/** Save the pictures of a composed link to a new event (staff, after "save"). */
+async function attachMedia(body: Record<string, unknown>) {
+  const eventId = String(body?.event_id ?? "");
+  if (!UUID.test(eventId)) return json({ error: "bad id" }, 400);
+  const postUrl = typeof body?.post_url === "string" && /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{3,}\/\d+$/.test(body.post_url) ? body.post_url : null;
+  const items = (Array.isArray(body?.media) ? body.media : []).slice(0, 4) as { url?: string; kind?: string }[];
+  const d = new Date();
+  let n = 0, videoIndex = 0;
+  for (const [i, m] of items.entries()) {
+    if (typeof m?.url !== "string" || !/^https:\/\//.test(m.url)) continue;
+    const img = await imageAsBase64(m.url);
+    if (!img) continue;
+    const bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
+    await makeRoom(db, bytes.length);
+    const ext = img.mime === "image/jpeg" ? "jpg" : img.mime.split("/")[1];
+    const path = `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${eventId}/link-${i}.${ext}`;
+    const up = await db.storage.from("event-media").upload(path, bytes, { contentType: img.mime, upsert: true });
+    if (up.error) continue;
+    const url = db.storage.from("event-media").getPublicUrl(path).data.publicUrl;
+    const video = m.kind === "video_thumb";
+    await db.from("event_media").upsert({
+      event_id: eventId, kind: video ? "video_thumb" : "image", storage_path: path, public_url: url, bytes: bytes.length,
+      source_msg_key: `link:${eventId}`,
+      ...(video ? { source_url: postUrl, source_index: videoIndex++ } : {}),
+    }, { onConflict: "storage_path" });
+    n++;
+  }
+  return json({ ok: true, saved: n });
 }
 
 async function handle(req: Request): Promise<Response> {
@@ -266,7 +313,7 @@ async function handle(req: Request): Promise<Response> {
       return json({ ok: false, configured: true, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }
   }
-  if (action === "compose") {
+  if (action === "compose" || action === "attach_media") {
     // Staff who may create or edit events: check the caller's own session.
     const auth = req.headers.get("authorization") ?? "";
     const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
@@ -279,6 +326,7 @@ async function handle(req: Request): Promise<Response> {
     ]);
     if (a !== true && b !== true && !(await cronOk(req))) return json({ error: "unauthorized" }, 401);
     try {
+      if (action === "attach_media") return await attachMedia(body);
       return await compose(body);
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
