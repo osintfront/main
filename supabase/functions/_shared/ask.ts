@@ -129,18 +129,23 @@ Pick ALL categories that could hold the answer (e.g. launch sites → missile-ro
     return { answer: lang === "en" ? "No matching events were found in the database for this question and time range." : "לא נמצאו במאגר אירועים שעונים על השאלה בטווח הזמן הזה.", ids: [], lang, since, until, candidates: 0 };
   }
 
-  // 3. Answer from the events only.
+  // 3. Answer from the events only. The original report goes along: names (of people killed,
+  // say) are often only there, not in the short summary.
+  const { data: origs } = await db.from("events").select("id,original_report_text").in("id", list.map((r) => r.id));
+  const orig = new Map<string, string>((origs ?? []).map((o: any) => [o.id, String(o.original_report_text ?? "")]));
   const lines = list.map((r, i) => {
     const places = Array.isArray(r.locations) ? r.locations.map((l: any) => l?.name).filter(Boolean).slice(0, 6).join(", ") : "";
-    return `[${i + 1}] ${ilTime(r.occurred_at)} | ${r.category_slug ?? "-"} | ${r.country ?? "-"} | ${r.location_name ?? "-"}${places && places !== r.location_name ? ` (${places})` : ""} | ${r.title} — ${String(r.description ?? "").replace(/\s+/g, " ").slice(0, 260)}`;
+    const src = (orig.get(r.id) ?? "").replace(/\s+/g, " ").slice(0, i < 40 ? 900 : 250);
+    return `[${i + 1}] ${ilTime(r.occurred_at)} | ${r.category_slug ?? "-"} | ${r.country ?? "-"} | ${r.location_name ?? "-"}${places && places !== r.location_name ? ` (${places})` : ""} | ${r.title} — ${String(r.description ?? "").replace(/\s+/g, " ").slice(0, 400)}${src ? ` ‖ מקור: ${src}` : ""}`;
   }).join("\n");
   const ans = await tool<{ answer?: string; items?: unknown }>(OPUS_MODELS, {
-    max_tokens: 1800,
+    max_tokens: 6000,
     system: [{
       type: "text",
       text: `You answer questions about a live Middle East conflict map using ONLY the numbered events given (from our own database). Now (Israel time): ${nowIl}.
 - Answer in ${lang === "en" ? "English" : "Hebrew (natural, correct Hebrew)"}.
 - First line: a one-sentence direct answer (how many, where). Then bullets "• " — one per finding: what happened, names of people (if any), the place, the time (Israel), and the citation [n]. Group the same incident reported several times into one bullet with all its citations.
+- Names of people (killed, wounded, arrested, targeted): list ALL of them, as written in the events or their original reports (‖ מקור), transliterated into the answer language. Never cut a list of names short.
 - Only what the events say. No guessing, no outside knowledge; if they do not answer the question, say so plainly.
 - Ignore events that do not fit the question (wrong country, wrong topic, outside the time asked) — do not mention them at all.
 - items: the numbers of the events that directly answer the question (usually the ones you cited), most relevant first. Not background, not other countries, not threats when the question asks what happened.
