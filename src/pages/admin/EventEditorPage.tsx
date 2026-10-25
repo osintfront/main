@@ -22,7 +22,7 @@ import { composeEvent } from '@/services/composeService';
 import { getCategoryIcon } from '@/data/categoryRegistry';
 import type { GeocodeResult } from '@/services/geocodingService';
 import type { EventCategory } from '@/types/category';
-import { SEVERITIES, SOURCE_TYPES, isApproximateLocation, type AdminEvent, type EventHistoryEntry, type EventInput, type EventStatus } from '@/types/event';
+import { SEVERITIES, SOURCE_TYPES, isApproximateLocation, type PlaceInput, type AdminEvent, type EventHistoryEntry, type EventInput, type EventStatus } from '@/types/event';
 import { formatDateTime } from '@/utils/time';
 import { StatusBadge } from '@/components/common/Badges';
 import { Alert, Spinner } from '@/components/common/Feedback';
@@ -207,6 +207,40 @@ export function EventEditorPage() {
     return k ? t(k as TranslationKey) : null;
   };
 
+  /**
+   * Places of different kinds → one event per kind: its own category, its places (pinned at
+   * the first one), a headline "<kind>: <places>", and the report's summary and original text.
+   */
+  const splitByCategory = (base: EventInput): EventInput[] => {
+    const places = base.locations ?? [];
+    const groups = new Map<string, PlaceInput[]>();
+    for (const p of places) {
+      if (!p.category_slug) continue;
+      groups.set(p.category_slug, [...(groups.get(p.category_slug) ?? []), p]);
+    }
+    if (groups.size < 2) return [base];
+    const out: EventInput[] = [];
+    for (const [slug, list] of groups) {
+      const cat = categories.find((c) => c.slug === slug);
+      if (!cat) continue;
+      const names = list.map((p) => p.name).filter(Boolean);
+      const shown = names.slice(0, 4).join(', ');
+      const more = names.length > 4 ? ` ${t('compose.andMore', { count: names.length - 4 })}` : '';
+      const first = list.find((p) => p.lat !== null && p.lng !== null);
+      out.push({
+        ...base,
+        title: `${categoryLabel(cat.slug, cat.name)}: ${shown}${more}`.slice(0, 200),
+        categoryId: cat.id,
+        locations: list,
+        locationName: first?.name ?? list[0]?.name ?? base.locationName,
+        latitude: first ? first.lat : null,
+        longitude: first ? first.lng : null,
+        locationPrecision: first ? ((first.precision as EventInput['locationPrecision']) ?? 'exact') : null,
+      });
+    }
+    return out.length > 1 ? out : [base];
+  };
+
   /** Validate for the target status, then save (create or update). */
   const run = async (label: string, target: EventStatus, extra?: { rejectionReason?: string; skipValidation?: boolean }) => {
     if (busy) return;
@@ -221,6 +255,14 @@ export function EventEditorPage() {
     setBusy(label);
     try {
       if (isNew) {
+        // A report with places of several kinds (strikes, shelling, explosions…): one event per kind.
+        const parts = splitByCategory(input);
+        if (parts.length > 1) {
+          for (const part of parts) await createEvent(part, target, notes);
+          toast.success(t('compose.splitDone', { count: parts.length }));
+          navigate('/admin/events', { replace: true });
+          return;
+        }
         const created = await createEvent(input, target, notes);
         toast.success(t(target === 'published' ? 'form.toastPublished' : target === 'pending_review' ? 'form.toastSubmitted' : 'form.toastDraft'));
         navigate(`/admin/events/${created.id}`, { replace: true });
@@ -421,6 +463,18 @@ export function EventEditorPage() {
                 })}
               </ul>
               <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{t('compose.placesHint')}</p>
+              {isNew && splitByCategory(input).length > 1 ? (
+                <p className="mt-1.5 rounded-lg bg-sky-100 px-2.5 py-1.5 text-xs font-medium text-sky-900 dark:bg-sky-500/15 dark:text-sky-200">
+                  {t('compose.splitHint', {
+                    kinds: [...new Set((input.locations ?? []).map((l) => l.category_slug).filter(Boolean))]
+                      .map((slug) => {
+                        const c = categories.find((x) => x.slug === slug);
+                        return c ? categoryLabel(c.slug, c.name) : slug;
+                      })
+                      .join(' · '),
+                  })}
+                </p>
+              ) : null}
             </div>
           ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-3">
