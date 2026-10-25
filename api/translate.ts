@@ -47,7 +47,7 @@ async function authorized(req: Request): Promise<boolean> {
   }
 }
 
-/** Arabic script → Arabic, Hebrew letters → Hebrew, otherwise English (only needed by Cloudflare). */
+/** Arabic script → Arabic, Hebrew letters → Hebrew, otherwise English (no translation when it is already the target). */
 function detect(text: string): Lang {
   const ar = (text.match(/[؀-ۿ]/g) ?? []).length;
   const he = (text.match(/[֐-׿]/g) ?? []).length;

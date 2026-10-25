@@ -11,7 +11,7 @@ create table if not exists public.translation_cache (
   source_lang     text,
   target_lang     text not null check (target_lang in ('he', 'en')),
   translated_text text not null,
-  provider        text not null,                    -- gemini / groq / cloudflare / openrouter / cohere / huggingface / claude
+  provider        text not null,                    -- cohere / gemini / groq / openrouter / cohere / huggingface / claude
   model           text,
   paid            boolean not null default false,
   created_at      timestamptz not null default now()
