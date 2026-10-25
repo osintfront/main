@@ -1,4 +1,4 @@
-export const APP_ROLES = ['super_admin', 'admin', 'editor', 'viewer'] as const;
+export const APP_ROLES = ['super_admin', 'admin', 'analyst', 'viewer'] as const;
 export type AppRole = (typeof APP_ROLES)[number];
 
 export const USER_STATUSES = ['active', 'pending', 'suspended'] as const;

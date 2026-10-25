@@ -16,7 +16,7 @@ import { useToast } from '@/components/common/Toast';
 
 const INPUT =
   'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-white';
-const ROLE_ORDER: AppRole[] = ['super_admin', 'admin', 'editor', 'viewer'];
+const ROLE_ORDER: AppRole[] = ['super_admin', 'admin', 'analyst', 'viewer'];
 
 /** Users: create (temporary password), change role, suspend, reset password, remove. */
 export function UsersPage() {
@@ -29,7 +29,7 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [form, setForm] = useState({ email: '', name: '', role: (roles.includes('editor') ? 'editor' : roles[0]) as AppRole });
+  const [form, setForm] = useState({ email: '', name: '', role: (roles.includes('analyst') ? 'analyst' : roles[0]) as AppRole });
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
   const [removing, setRemoving] = useState<Profile | null>(null);

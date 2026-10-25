@@ -59,7 +59,7 @@ const ROLE_PERMISSIONS: Record<AppRole, readonly Permission[]> = {
   // Back office: events list + "Report event"; may publish drafts / reports waiting for review
   // (event.publish.draft); a change to a live event waits for an admin (trigger events_editor_review).
   // No archive/delete/duplicate.
-  editor: ['admin.access', 'event.view.operational', 'event.view.internal', 'event.create', 'event.edit.own', 'event.edit.any', 'event.publish.draft'],
+  analyst: ['admin.access', 'event.view.operational', 'event.view.internal', 'event.create', 'event.edit.own', 'event.edit.any', 'event.publish.draft'],
   // "User": the public map with its filters only.
   viewer: [],
 };
@@ -69,7 +69,7 @@ type PermissionSubject = Pick<Profile, 'role' | 'status' | 'canPublish'> | null 
 export function permissionsFor(subject: PermissionSubject): ReadonlySet<Permission> {
   if (!subject || subject.status !== 'active') return new Set();
   const granted = new Set<Permission>(ROLE_PERMISSIONS[subject.role] ?? []);
-  if (subject.canPublish && subject.role === 'editor') granted.add('event.publish');
+  if (subject.canPublish && subject.role === 'analyst') granted.add('event.publish');
   return granted;
 }
 
@@ -80,8 +80,8 @@ export function hasPermission(subject: PermissionSubject, permission: Permission
 /** Roles a user may assign to others, mirroring the profiles guard trigger. */
 export function assignableRoles(subject: PermissionSubject): AppRole[] {
   const perms = permissionsFor(subject);
-  if (perms.has('role.manage')) return ['super_admin', 'admin', 'editor', 'viewer'];
-  if (perms.has('user.manage.admins')) return ['admin', 'editor', 'viewer'];
-  if (perms.has('user.manage') || perms.has('user.invite')) return ['editor', 'viewer'];
+  if (perms.has('role.manage')) return ['super_admin', 'admin', 'analyst', 'viewer'];
+  if (perms.has('user.manage.admins')) return ['admin', 'analyst', 'viewer'];
+  if (perms.has('user.manage') || perms.has('user.invite')) return ['analyst', 'viewer'];
   return [];
 }

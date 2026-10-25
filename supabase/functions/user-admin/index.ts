@@ -15,7 +15,7 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
-const ROLES = ["super_admin", "admin", "editor", "viewer"];
+const ROLES = ["super_admin", "admin", "analyst", "viewer"];
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
 /** 16 characters, letters + digits (no look-alikes). */

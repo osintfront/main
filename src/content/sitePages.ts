@@ -44,7 +44,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           h: 'איך אנחנו עובדים',
           p: [
             'הדיווחים נאספים ממקורות פתוחים: אתרי חדשות ומכוני מחקר, ערוצי טלגרם ציבוריים, קבוצות דיווח וההתרעות הרשמיות של פיקוד העורף.',
-            'העיבוד נעשה בסיוע בינה מלאכותית (AI) תחת בקרה של צוות העורכים: סיווג הדיווח, תרגום לעברית, תמצות, איחוד דיווחים כפולים על אותו אירוע ואיתור המיקום. הצוות רשאי לתקן, לאחד או להסיר כל אירוע.',
+            'העיבוד נעשה בסיוע בינה מלאכותית (AI) תחת בקרה של צוות האנליסטים: סיווג הדיווח, תרגום לעברית, תמצות, איחוד דיווחים כפולים על אותו אירוע ואיתור המיקום. הצוות רשאי לתקן, לאחד או להסיר כל אירוע.',
             'אנחנו לא מעתיקים כתבות. כל אירוע מוצג כתקציר קצר עם קישור למקור המלא, ודיווחים נוספים על אותו אירוע מופיעים תחת "מקורות".',
           ],
         },
@@ -99,7 +99,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         },
         {
           h: 'צוות האתר',
-          p: ['חשבונות משתמש קיימים רק לצוות העורכים, בהזמנה בלבד. פרטי הצוות (שם ומייל) נשמרים לצורך ניהול הגישה ותיעוד פעולות עריכה.'],
+          p: ['חשבונות משתמש קיימים רק לצוות האנליסטים, בהזמנה בלבד. פרטי הצוות (שם ומייל) נשמרים לצורך ניהול הגישה ותיעוד פעולות עריכה.'],
         },
         {
           h: 'שיתוף מידע',
@@ -162,7 +162,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           h: 'How we work',
           p: [
             'Reports come from open sources: news sites and research institutes, public Telegram channels, reporting groups and the official Home Front Command alerts.',
-            'Processing is assisted by artificial intelligence (AI) under the oversight of our editors: classifying the report, translating it into Hebrew, summarising it, merging duplicate reports of the same event and locating it. Editors may correct, merge or remove any event.',
+            'Processing is assisted by artificial intelligence (AI) under the oversight of our analysts: classifying the report, translating it into Hebrew, summarising it, merging duplicate reports of the same event and locating it. Analysts may correct, merge or remove any event.',
             'We do not copy articles. Each event is a short summary with a link to the full source; further reports of the same event are listed under "Sources".',
           ],
         },
@@ -209,7 +209,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           ],
         },
         { h: 'Contacting us', p: ['If you email us, we use your address and message only to reply and handle your request.'] },
-        { h: 'Site staff', p: ['User accounts exist only for our editors, by invitation. Their name and email are kept to manage access and record editing actions.'] },
+        { h: 'Site staff', p: ['User accounts exist only for our analysts, by invitation. Their name and email are kept to manage access and record editing actions.'] },
         {
           h: 'Sharing information',
           p: ['We do not sell personal information. Information is passed to service providers (hosting, database, advertising) only as needed to run the site, or where the law requires it.'],
