@@ -1,5 +1,5 @@
 -- Per-place categories survive place resolution (one event per category on ingest),
--- and a report may list up to 15 places.
+-- and a report may list up to 30 places.
 create or replace function public.resolve_event_locations(p_locations jsonb, p_seed uuid)
 returns jsonb language plpgsql stable set search_path = '' as $$
 declare
@@ -15,7 +15,7 @@ declare
 begin
   if p_locations is null or jsonb_typeof(p_locations) <> 'array' then return '[]'::jsonb; end if;
   for v_item in select value from jsonb_array_elements(p_locations) loop
-    exit when jsonb_array_length(v_out) >= 15;
+    exit when jsonb_array_length(v_out) >= 30;
     continue when jsonb_typeof(v_item) <> 'object';
     v_i := v_i + 1;
     v_name := left(btrim(coalesce(v_item ->> 'name', '')), 120);
