@@ -363,8 +363,9 @@ async function runAgent(agent: string, settings: Record<string, any>) {
       const since = new Date(Date.now() - 12 * 3600_000).toISOString();
       const { data: candidates } = await db.from("events").select("id,title,occurred_at,description,sources,source_url")
         .is("deleted_at", null).in("status", ["published"]).gte("occurred_at", since).order("occurred_at", { ascending: false }).limit(40);
+      // The lead of the article carries the news; the rest costs tokens without changing the event.
       const r = await editReport({
-        text, mode: "crawler", categories, candidates: candidates ?? [], allowedDomains, categoryLessons,
+        text: text.slice(0, 3000), mode: "crawler", categories, candidates: candidates ?? [], allowedDomains, categoryLessons,
         detailedPlaces: true, maxPlaces: 15,
         origin: { name: item.source.name, url: item.url, sentAt: articleDate ?? undefined },
         contextOnly: tooOld,
