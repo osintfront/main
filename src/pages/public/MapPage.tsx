@@ -349,6 +349,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         filterCount={filterCount}
         filtersOpen={filtersOpen}
         onToggleFilters={() => setFiltersOpen((v) => !v)}
+        onSoundOpen={() => setFiltersOpen(false)}
       />
       {filtersOpen ? (
         <FilterPanel

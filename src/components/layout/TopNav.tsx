@@ -20,9 +20,11 @@ interface TopNavProps {
   filterCount?: number;
   filtersOpen?: boolean;
   onToggleFilters?: () => void;
+  /** The alert-sound menu opened (the page closes its filter panel). */
+  onSoundOpen?: () => void;
 }
 
-export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, filtersOpen = false, onToggleFilters }: TopNavProps) {
+export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, filtersOpen = false, onToggleFilters, onSoundOpen }: TopNavProps) {
   const { t } = useI18n();
   const { status, profile } = useAuth();
   const { can } = usePermissions();
@@ -184,7 +186,7 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
         >
           {mode === 'live' ? <History className="size-4" aria-hidden /> : <Radio className="size-4 text-red-500" aria-hidden />}
         </Link>
-        {mode === 'live' ? <SoundMenu /> : null}
+        {mode === 'live' ? <SoundMenu onOpen={onSoundOpen} /> : null}
         <LanguageToggle />
         <ThemeToggle />
         {showAdmin ? (

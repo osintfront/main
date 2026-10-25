@@ -19,7 +19,7 @@ const SLUGS = DEFAULT_CATEGORIES.map((c) => c.slug);
  * Bell button + menu: master sound switch and a checkbox per event type.
  * Preferences are per browser (localStorage).
  */
-export function SoundMenu() {
+export function SoundMenu({ onOpen }: { onOpen?: () => void } = {}) {
   const { t, categoryLabel } = useI18n();
   const sound = useSoundSetting();
   const audioReady = useAudioReady();
@@ -57,7 +57,10 @@ export function SoundMenu() {
         onClick={() => {
           unlockAudio(); // a click is what browsers need to allow sound
           if (needsClick) preview();
-          setOpen((o) => !o);
+          setOpen((o) => {
+            if (!o) onOpen?.(); // e.g. close the filter panel: both don't fit on a phone
+            return !o;
+          });
         }}
         aria-haspopup="true"
         aria-expanded={open}
@@ -75,7 +78,7 @@ export function SoundMenu() {
         <div
           role="dialog"
           aria-label={t('sound.menu')}
-          className="absolute end-0 top-11 z-[1100] w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10"
+          className="ofm-scroll fixed inset-x-3 top-16 z-[1100] max-h-[calc(100dvh-9.5rem)] overflow-y-auto overscroll-contain rounded-xl bg-white shadow-2xl ring-1 ring-slate-900/10 sm:absolute sm:inset-x-auto sm:end-0 sm:top-11 sm:w-72 sm:max-h-[min(80vh,640px)] dark:bg-slate-900 dark:ring-white/10"
         >
           <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
             <div className="min-w-0 flex-1">
