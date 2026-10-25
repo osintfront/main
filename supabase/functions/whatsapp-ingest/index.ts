@@ -658,9 +658,11 @@ async function processOne(m: InMsg) {
       return { key, status: "merged_duplicate", event_id: twin.id, race: true, media_saved };
     }
   }
+  // Shown only once processed: the editor agent writes the Hebrew/English text (and places)
+  // first, then publishes. Light mode (no editor) publishes at once.
   let waitingForPlace = false;
   if (status === "published") {
-    if (ins!.latitude == null) waitingForPlace = true;
+    if (ins!.latitude == null || !m.light) waitingForPlace = true;
     else {
       const { data: done, error: pubErr } = await db.from("events").update({ status: "published", ...pub }).eq("id", ins!.id).select("id,status,latitude").single();
       if (pubErr) console.error("publish failed", pubErr.message);
@@ -668,7 +670,7 @@ async function processOne(m: InMsg) {
     }
   }
   const finalStatus = ins!.status === "published" ? "published" : "draft";
-  await log(finalStatus === "published" ? "event_published" : "event_draft", ins!.id);
+  await log(finalStatus === "published" || waitingForPlace ? "event_published" : "event_draft", ins!.id);
   // Editor agent runs in the background so the extension gets its answer quickly;
   // the event appears at once and is rewritten in the house template seconds later.
   // Editor only for what is (or will be) on the map — not for drafts left for review.
@@ -706,8 +708,10 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     return;
   }
   if (!edited) {
-    // The editor failed or timed out: at least a cheap Hebrew/English headline + summary.
+    // The editor failed or timed out: at least a cheap Hebrew/English headline + summary,
+    // then publish (if the database placed it).
     if (foreignShare(`${row.title} ${text}`) > 0.4) await translateRow(eventId, String(row.title ?? ""), text);
+    if (publishWhenPlaced) await publishIfPlaced(eventId);
     return;
   }
   const extra = edited.sources.filter((s) => s.url !== url);
@@ -745,18 +749,21 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     await new Promise((r) => setTimeout(r, 3000));
     ({ error } = await db.from("events").update(placePart).eq("id", eventId));
   }
-  if (error) return void console.error("editor update failed", error.message);
-  // Was held back only for lack of a place: publish now that the database placed it.
-  if (publishWhenPlaced) {
-    const { data: now } = await db.from("events").select("status,latitude").eq("id", eventId).maybeSingle();
-    if (now?.status === "draft" && now.latitude != null) {
-      const { error: pubErr } = await db.from("events")
-        .update({ status: "published", published_at: new Date().toISOString(), approved_by: BOT_USER_ID }).eq("id", eventId);
-      if (pubErr) console.error("publish after placing failed", pubErr.message);
-    }
+  if (error) console.error("editor update failed", error.message);
+  // Places of several categories → one event per category (before it is shown).
+  let siblings: string[] = [];
+  try { siblings = await splitEventByCategory(db, eventId); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }
+  // Held back until processed (and placed): publish now — the event and its siblings.
+  if (publishWhenPlaced) for (const id of [eventId, ...siblings]) await publishIfPlaced(id);
+}
+
+async function publishIfPlaced(eventId: string) {
+  const { data: now } = await db.from("events").select("status,latitude,deleted_at").eq("id", eventId).maybeSingle();
+  if (now?.status === "draft" && now.latitude != null && !now.deleted_at) {
+    const { error } = await db.from("events")
+      .update({ status: "published", published_at: new Date().toISOString(), approved_by: BOT_USER_ID }).eq("id", eventId);
+    if (error) console.error("publish after processing failed", error.message);
   }
-  // Places of several categories → one event per category.
-  try { await splitEventByCategory(db, eventId); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }
 }
 
 let editorDomains: string[] | null = null;
