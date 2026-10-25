@@ -150,6 +150,29 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
       }
     : FALLBACK_CATEGORY;
 
+  let places = pinned ? toPlaces(row.locations, latitude!, longitude!) : [];
+  let precision: LocationPrecision | null = pinned && (LOCATION_PRECISIONS as readonly string[]).includes(row.location_precision ?? '')
+    ? (row.location_precision as LocationPrecision)
+    : null;
+  let locationName = row.location_name ?? '';
+  let locationNameHe = row.location_name_he ?? '';
+  let locationNameEn = row.location_name_en ?? '';
+  // The main pin is only the country or a wide area ("Lebanon") and the report lists a place
+  // ("South Lebanon", a town): one pin, on the most specific place — not both.
+  const rank = (p: LocationPrecision | null) => (p === 'country' ? 3 : p === 'region' ? 2 : p === 'city' ? 1 : 0);
+  if (places.length && (precision === 'country' || precision === 'region' || (!locationName.trim() && precision !== 'exact'))) {
+    const best = places.reduce((a, b) => (rank(b.precision) < rank(a.precision) ? b : a));
+    if (rank(best.precision) <= rank(precision)) {
+      latitude = best.latitude;
+      longitude = best.longitude;
+      precision = best.precision ?? 'exact';
+      locationName = best.name || best.nameEn;
+      locationNameHe = /[\u0590-\u05FF]/.test(best.name) ? best.name : '';
+      locationNameEn = best.nameEn;
+      places = places.filter((p) => p !== best);
+    }
+  }
+
   return {
     id: row.id,
     title: row.title ?? '',
@@ -157,12 +180,10 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     severity: asSeverity(row.severity),
     latitude: latitude ?? 0,
     longitude: longitude ?? 0,
-    locationName: row.location_name ?? '',
-    locationNameHe: row.location_name_he ?? '',
-    locationNameEn: row.location_name_en ?? '',
-    locationPrecision: pinned && (LOCATION_PRECISIONS as readonly string[]).includes(row.location_precision ?? '')
-      ? (row.location_precision as LocationPrecision)
-      : null,
+    locationName,
+    locationNameHe,
+    locationNameEn,
+    locationPrecision: precision,
     country: row.country ?? '',
     region: row.region ?? '',
     city: row.city ?? '',
@@ -170,7 +191,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     // Never pass an unvalidated URL to the UI.
     sourceUrl: safeExternalUrl(row.source_url),
     sources: toSources(row.sources),
-    places: pinned ? toPlaces(row.locations, latitude!, longitude!) : [],
+    places,
     sourceType: asSourceType(row.source_type),
     occurredAt: row.occurred_at,
     publishedAt: row.published_at,
