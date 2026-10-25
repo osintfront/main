@@ -180,12 +180,16 @@ export interface TelegramChannel {
   postsSeen: number;
   lastOkAt: string | null;
   lastError: string | null;
+  /** Country / area the channel mainly reports on (see CHANNEL_REGIONS). */
+  region: string | null;
+  /** The Telegram worker's tab it came from (null = added here). */
+  folder: string | null;
 }
 
 export async function fetchTelegramChannels(): Promise<TelegramChannel[]> {
   const { data, error } = await client()
     .from('telegram_channels')
-    .select('username,title,active,baseline_done,last_post_id,posts_seen,last_ok_at,last_error')
+    .select('username,title,active,baseline_done,last_post_id,posts_seen,last_ok_at,last_error,region,folder')
     .order('created_at', { ascending: true });
   if (error) throw toServiceError(error);
   return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
@@ -197,6 +201,8 @@ export async function fetchTelegramChannels(): Promise<TelegramChannel[]> {
     postsSeen: Number(r.posts_seen ?? 0),
     lastOkAt: (r.last_ok_at as string | null) ?? null,
     lastError: (r.last_error as string | null) ?? null,
+    region: (r.region as string | null) ?? null,
+    folder: (r.folder as string | null) ?? null,
   }));
 }
 
