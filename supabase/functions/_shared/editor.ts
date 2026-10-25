@@ -143,7 +143,7 @@ UNIFIL ← יוניפי"ל (כוח האו"ם הזמני בלבנון) | Blue Lin
 מיקומים וקואורדינטות:
 - קואורדינטות רק למקום ספציפי שאתה בטוח בו (יישוב, אתר, שכונה), בדיוק של 4–5 ספרות אחרי הנקודה.
 - מקום הכתיבה בראש ידיעה (dateline, כמו "TEL AVIV —" או "صوفيا - سبأنت") אינו מקום האירוע. אל תשים עליו נעץ, אלא אם האירוע עצמו התרחש שם.
-- ברשימת locations רשום כל מקום ספציפי שהידיעה מזכירה כמקום שבו משהו קרה או נמצא (עיר, כפר, שכונה, בסיס, נמל, מחוז, אזור, מצר וכד'), לפי סדר החשיבות — המקום העיקרי ראשון. עד 10 מקומות. כשהידיעה מפרטת כמה מקומות שהותקפו, נפגעו או שבהם קרה משהו — רשום כל אחד מהם בנפרד (כל אחד יקבל סימון במפה). לא מדינות שלמות, ולא מקום הכתיבה (dateline). אל תרשום אזור, מחוז או עיר שרק מתארים איפה נמצא מקום שכבר רשמת ("הכפר X באזור הכפרי של Y" → רק X); רשום מקום נוסף רק אם גם בו קרה משהו. מקום שמתואר ביחס למקום אחר — "X שבנפת/במחוז/בגזרת Y", "X מצפון/מדרום/ממזרח/ממערב ל-Y", "בצפון Y" — רשום רק את X, המקום עצמו (ואם אין X, רק את Y). אירוע שבין שני מקומות — "מחסום בדרך A–B", "ירי מכיוון A לעבר B", "תנועה מ-A ל-B" — רשום את שני המקומות (A ו-B), העיקרי ראשון. לכל מקום מלא name ו-name_en, וקואורדינטות רק אם אתה בטוח (אחרת null — המערכת תאתר לפי השם).
+- ברשימת locations רשום כל מקום ספציפי שהידיעה מזכירה כמקום שבו משהו קרה או נמצא (עיר, כפר, שכונה, בסיס, נמל, מחוז, אזור, מצר וכד'), לפי סדר החשיבות — המקום העיקרי ראשון. עד 10 מקומות. כשהידיעה מפרטת כמה מקומות שהותקפו, נפגעו או שבהם קרה משהו — רשום כל אחד מהם בנפרד (כל אחד יקבל סימון במפה). לא מדינות שלמות, ולא מקום הכתיבה (dateline). אל תרשום אזור, מחוז או עיר שרק מתארים איפה נמצא מקום שכבר רשמת ("הכפר X באזור הכפרי של Y" → רק X); רשום מקום נוסף רק אם גם בו קרה משהו. מקום שמתואר ביחס למקום אחר — "X שבנפת/במחוז/בגזרת Y", "X מצפון/מדרום/ממזרח/ממערב ל-Y", "בצפון Y" — רשום רק את X, המקום עצמו (ואם אין X, רק את Y). אירוע שבין שני מקומות — "מחסום בדרך A–B", "ירי מכיוון A לעבר B", "תנועה מ-A ל-B" — רשום את שני המקומות (A ו-B), העיקרי ראשון. לכל מקום מלא name ו-name_en, וקואורדינטות רק אם אתה בטוח (אחרת null — המערכת תאתר לפי השם). מוסד או אתר בתוך עיר (אוניברסיטה, בית חולים, בית ספר, מסגד, מגדל, מחנה, צומת, רחוב, שכונה) הוא המקום עצמו — רשום אותו (name_en מלא ומזוהה, כמו "Islamic University of Gaza", "Al-Shifa Hospital, Gaza City"), ולא את העיר שבה הוא נמצא; ה-location_name הוא אותו מקום.
 - country (באנגלית): תמיד מלא את המדינה העיקרית שהידיעה עוסקת בה, גם כשאין שום מקום ספציפי. countries: כל המדינות המעורבות, העיקרית ראשונה.
 
 כללי דיוק:
@@ -473,7 +473,7 @@ ${input.mode === "crawler" ? `\nCANDIDATES (אירועים קיימים מהשע
 // up in OpenStreetMap (Nominatim); a real hit replaces the model's guess when
 // the guess is missing or more than 25 km off. Nominatim allows ~1 request/s.
 const GEO_UA = "Osintfront/1.0 (+https://main-drab-chi.vercel.app)";
-const GEO_CACHE = new Map<string, { lat: number; lng: number; kind: string } | null>();
+const GEO_CACHE = new Map<string, { lat: number; lng: number; kind: string; rank: number } | null>();
 let lastGeo = 0;
 let geoChain: Promise<void> = Promise.resolve();
 
@@ -484,7 +484,7 @@ function km(aLat: number, aLng: number, bLat: number, bLng: number): number {
   return Math.sqrt(x * x + y * y) * 6371;
 }
 
-export async function geocode(query: string): Promise<{ lat: number; lng: number; kind: string } | null> {
+export async function geocode(query: string): Promise<{ lat: number; lng: number; kind: string; rank: number } | null> {
   const key = query.toLowerCase();
   if (GEO_CACHE.has(key)) return GEO_CACHE.get(key)!;
   // One request at a time across parallel editor calls, ≥1.1 s apart.
@@ -499,7 +499,7 @@ export async function geocode(query: string): Promise<{ lat: number; lng: number
     const res = await fetch(url, { headers: { "User-Agent": GEO_UA }, signal: AbortSignal.timeout(6000) });
     if (!res.ok) return null; // not cached: may work next time
     const [hit] = await res.json();
-    const out = hit ? { lat: Number(hit.lat), lng: Number(hit.lon), kind: String(hit.addresstype ?? hit.type ?? "") } : null;
+    const out = hit ? { lat: Number(hit.lat), lng: Number(hit.lon), kind: String(hit.addresstype ?? hit.type ?? ""), rank: Number(hit.place_rank ?? 0) } : null;
     GEO_CACHE.set(key, out);
     return out;
   } catch {
@@ -509,6 +509,8 @@ export async function geocode(query: string): Promise<{ lat: number; lng: number
 
 async function verifyLocations(r: EditResult): Promise<void> {
   const main = r.country.split("/")[0]?.trim() ?? "";
+  const sites: EditorLocation[] = [];
+  const towns: EditorLocation[] = [];
   for (const l of r.locations.slice(0, 6)) {
     const name = (l.name_en || l.name).trim();
     const country = l.country || main;
@@ -519,13 +521,23 @@ async function verifyLocations(r: EditResult): Promise<void> {
     const hit = await geocode(country && !name.toLowerCase().includes(country.toLowerCase()) ? `${name}, ${country}` : name);
     if (!hit || !isFinite(hit.lat) || !isFinite(hit.lng)) continue;
     if (hit.kind === "country") continue; // query fell back to the whole country: no better than the model
-    if (l.lat === null || l.lng === null || km(l.lat, l.lng, hit.lat, hit.lng) > 25) {
+    if (/^(city|town|village|municipality|hamlet)$/.test(hit.kind)) towns.push(l);
+    // A site (university, hospital, street, neighbourhood…) is a point: trust the map over the
+    // model even when it is only a few km off. A town / area: only when the guess is far off.
+    const site = hit.rank >= 26 || /^(amenity|building|tourism|historic|leisure|man_made|aeroway|military|road|neighbourhood|quarter|suburb|square|shop|office)$/.test(hit.kind);
+    if (site) sites.push(l);
+    if (l.lat === null || l.lng === null || km(l.lat, l.lng, hit.lat, hit.lng) > (site ? 0.3 : 25)) {
       l.lat = Math.round(hit.lat * 1e5) / 1e5;
       l.lng = Math.round(hit.lng * 1e5) / 1e5;
       // A province / district / sea is pinned at its middle: show it as approximate.
       if (/^(state|province|region|county|state_district|district|governorate|sea|strait|bay|mountain_range)$/.test(hit.kind)) l.precision = "region";
     }
   }
+  // The town a listed site is in only says where the site is: one pin, on the site
+  // (unless something else happened in that town — then the model lists another place there).
+  const inSite = (t: EditorLocation) => t.lat !== null && sites.some((s) => s !== t && s.lat !== null && km(t.lat!, t.lng!, s.lat!, s.lng!) < 8 && (!t.category_slug || !s.category_slug || t.category_slug === s.category_slug));
+  const drop = new Set(towns.filter(inSite));
+  if (drop.size) r.locations = r.locations.filter((l) => !drop.has(l));
 }
 
 /** Text for the site: the short summary only (the full text is written on "expand"). */
