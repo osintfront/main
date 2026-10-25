@@ -452,6 +452,19 @@ function placeKeys(...names: (string | null | undefined)[]): Set<string> {
 }
 const eventPlaceKeys = (e: any) => placeKeys(e.location_name, e.ai_suggestions?.place_en);
 
+/** Does a candidate event concern the place a message names (its place, or named in its text)? */
+function samePlace(e: any, keys: Set<string>, rawNames: (string | null | undefined)[]): boolean {
+  if ([...eventPlaceKeys(e)].some((k) => keys.has(k))) return true;
+  const norm = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f\u064B-\u065F\u0591-\u05C7]/g, "").replace(/[إأآ]/g, "ا").replace(/ة/g, "ه");
+  const hay = norm(`${e.title ?? ""} ${e.original_report_text ?? ""} ${e.description ?? ""} ${e.location_name ?? ""} ${e.ai_suggestions?.place_en ?? ""}`);
+  // No place of its own: cannot tell, trust the classifier.
+  if (!eventPlaceKeys(e).size && !hay.trim()) return true;
+  return rawNames.some((n) => {
+    const v = norm(String(n ?? "")).replace(/^(ال|al[- ]|el[- ])/, "").trim();
+    return v.length >= 3 && hay.includes(v);
+  });
+}
+
 /** The same place within the hour: another channel reporting the same incident. */
 function samePlaceEvent(pool: any[], keys: Set<string>, sentAt: Date, excludeId?: string): any | null {
   if (!keys.size) return null;
@@ -522,6 +535,18 @@ async function processOne(m: InMsg) {
   if (c.decision === "off_topic") {
     await log("skipped_off_topic", null);
     return { key, status: "skipped_off_topic", reason: c.reason };
+  }
+  // The classifier said "duplicate" but the message names a place the candidate does not
+  // (a video from the Islamic University in Gaza is not the patrol in south Lebanon): a
+  // wrong merge would hang this source and its pictures on another incident. Keep it apart.
+  if (!same && c.decision === "duplicate") {
+    const cand = (candidates ?? []).find((x) => x.id === c.duplicate_of);
+    const mine = placeKeys(c.location_name, c.location_name_en);
+    if (cand && mine.size && !samePlace(cand, mine, [c.location_name, c.location_name_en])) {
+      c.reason = `not a duplicate: other place (${c.location_name || c.location_name_en}) — ${c.reason ?? ""}`;
+      c.decision = c.category_slug ? "event" : "uncertain";
+      c.duplicate_of = undefined;
+    }
   }
   // Outside Israel / the Middle East (Ukraine, Europe, world markets…): not for this map.
   // Same place within the hour (other channels, other wording): one event, more sources.
