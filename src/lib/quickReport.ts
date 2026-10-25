@@ -71,7 +71,14 @@ export function splitByCategory(
     if (!p.category_slug) continue;
     groups.set(p.category_slug, [...(groups.get(p.category_slug) ?? []), p]);
   }
-  if (groups.size < 2) return [base];
+  if (groups.size < 2) {
+    // One kind only: it is this report's incident, so its pins show the report's category.
+    const own = categories.find((c) => c.id === base.categoryId)?.slug;
+    if (groups.size === 1 && own && !groups.has(own)) {
+      return [{ ...base, locations: places.map((p) => (p.category_slug ? { ...p, category_slug: own } : p)) }];
+    }
+    return [base];
+  }
   const out: EventInput[] = [];
   for (const [slug, list] of groups) {
     const cat = categories.find((c) => c.slug === slug);
