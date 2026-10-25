@@ -8,7 +8,7 @@
 //   3. Groq (free tier)                      GROQ_API_KEY
 //   4. OpenRouter (free models only)         OPENROUTER_API_KEY
 //   5. Hugging Face Inference Providers      HF_TOKEN (monthly free credit)
-//   6. Anthropic Claude Haiku — PAID, last   ANTHROPIC_API_KEY
+//   6. Anthropic Claude Haiku — PAID, last   ANTHROPIC_API_KEY (or ANTHROPIC_ADMIN_KEY)
 // Cloudflare Workers AI (m2m100) was removed on 2026-10-26: it changed the meaning of news
 // text ("artillery" came out as "the Israeli ambassador").
 // A provider without its key is skipped. Any error, a 10-second timeout or a rate-limit /
@@ -23,6 +23,9 @@ const LANG_NAME: Record<string, string> = { he: 'Hebrew', en: 'English', ar: 'Ar
 const TIMEOUT_MS = 10_000;
 
 const env = (k: string) => (process.env[k] ?? '').trim();
+
+/** The Claude key: ANTHROPIC_API_KEY, or the one saved as ANTHROPIC_ADMIN_KEY. */
+const claudeKey = () => env('ANTHROPIC_API_KEY') || env('ANTHROPIC_ADMIN_KEY');
 
 export interface ChainResult {
   text: string;
@@ -180,12 +183,14 @@ const PROVIDERS: Provider[] = [
     // PAID — last resort, cheapest Claude model only.
     name: 'claude',
     paid: true,
-    enabled: () => !!env('ANTHROPIC_API_KEY'),
+    enabled: () => !!claudeKey(),
     model: () => 'claude-haiku-5-5',
     run: async (text, target, source) => {
+      // An Admin key (sk-ant-admin…) only reads usage and costs; it cannot call the model.
+      if (claudeKey().startsWith('sk-ant-admin')) throw new ProviderError('the saved key is an Admin key (sk-ant-admin…), which cannot translate; a regular API key (sk-ant-api…) is needed');
       const out = await post(
         'https://api.anthropic.com/v1/messages',
-        { 'x-api-key': env('ANTHROPIC_API_KEY'), 'anthropic-version': '2023-06-01' },
+        { 'x-api-key': claudeKey(), 'anthropic-version': '2023-06-01' },
         {
           model: 'claude-haiku-5-5',
           max_tokens: Math.min(4000, 200 + text.length * 2),
@@ -218,7 +223,7 @@ export function badOutput(out: string, target: Lang): string | null {
 }
 
 /** Health check: run every provider that has a key on its own (no fallback, no cache). */
-export async function testProviders(text: string, target: Lang, source: Lang) {
+export async function testProviders(text: string, target: Lang, source: Lang, includePaid = false) {
   const out: { name: string; model: string; paid: boolean; configured: boolean; ok: boolean; ms: number; result?: string; error?: string }[] = [];
   for (const p of PROVIDERS) {
     if (!p.enabled()) {
@@ -226,7 +231,7 @@ export async function testProviders(text: string, target: Lang, source: Lang) {
       continue;
     }
     // The paid fallback is reported but never called by the health check.
-    if (p.paid) {
+    if (p.paid && !includePaid) {
       out.push({ name: p.name, model: p.model(), paid: true, configured: true, ok: false, ms: 0, error: 'not called (paid)' });
       continue;
     }
@@ -235,9 +240,9 @@ export async function testProviders(text: string, target: Lang, source: Lang) {
       const r = await p.run(text, target, source);
       const t = r.text.trim();
       const bad = t ? badOutput(t, target) : 'empty answer';
-      out.push({ name: p.name, model: p.model(), paid: false, configured: true, ok: !bad, ms: Date.now() - started, result: t.slice(0, 200), ...(bad ? { error: bad } : {}) });
+      out.push({ name: p.name, model: p.model(), paid: !!p.paid, configured: true, ok: !bad, ms: Date.now() - started, result: t.slice(0, 200), ...(bad ? { error: bad } : {}) });
     } catch (e: any) {
-      out.push({ name: p.name, model: p.model(), paid: false, configured: true, ok: false, ms: Date.now() - started, error: String(e?.message ?? e).slice(0, 300) });
+      out.push({ name: p.name, model: p.model(), paid: !!p.paid, configured: true, ok: false, ms: Date.now() - started, error: String(e?.message ?? e).slice(0, 300) });
     }
   }
   return out;

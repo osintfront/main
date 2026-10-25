@@ -194,7 +194,7 @@ export async function GET(req: Request): Promise<Response> {
   // ?test=1 — run every free provider separately on a sample (Arabic → Hebrew).
   if (new URL(req.url).searchParams.get('test') === '1') {
     const sample = 'قصف مدفعي إسرائيلي استهدف أطراف بلدة الخيام جنوب لبنان صباح اليوم';
-    return json({ sample, results: await testProviders(sample, 'he', 'ar'), cache: !!(SUPABASE_URL() && SERVICE_KEY()), cacheKeyRole: keyRole(SERVICE_KEY()) });
+    return json({ sample, results: await testProviders(sample, 'he', 'ar', new URL(req.url).searchParams.get('paid') === '1'), cache: !!(SUPABASE_URL() && SERVICE_KEY()), cacheKeyRole: keyRole(SERVICE_KEY()) });
   }
   return json({ providers: activeProviders(), cache: !!(SUPABASE_URL() && SERVICE_KEY()), cacheKeyRole: keyRole(SERVICE_KEY()) });
 }
