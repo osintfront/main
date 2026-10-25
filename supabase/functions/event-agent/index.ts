@@ -13,6 +13,7 @@
 //                                Nothing is saved; the form is filled for the person to check.
 //   {action:"ask", question}     signed-in users — "ask the map": a free-text question about our events
 //                                → answer + event ids (shown on the map). 40 questions / hour / user.
+//   {action:"classify_channels"} cron secret — region of public Telegram channels without one (batch of 120).
 //   {action:"dedupe", minutes?}  cron secret — fold duplicate reports of one incident into one event
 //                                (events created since the last run vs. the last 12 hours).
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
@@ -24,6 +25,7 @@ import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { dedupeRecent } from "../_shared/dedupe.ts";
+import { classifyChannels } from "../_shared/channels.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -319,6 +321,13 @@ async function handle(req: Request): Promise<Response> {
   if (action === "edit") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
+  }
+  if (action === "classify_channels") {
+    try {
+      return json({ ok: true, ...(await classifyChannels(db)) });
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
   }
   if (action === "dedupe") {
     const m = Number(body?.minutes);
