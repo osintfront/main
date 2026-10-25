@@ -13,6 +13,7 @@ import { TopNav } from '@/components/layout/TopNav';
 import { EventFeed } from '@/components/feed/EventFeed';
 import { MapView } from '@/components/map/MapView';
 import { CategoryLegend } from '@/components/map/CategoryLegend';
+import { QuickReportButton } from '@/components/map/QuickReport';
 import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
 import { MobileEventSheet } from '@/components/map/MobileEventSheet';
 import { FilterPanel } from '@/components/filters/FilterPanel';
@@ -490,6 +491,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               topSlot={canAsk ? <AskMap result={ask} onResult={handleAskResult} onCite={handleLocate} /> : undefined}
               fitTo={askFit}
             />
+            {canAsk && !moving ? <QuickReportButton /> : null}
           </div>
         </main>
 
