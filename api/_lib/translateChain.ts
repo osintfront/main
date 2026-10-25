@@ -203,6 +203,20 @@ const PROVIDERS: Provider[] = [
   },
 ];
 
+/**
+ * Is this really a translation into the target language? Rejects an answer that kept Arabic
+ * letters, or that is not mostly in the target script (e.g. a model's "thinking" in English).
+ */
+export function badOutput(out: string, target: Lang): string | null {
+  const ar = (out.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) ?? []).length;
+  const he = (out.match(/[\u0590-\u05FF]/g) ?? []).length;
+  const la = (out.match(/[A-Za-z]/g) ?? []).length;
+  if (ar > 0) return 'answer still contains Arabic letters';
+  if (target === 'he' && he < (he + la) * 0.6) return 'answer is not in Hebrew';
+  if (target === 'en' && la < (he + la) * 0.6) return 'answer is not in English';
+  return null;
+}
+
 /** Health check: run every provider that has a key on its own (no fallback, no cache). */
 export async function testProviders(text: string, target: Lang, source: Lang) {
   const out: { name: string; model: string; paid: boolean; configured: boolean; ok: boolean; ms: number; result?: string; error?: string }[] = [];
@@ -220,7 +234,8 @@ export async function testProviders(text: string, target: Lang, source: Lang) {
     try {
       const r = await p.run(text, target, source);
       const t = r.text.trim();
-      out.push({ name: p.name, model: p.model(), paid: false, configured: true, ok: !!t, ms: Date.now() - started, result: t.slice(0, 200), ...(t ? {} : { error: 'empty answer' }) });
+      const bad = t ? badOutput(t, target) : 'empty answer';
+      out.push({ name: p.name, model: p.model(), paid: false, configured: true, ok: !bad, ms: Date.now() - started, result: t.slice(0, 200), ...(bad ? { error: bad } : {}) });
     } catch (e: any) {
       out.push({ name: p.name, model: p.model(), paid: false, configured: true, ok: false, ms: Date.now() - started, error: String(e?.message ?? e).slice(0, 300) });
     }
@@ -253,6 +268,8 @@ export async function translateWithFallback(
       const r = await p.run(text, target, source);
       const out = r.text.trim();
       if (!out) throw new ProviderError('empty answer');
+      const bad = badOutput(out, target);
+      if (bad) throw new ProviderError(`${bad}: ${out.slice(0, 80)}`);
       if (p.paid) log(`[translate] ⚠️ PAID PROVIDER USED: Claude (${p.model()}) — all free providers failed`);
       else log(`[translate] ok via ${p.name} (${p.model()}) in ${Date.now() - started} ms`);
       return { text: out, provider: p.name, model: p.model(), paid: !!p.paid, usage: r.usage };
