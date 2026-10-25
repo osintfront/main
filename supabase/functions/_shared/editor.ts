@@ -484,8 +484,20 @@ function km(aLat: number, aLng: number, bLat: number, bLng: number): number {
   return Math.sqrt(x * x + y * y) * 6371;
 }
 
-export async function geocode(query: string): Promise<{ lat: number; lng: number; kind: string; rank: number } | null> {
-  const key = query.toLowerCase();
+// Country (English, as the editor writes it) → ISO code: Nominatim filters by code far better
+// than by a country name in the query ("Islamic University of Gaza, Palestine" finds nothing).
+const COUNTRY_CC: Record<string, string> = {
+  israel: "il", palestine: "ps", "palestinian territories": "ps", "gaza strip": "ps", gaza: "ps", "west bank": "ps",
+  lebanon: "lb", syria: "sy", iran: "ir", iraq: "iq", yemen: "ye", jordan: "jo", egypt: "eg", "saudi arabia": "sa",
+  "united arab emirates": "ae", uae: "ae", qatar: "qa", bahrain: "bh", kuwait: "kw", oman: "om", turkey: "tr", cyprus: "cy",
+};
+export function countryCode(country: string | null | undefined): string | null {
+  return COUNTRY_CC[String(country ?? "").trim().toLowerCase()] ?? null;
+}
+
+/** Look a place up in OpenStreetMap; `cc` limits it to one country (ISO code). */
+export async function geocode(query: string, cc?: string | null): Promise<{ lat: number; lng: number; kind: string; rank: number } | null> {
+  const key = `${query.toLowerCase()}|${cc ?? ""}`;
   if (GEO_CACHE.has(key)) return GEO_CACHE.get(key)!;
   // One request at a time across parallel editor calls, ≥1.1 s apart.
   geoChain = geoChain.then(async () => {
@@ -495,7 +507,7 @@ export async function geocode(query: string): Promise<{ lat: number; lng: number
   });
   await geoChain;
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en&q=${encodeURIComponent(query)}`;
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en&q=${encodeURIComponent(query)}${cc ? `&countrycodes=${cc}` : ""}`;
     const res = await fetch(url, { headers: { "User-Agent": GEO_UA }, signal: AbortSignal.timeout(6000) });
     if (!res.ok) return null; // not cached: may work next time
     const [hit] = await res.json();
@@ -517,14 +529,18 @@ async function verifyLocations(r: EditResult): Promise<void> {
     if (!name) continue;
     const sameAsCountry = country && name.toLowerCase() === country.toLowerCase();
     if (sameAsCountry) continue; // a country is pinned by the database, not here
-    // Always qualify with the country, so "Tyre" is not found in some other country.
-    const hit = await geocode(country && !name.toLowerCase().includes(country.toLowerCase()) ? `${name}, ${country}` : name);
+    // Always limit to the country, so "Tyre" is not found in some other country.
+    const cc = countryCode(country);
+    const hit = cc ? await geocode(name, cc) : await geocode(country && !name.toLowerCase().includes(country.toLowerCase()) ? `${name}, ${country}` : name);
     if (!hit || !isFinite(hit.lat) || !isFinite(hit.lng)) continue;
     if (hit.kind === "country") continue; // query fell back to the whole country: no better than the model
     if (/^(city|town|village|municipality|hamlet)$/.test(hit.kind)) towns.push(l);
     // A site (university, hospital, street, neighbourhood…) is a point: trust the map over the
     // model even when it is only a few km off. A town / area: only when the guess is far off.
     const site = hit.rank >= 26 || /^(amenity|building|tourism|historic|leisure|man_made|aeroway|military|road|neighbourhood|quarter|suburb|square|shop|office)$/.test(hit.kind);
+    // A site name far from the model's guess is probably another site of the same name
+    // (there are many "Al-Shifa Hospital"s): keep the guess then.
+    if (site && l.lat !== null && l.lng !== null && km(l.lat, l.lng, hit.lat, hit.lng) > 15) continue;
     if (site) sites.push(l);
     if (l.lat === null || l.lng === null || km(l.lat, l.lng, hit.lat, hit.lng) > (site ? 0.3 : 25)) {
       l.lat = Math.round(hit.lat * 1e5) / 1e5;

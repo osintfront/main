@@ -20,7 +20,7 @@
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { EXPAND_VERSION, editReport, expandReport, geocode, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor } from "../_shared/editor.ts";
+import { EXPAND_VERSION, countryCode, editReport, expandReport, geocode, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor } from "../_shared/editor.ts";
 import { setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
@@ -203,6 +203,9 @@ async function compose(body: Record<string, unknown>) {
     // Arabic compounds are written joined or apart ("كفرتبنيت" / "كفر تبنيت"); try both.
     const ar = (l.name_ar ?? "").replace(/^(?:أطراف|اطراف|خراج|محيط)\s+/, "");
     const arSpaced = ar.replace(/^(كفر|دير|بيت|عين|مجدل|تل|جبل|خربة|عيتا|برج)(?=[^\s])/, "$1 ");
+    // Places editors corrected by hand come first.
+    const { data: lp } = await db.rpc("learned_place", { p_name: l.name, p_name_en: l.name_en || null });
+    if (lp && (lp as any).id && (lp as any).latitude != null) return { lat: Number((lp as any).latitude), lng: Number((lp as any).longitude), precision: "exact", he: null };
     for (const name of [ar, arSpaced !== ar ? arSpaced : "", l.name_en, l.name].filter(Boolean) as string[]) {
       const { data: hit } = await db.rpc("geo_lookup", { p_name: name, p_country: l.country || r.country || null, p_lat: near?.lat ?? null, p_lng: near?.lng ?? null });
       const c = (hit as { geom?: { coordinates?: unknown } } | null)?.geom?.coordinates;
@@ -227,7 +230,8 @@ async function compose(body: Record<string, unknown>) {
     if (h && anchor && km(h, anchor) > 60) h = null; // far from the rest of the report: not this one
     if (!h && nominatimCalls < 10 && (l.name_en || l.name)) {
       nominatimCalls++;
-      const g = await geocode(`${l.name_en || l.name}, ${l.country || r.country || ""}`).catch(() => null);
+      const cc = countryCode(l.country || r.country);
+      const g = await (cc ? geocode(l.name_en || l.name, cc) : geocode(`${l.name_en || l.name}, ${l.country || r.country || ""}`)).catch(() => null);
       if (g && g.kind !== "country" && (!anchor || km(g, anchor) <= 60)) h = { lat: Math.round(g.lat * 1e5) / 1e5, lng: Math.round(g.lng * 1e5) / 1e5, precision: "exact", he: null };
       await new Promise((res) => setTimeout(res, 1100)); // Nominatim: 1 request a second
     }
