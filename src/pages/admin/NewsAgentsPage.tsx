@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ExternalLink, Plus, RefreshCw, Rss, Trash2 } from 'lucide-react';
 import { Alert, Spinner } from '@/components/common/Feedback';
 import { TelegramChannelsSection } from '@/components/admin/TelegramChannelsSection';
+import { AgentFilterBar, DEFAULT_AGENT_FILTERS, applyAgentFilters, filtersActive, type AgentFilterState } from '@/components/admin/AgentFilters';
 import { Button, SelectField, TextField, ToggleField } from '@/components/common/Form';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useToast } from '@/components/common/Toast';
@@ -86,6 +87,21 @@ export function NewsAgentsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<IntelSource | null>(null);
   const [form, setForm] = useState<{ agent: IntelAgentId; url: string; name: string }>({ agent: 'lebanon', url: '', name: '' });
+  const [filters, setFilters] = useState<AgentFilterState>(() => {
+    try {
+      return { ...DEFAULT_AGENT_FILTERS, ...JSON.parse(sessionStorage.getItem('ofm.agentFilters') ?? '{}') };
+    } catch {
+      return DEFAULT_AGENT_FILTERS;
+    }
+  });
+  const [tgCount, setTgCount] = useState(0);
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('ofm.agentFilters', JSON.stringify(filters));
+    } catch {
+      /* private mode */
+    }
+  }, [filters]);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -106,12 +122,23 @@ export function NewsAgentsPage() {
     void load();
   }, [load]);
 
+  // A news site's region is its agent (Lebanon, Syria, …, International, Research).
+  const filtering = filtersActive(filters);
   const byAgent = useMemo(() => {
+    const shown = applyAgentFilters(sources, filters, (s) => ({
+      text: `${s.name} ${s.url}`,
+      active: s.active,
+      error: !!s.lastError,
+      region: s.agent,
+      events: s.eventsCreated,
+      lastAt: s.lastRunAt,
+    }));
     const m = new Map<IntelAgentId, IntelSource[]>();
     INTEL_AGENTS.forEach((a) => m.set(a, []));
-    sources.forEach((s) => m.get(s.agent)?.push(s));
+    shown.forEach((s) => m.get(s.agent)?.push(s));
     return m;
-  }, [sources]);
+  }, [sources, filters]);
+  const webShown = [...byAgent.values()].reduce((n, l) => n + l.length, 0);
 
   const toggleCrawler = async (enabled: boolean) => {
     if (!settings) return;
@@ -203,9 +230,17 @@ export function NewsAgentsPage() {
         </section>
       ) : null}
 
+      <AgentFilterBar value={filters} onChange={setFilters} counts={{ web: sources.length, telegram: tgCount }} />
+
+      {filters.kind !== 'telegram' ? (
+      <>
+      {filtering ? (
+        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">{t('agentsFilter.showing', { shown: webShown, total: sources.length })}</p>
+      ) : null}
       <div className="grid gap-5">
         {agents.map((a) => {
           const list = byAgent.get(a.agent) ?? [];
+          if (filtering && !list.length) return null;
           const r = a.lastResult;
           return (
             <section key={a.agent} className="overflow-hidden rounded-xl bg-white ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
@@ -276,7 +311,11 @@ export function NewsAgentsPage() {
         })}
       </div>
 
-      {canManage ? (
+      {filtering && !webShown ? <p className="rounded-xl bg-white px-4 py-4 text-sm text-slate-500 ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">{t('agentsFilter.noMatch')}</p> : null}
+      </>
+      ) : null}
+
+      {canManage && filters.kind !== 'telegram' ? (
         <form onSubmit={onAdd} className="mt-5 rounded-xl bg-white p-4 ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
           <h2 className="mb-3 text-base font-semibold text-slate-900 dark:text-white">{t('agents.addTitle')}</h2>
           <div className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_minmax(0,14rem)_auto] sm:items-end">
@@ -310,7 +349,7 @@ export function NewsAgentsPage() {
         </form>
       ) : null}
 
-      <TelegramChannelsSection />
+      {filters.kind !== 'web' ? <TelegramChannelsSection filters={filters} onCount={setTgCount} /> : null}
 
       <section className="mt-5 overflow-hidden rounded-xl bg-white ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
         <h2 className="border-b border-slate-100 px-4 py-3 text-base font-semibold text-slate-900 dark:border-slate-800 dark:text-white">

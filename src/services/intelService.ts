@@ -209,6 +209,13 @@ export async function fetchTelegramChannels(): Promise<TelegramChannel[]> {
   }));
 }
 
+/** Events each Telegram channel produced (main or extra source), by lower-case username. */
+export async function fetchTelegramEventCounts(): Promise<Map<string, number>> {
+  const { data, error } = await client().rpc('telegram_channel_event_counts');
+  if (error) throw toServiceError(error);
+  return new Map(((data ?? []) as { username: string; events: number }[]).map((r) => [String(r.username).toLowerCase(), Number(r.events ?? 0)]));
+}
+
 /** "https://t.me/name", "t.me/s/name", "@name" or "name" → "name". */
 export function telegramUsername(input: string): string | null {
   const s = input.trim();

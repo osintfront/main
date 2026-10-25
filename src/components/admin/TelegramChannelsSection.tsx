@@ -6,10 +6,12 @@ import { useToast } from '@/components/common/Toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useI18n, type TranslationKey } from '@/i18n';
 import { friendlyError } from '@/services/serviceError';
+import { applyAgentFilters, filtersActive, type AgentFilterState } from '@/components/admin/AgentFilters';
 import {
   addTelegramChannel,
   deleteTelegramChannel,
   fetchTelegramChannels,
+  fetchTelegramEventCounts,
   setTelegramChannelActive,
   telegramUsername,
   type TelegramChannel,
@@ -20,7 +22,7 @@ import { cn } from '@/utils/cn';
 const REGION_ORDER = ['israel', 'palestine', 'lebanon', 'syria', 'iraq', 'iran', 'yemen', 'jordan', 'egypt', 'gulf', 'regional', 'international', 'unknown'];
 
 /** Public Telegram channels read every minute into the same pipeline as the WhatsApp feed, grouped by region. */
-export function TelegramChannelsSection() {
+export function TelegramChannelsSection({ filters, onCount }: { filters: AgentFilterState; onCount?: (n: number) => void }) {
   const { t, locale } = useI18n();
   const toast = useToast();
   const { can } = usePermissions();
@@ -30,15 +32,19 @@ export function TelegramChannelsSection() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<TelegramChannel | null>(null);
+  const [eventCounts, setEventCounts] = useState<Map<string, number>>(new Map());
 
   const load = useCallback(async () => {
     try {
-      setChannels(await fetchTelegramChannels());
+      const [list, counts] = await Promise.all([fetchTelegramChannels(), fetchTelegramEventCounts().catch(() => new Map<string, number>())]);
+      setChannels(list);
+      setEventCounts(counts);
+      onCount?.(list.length);
       setError(null);
     } catch (err) {
       setError(friendlyError(err, t));
     }
-  }, [t]);
+  }, [t, onCount]);
 
   useEffect(() => {
     void load();
@@ -90,6 +96,18 @@ export function TelegramChannelsSection() {
     }
   };
 
+  const evCount = (c: TelegramChannel) => eventCounts.get(c.username.toLowerCase()) ?? 0;
+  const filtering = filtersActive(filters);
+  const shown = applyAgentFilters(channels, filters, (c) => ({
+    text: `${c.title} ${c.username}`,
+    active: c.active,
+    error: !!c.lastError,
+    region: c.region ?? 'unknown',
+    events: evCount(c),
+    pinned: c.pinned,
+    lastAt: c.lastOkAt,
+  }));
+
   return (
     <section className="mt-5 overflow-hidden rounded-xl bg-white ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
       <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
@@ -101,12 +119,13 @@ export function TelegramChannelsSection() {
       </div>
       {error ? <p className="px-4 py-3 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       {channels.length === 0 && !error ? <p className="px-4 py-4 text-sm text-slate-500">{t('telegram.empty')}</p> : null}
+      {filtering && !shown.length && channels.length ? <p className="px-4 py-4 text-sm text-slate-500">{t('agentsFilter.noMatch')}</p> : null}
       {REGION_ORDER.map((region) => {
-        const list = channels.filter((c) => (c.region ?? 'unknown') === region);
+        const list = shown.filter((c) => (c.region ?? 'unknown') === region);
         if (!list.length) return null;
         const on = list.filter((c) => c.active).length;
         return (
-          <details key={region} className="group border-b border-slate-100 dark:border-slate-800" open={on > 0}>
+          <details key={`${region}-${filtering ? 'f' : 'n'}`} className="group border-b border-slate-100 dark:border-slate-800" open={filtering || on > 0}>
             <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800/50">
               <span className="inline-block transition-transform group-open:rotate-90 rtl:-scale-x-100" aria-hidden>
                 ›
@@ -157,7 +176,9 @@ export function TelegramChannelsSection() {
                     ) : (
                       <span className="text-xs text-slate-500">{t('agents.state.pending')}</span>
                     )}
-                    <span className="w-24 text-end text-xs tabular-nums text-slate-500">{t('telegram.postsSeen', { count: String(c.postsSeen) })}</span>
+                    <span className="w-28 text-end text-xs tabular-nums text-slate-500" title={t('telegram.postsSeen', { count: String(c.postsSeen) })}>
+                      {t('agents.eventsShort', { count: String(evCount(c)) })}
+                    </span>
                     {canManage ? (
                       <div className="flex items-center gap-2">
                         <ToggleField label={t('agents.active')} checked={c.active} disabled={busy === c.username} onChange={(v) => void toggle(c, v)} />
