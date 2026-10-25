@@ -15,6 +15,7 @@
 //  - Names of people and places get their English name in parentheses.
 //  - Foreign-letter check now catches any non-Hebrew script (not only Arabic/Latin).
 
+import { CATEGORY_RULES } from "./categoryRules.ts";
 import { logUsage } from "./usage.ts";
 
 export interface EditorSource { name: string; url: string | null }
@@ -357,7 +358,7 @@ export async function editReport(input: EditInput): Promise<EditResult> {
   const categories = input.categories ?? [];
   const system = SYSTEM_BASE + (input.mode === "crawler"
     ? SYSTEM_CRAWLER + `\nקטגוריות מותרות: ${categories.map((c) => `${c.slug} (${c.name})`).join(", ")}` + (input.categoryLessons ?? "")
-    : "") + (input.detailedPlaces ? SYSTEM_DETAILED_PLACES : "");
+    : "") + (input.detailedPlaces ? SYSTEM_DETAILED_PLACES : "") + (categories.length ? CATEGORY_RULES : "");
   // Strip site-name boilerplate ("| Lebanon News") before judging how much text there is.
   const substance = input.text.replace(/\|\s*[^\n|]{0,40}$/gm, "").replace(/\s+/g, " ").trim();
   const thin = substance.length < 300;

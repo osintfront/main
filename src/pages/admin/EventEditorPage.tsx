@@ -298,7 +298,8 @@ export function EventEditorPage() {
 
   const disabled = !editable || !!busy;
   const categoryOptions = categories
-    .filter((c) => c.isActive || c.id === input.categoryId)
+    // Home Front Command alerts come only from the Home Front Command feed.
+    .filter((c) => ((c.isActive && c.slug !== 'home-front-alerts') || c.id === input.categoryId))
     .map((c) => ({ value: c.id, label: categoryLabel(c.slug, c.name) }));
   const CategoryIcon = getCategoryIcon(category?.icon);
   const actionMeta: Record<WorkflowAction, { label: string; icon: typeof Send; variant: 'primary' | 'secondary' | 'danger' }> = {

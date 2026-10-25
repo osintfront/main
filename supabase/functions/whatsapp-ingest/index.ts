@@ -13,6 +13,7 @@ import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDe
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
+import { AGENT_EXCLUDED_CATEGORIES, CATEGORY_RULES } from "../_shared/categoryRules.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -301,7 +302,7 @@ async function categoryLessons(): Promise<string> {
 
 async function classify(msg: InMsg, candidates: any[]) {
   const learned = await categoryLessons();
-  const cats = (await categories()).filter((c) => c.slug !== "other");
+  const cats = (await categories()).filter((c) => !AGENT_EXCLUDED_CATEGORIES.has(c.slug));
   const system = `You triage reports posted in an OSINT WhatsApp group or Telegram channel (mostly Hebrew; Israel, Lebanon, Syria, Iran, Yemen, Iraq).
 Allowed category slugs: ${cats.map((c) => `${c.slug} (${c.name})`).join(", ")}.${learned}
 Never use 'other'. Use 'uncategorized' only via decision=uncertain.
@@ -314,7 +315,7 @@ Rules:
 - Photos/videos/reports of troops, vehicles or weapons at a stated location: force-sighting. Movements, operations, deployments without a documented sighting: military-activity.
 - Gunfire, sweep fire (ירי סריקה), light-weapons fire: shooting-gunfire (small-arms fire).
 - Artillery, mortar or tank shelling (قصف مدفعي, مدفعية, هاون, قذائف, tank fire at a place): artillery-shelling — not airstrike (airstrike = aircraft / drones dropping or firing).
-- If torn between event and not_event, choose uncertain — never not_event.
+- If torn between event and not_event, choose uncertain — never not_event.${CATEGORY_RULES}
 Examples:
 - "מפקד גזרת דרום אל-ליטאני, תת-אלוף X: המשך התקיפות של צה\"ל מדגיש את הצורך בפעולה ערבית" -> event, statements
 - "מזכ\"ל הליגה הערבית מבקר בעיירה זוטר" -> event, political-event

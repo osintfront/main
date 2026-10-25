@@ -27,6 +27,7 @@ import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { dedupeRecent } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
+import { AGENT_EXCLUDED_CATEGORIES } from "../_shared/categoryRules.ts";
 import { classifyChannels } from "../_shared/channels.ts";
 import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
 import { imageAsBase64 } from "../whatsapp-ingest/telegram.ts";
@@ -188,7 +189,7 @@ async function compose(body: Record<string, unknown>) {
   const r = await editReport({
     text,
     mode: "crawler",
-    categories: (cats ?? []).map((c: any) => ({ slug: c.slug, name: c.name })),
+    categories: (cats ?? []).filter((c: any) => !AGENT_EXCLUDED_CATEGORIES.has(c.slug)).map((c: any) => ({ slug: c.slug, name: c.name })),
     categoryLessons: formatCategoryLessons(corrections ?? []),
     origin: { name: (page?.sourceName ?? String(body?.source_name ?? "")).slice(0, 120), url: page?.url ?? (typeof body?.source_url === "string" ? body.source_url : undefined), sentAt },
     detailedPlaces: true,
