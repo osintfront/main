@@ -199,7 +199,10 @@ async function compose(body: Record<string, unknown>) {
   // for a report from the south), and the geocoder fills the rest.
   type Hit = { lat: number; lng: number; precision: "exact" | "region"; he: string | null };
   const lookup = async (l: (typeof r.locations)[number], near?: { lat: number; lng: number }): Promise<Hit | null> => {
-    for (const name of [l.name_ar, l.name_en, l.name].filter(Boolean) as string[]) {
+    // Arabic compounds are written joined or apart ("كفرتبنيت" / "كفر تبنيت"); try both.
+    const ar = (l.name_ar ?? "").replace(/^(?:أطراف|اطراف|خراج|محيط)\s+/, "");
+    const arSpaced = ar.replace(/^(كفر|دير|بيت|عين|مجدل|تل|جبل|خربة|عيتا|برج)(?=[^\s])/, "$1 ");
+    for (const name of [ar, arSpaced !== ar ? arSpaced : "", l.name_en, l.name].filter(Boolean) as string[]) {
       const { data: hit } = await db.rpc("geo_lookup", { p_name: name, p_country: l.country || r.country || null, p_lat: near?.lat ?? null, p_lng: near?.lng ?? null });
       const c = (hit as { geom?: { coordinates?: unknown } } | null)?.geom?.coordinates;
       if (Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number") {
@@ -220,11 +223,11 @@ async function compose(body: Record<string, unknown>) {
     let h = second[i] ?? first[i];
     // The editor's own coordinates (model / geocoder) as a fallback.
     if (!h && l.lat !== null && l.lng !== null) h = { lat: l.lat, lng: l.lng, precision: l.precision ?? "exact", he: null };
-    if (h && anchor && km(h, anchor) > 150) h = null; // far from the rest of the report: not this one
+    if (h && anchor && km(h, anchor) > 60) h = null; // far from the rest of the report: not this one
     if (!h && nominatimCalls < 10 && (l.name_en || l.name)) {
       nominatimCalls++;
       const g = await geocode(`${l.name_en || l.name}, ${l.country || r.country || ""}`).catch(() => null);
-      if (g && g.kind !== "country" && (!anchor || km(g, anchor) <= 150)) h = { lat: Math.round(g.lat * 1e5) / 1e5, lng: Math.round(g.lng * 1e5) / 1e5, precision: "exact", he: null };
+      if (g && g.kind !== "country" && (!anchor || km(g, anchor) <= 60)) h = { lat: Math.round(g.lat * 1e5) / 1e5, lng: Math.round(g.lng * 1e5) / 1e5, precision: "exact", he: null };
       await new Promise((res) => setTimeout(res, 1100)); // Nominatim: 1 request a second
     }
     if (h) {
