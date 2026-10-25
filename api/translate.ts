@@ -60,12 +60,30 @@ function detect(text: string): Lang {
 const hashOf = (text: string, target: string) => createHash('sha256').update(`${target}\u0000${text}`).digest('hex');
 
 // ── Supabase cache (service role, server only) ────────────────────────────
+/** Which role the key carries: a legacy JWT says it inside; new keys say it in their prefix. */
+function keyRole(key: string): string {
+  if (key.startsWith('sb_secret_')) return 'service_role';
+  if (key.startsWith('sb_publishable_')) return 'anon';
+  try {
+    return String(JSON.parse(Buffer.from(key.split('.')[1] ?? '', 'base64url').toString('utf8'))?.role ?? '?');
+  } catch {
+    return '?';
+  }
+}
+
 async function db(path: string, init: RequestInit = {}) {
   if (!SUPABASE_URL() || !SERVICE_KEY()) return null;
+  const key = SERVICE_KEY();
+  const role = keyRole(key);
+  if (role !== 'service_role') {
+    console.warn(`[translate] SUPABASE_SERVICE_ROLE_KEY is not the service-role (secret) key (it is "${role}") — the cache cannot be used`);
+    return null;
+  }
   try {
     const res = await fetch(`${SUPABASE_URL()}/rest/v1/${path}`, {
       ...init,
-      headers: { apikey: SERVICE_KEY(), authorization: `Bearer ${SERVICE_KEY()}`, 'content-type': 'application/json', ...(init.headers ?? {}) },
+      // New secret keys (sb_secret_…) go in apikey only; legacy JWT keys also as the bearer.
+      headers: { apikey: key, ...(key.startsWith('eyJ') ? { authorization: `Bearer ${key}` } : {}), 'content-type': 'application/json', ...(init.headers ?? {}) },
     });
     if (!res.ok) {
       console.warn(`[translate] cache ${init.method ?? 'GET'} failed: HTTP ${res.status} ${(await res.text()).slice(0, 160)}`);
@@ -176,7 +194,7 @@ export async function GET(req: Request): Promise<Response> {
   // ?test=1 — run every free provider separately on a sample (Arabic → Hebrew).
   if (new URL(req.url).searchParams.get('test') === '1') {
     const sample = 'قصف مدفعي إسرائيلي استهدف أطراف بلدة الخيام جنوب لبنان صباح اليوم';
-    return json({ sample, results: await testProviders(sample, 'he', 'ar'), cache: !!(SUPABASE_URL() && SERVICE_KEY()) });
+    return json({ sample, results: await testProviders(sample, 'he', 'ar'), cache: !!(SUPABASE_URL() && SERVICE_KEY()), cacheKeyRole: keyRole(SERVICE_KEY()) });
   }
-  return json({ providers: activeProviders(), cache: !!(SUPABASE_URL() && SERVICE_KEY()) });
+  return json({ providers: activeProviders(), cache: !!(SUPABASE_URL() && SERVICE_KEY()), cacheKeyRole: keyRole(SERVICE_KEY()) });
 }
