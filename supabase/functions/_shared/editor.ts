@@ -18,7 +18,7 @@
 import { logUsage } from "./usage.ts";
 
 export interface EditorSource { name: string; url: string | null }
-export interface EditorLocation { name: string; name_en: string; country: string; lat: number | null; lng: number | null; precision?: "exact" | "region"; category_slug?: string }
+export interface EditorLocation { name: string; name_en: string; name_ar?: string; country: string; lat: number | null; lng: number | null; precision?: "exact" | "region"; category_slug?: string }
 
 export interface EditResult {
   relevant: boolean;
@@ -202,6 +202,7 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
           lat: { type: ["number", "null"] },
           lng: { type: ["number", "null"] },
           ...(detailed && categories.length ? { category_slug: { type: "string", enum: categories.map((c) => c.slug), description: "What happened at this place (its own category)" } } : {}),
+          ...(detailed ? { name_ar: { type: "string", description: "The place name in Arabic script, as written in the report when it is Arabic (else empty)" } } : {}),
         },
         required: detailed && categories.length ? ["name", "name_en", "category_slug"] : ["name", "name_en"],
       },
@@ -314,6 +315,7 @@ function normalise(raw: Record<string, any>, model: string, mode: EditInput["mod
     lat: num(l?.lat, -90, 90),
     lng: num(l?.lng, -180, 180),
     ...(typeof l?.category_slug === "string" && cats.has(l.category_slug) ? { category_slug: l.category_slug } : {}),
+    ...(typeof l?.name_ar === "string" && l.name_ar.trim() ? { name_ar: clean(l.name_ar, 120) } : {}),
   })).filter((l: EditorLocation) => {
     // The same place listed twice (e.g. under two headings): keep the first.
     const k = (l.name_en || l.name).toLowerCase();
@@ -482,7 +484,7 @@ function km(aLat: number, aLng: number, bLat: number, bLng: number): number {
   return Math.sqrt(x * x + y * y) * 6371;
 }
 
-async function geocode(query: string): Promise<{ lat: number; lng: number; kind: string } | null> {
+export async function geocode(query: string): Promise<{ lat: number; lng: number; kind: string } | null> {
   const key = query.toLowerCase();
   if (GEO_CACHE.has(key)) return GEO_CACHE.get(key)!;
   // One request at a time across parallel editor calls, ≥1.1 s apart.

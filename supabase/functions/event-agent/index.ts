@@ -20,7 +20,7 @@
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { EXPAND_VERSION, editReport, expandReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor } from "../_shared/editor.ts";
+import { EXPAND_VERSION, editReport, expandReport, geocode, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor } from "../_shared/editor.ts";
 import { setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
@@ -194,20 +194,49 @@ async function compose(body: Record<string, unknown>) {
     maxPlaces: 30,
   });
   // Every place: our own places database first (villages the geocoder misses), then the
-  // geocoder's / model's coordinates.
-  await Promise.all(r.locations.map(async (l) => {
-    for (const name of [l.name_en, l.name].filter(Boolean)) {
-      const { data: hit } = await db.rpc("geo_lookup", { p_name: name, p_country: l.country || r.country || null });
+  // geocoder. A list of places of one report is close together: a first pass finds the area,
+  // a second pass picks, for every name, the place nearest to it (no "Qantara" in the north
+  // for a report from the south), and the geocoder fills the rest.
+  type Hit = { lat: number; lng: number; precision: "exact" | "region"; he: string | null };
+  const lookup = async (l: (typeof r.locations)[number], near?: { lat: number; lng: number }): Promise<Hit | null> => {
+    for (const name of [l.name_ar, l.name_en, l.name].filter(Boolean) as string[]) {
+      const { data: hit } = await db.rpc("geo_lookup", { p_name: name, p_country: l.country || r.country || null, p_lat: near?.lat ?? null, p_lng: near?.lng ?? null });
       const c = (hit as { geom?: { coordinates?: unknown } } | null)?.geom?.coordinates;
       if (Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number") {
-        l.lat = Math.round(c[1] * 1e5) / 1e5;
-        l.lng = Math.round(c[0] * 1e5) / 1e5;
-        l.precision = (hit as any).feature_class === "A" ? "region" : "exact";
-        if ((hit as any).name_he && !/[\u0590-\u05FF]/.test(l.name)) l.name = (hit as any).name_he;
-        return;
+        return { lat: Math.round(c[1] * 1e5) / 1e5, lng: Math.round(c[0] * 1e5) / 1e5, precision: (hit as any).feature_class === "A" ? "region" : "exact", he: (hit as any).name_he ?? null };
       }
     }
-  }));
+    return null;
+  };
+  const first = await Promise.all(r.locations.map((l) => lookup(l)));
+  const found = first.filter(Boolean) as Hit[];
+  const median = (xs: number[]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+  const anchor = found.length ? { lat: median(found.map((h) => h.lat)), lng: median(found.map((h) => h.lng)) } : null;
+  const km = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
+    Math.hypot((a.lat - b.lat) * 111, (a.lng - b.lng) * 111 * Math.cos((a.lat * Math.PI) / 180));
+  const second = anchor ? await Promise.all(r.locations.map((l) => lookup(l, anchor))) : first;
+  let nominatimCalls = 0;
+  for (const [i, l] of r.locations.entries()) {
+    let h = second[i] ?? first[i];
+    // The editor's own coordinates (model / geocoder) as a fallback.
+    if (!h && l.lat !== null && l.lng !== null) h = { lat: l.lat, lng: l.lng, precision: l.precision ?? "exact", he: null };
+    if (h && anchor && km(h, anchor) > 150) h = null; // far from the rest of the report: not this one
+    if (!h && nominatimCalls < 10 && (l.name_en || l.name)) {
+      nominatimCalls++;
+      const g = await geocode(`${l.name_en || l.name}, ${l.country || r.country || ""}`).catch(() => null);
+      if (g && g.kind !== "country" && (!anchor || km(g, anchor) <= 150)) h = { lat: Math.round(g.lat * 1e5) / 1e5, lng: Math.round(g.lng * 1e5) / 1e5, precision: "exact", he: null };
+      await new Promise((res) => setTimeout(res, 1100)); // Nominatim: 1 request a second
+    }
+    if (h) {
+      l.lat = h.lat;
+      l.lng = h.lng;
+      l.precision = h.precision;
+      if (h.he && !/[\u0590-\u05FF]/.test(l.name)) l.name = h.he;
+    } else {
+      l.lat = null;
+      l.lng = null;
+    }
+  }
   let point = mainPoint(r);
   // Model/geocoder found no coordinates: try our own places database.
   if (!point && r.locations[0]) {
