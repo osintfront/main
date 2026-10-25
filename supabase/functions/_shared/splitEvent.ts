@@ -43,7 +43,19 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
   const places: Place[] = Array.isArray(ev.locations) ? ev.locations : [];
   const groups = new Map<string, Place[]>();
   for (const p of places) if (p?.category_slug) groups.set(p.category_slug, [...(groups.get(p.category_slug) ?? []), p]);
-  if (groups.size < 2) return [];
+  if (groups.size < 2) {
+    // One kind only: it is this event's incident. The event's own category wins (an
+    // "assassination" carried out by an airstrike must not show a second, airstrike pin icon).
+    if (groups.size === 1) {
+      const { data: own } = await db.from("event_categories").select("slug").eq("id", ev.category_id).maybeSingle();
+      if (own?.slug && !groups.has(own.slug)) {
+        const fixed = places.map((p) => (p?.category_slug ? { ...p, category_slug: own.slug } : p));
+        const { error } = await db.from("events").update({ locations: fixed }).eq("id", ev.id);
+        if (error) console.error("place category update failed", error.message);
+      }
+    }
+    return [];
+  }
 
   const { data: cats } = await db.from("event_categories").select("id,slug,name").in("slug", [...groups.keys()]);
   const bySlug = new Map<string, { id: string; slug: string; name: string }>((cats ?? []).map((c: any) => [c.slug, c]));
