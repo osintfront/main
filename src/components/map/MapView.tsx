@@ -450,6 +450,38 @@ export function MapView({
       markersRef.current.set(event.id, { markers, event });
     }
     if (all.length) layer.addLayers(all);
+    // Several reports on the very same spot (the same village, two channels): their pins
+    // stand side by side, so each one can be clicked even when one is held out of the clusters.
+    if (all.length || gone.length || !sameDeps) {
+      const stacks = new Map<string, { marker: L.Marker; event: MarkerEntry['event']; index: number }[]>();
+      markersRef.current.forEach(({ markers, event }) =>
+        markers.forEach((marker, index) => {
+          const ll = marker.getLatLng();
+          const key = `${ll.lat.toFixed(5)},${ll.lng.toFixed(5)}`;
+          stacks.set(key, [...(stacks.get(key) ?? []), { marker, event, index }]);
+        }),
+      );
+      stacks.forEach((list) => {
+        list.sort((a, b) => (a.event.id < b.event.id ? -1 : 1));
+        list.forEach(({ marker, event, index }, i) => {
+          const shift = list.length > 1 ? Math.round((i - (list.length - 1) / 2) * 24) : 0;
+          const o = marker.options as { ofmShift?: number; ofmIcon?: string; ofmColor?: string };
+          if ((o.ofmShift ?? 0) === shift) return;
+          o.ofmShift = shift;
+          marker.setIcon(
+            createMarkerIcon({
+              iconName: o.ofmIcon ?? event.category.icon,
+              color: o.ofmColor ?? event.category.markerColor,
+              severity: event.severity,
+              selected: event.id === selectedRef.current,
+              breaking: event.isBreaking,
+              compact: index > 0,
+              shift,
+            }),
+          );
+        });
+      });
+    }
     if (all.length || gone.length || !sameDeps || held) setMarkersVersion((v) => v + 1);
   }, [events, t, dir, locale, lang, categoryLabel, compact, canMove]);
 
@@ -673,6 +705,7 @@ export function MapView({
             selected,
             breaking: event.isBreaking,
             compact: index > 0,
+            shift: (marker.options as { ofmShift?: number }).ofmShift,
           }),
         );
         marker.setZIndexOffset(selected ? 1000 : event.severity === 'critical' ? 400 : 0);
@@ -703,15 +736,19 @@ export function MapView({
     if (!group || !holder) return;
     const entry = focusId ? markersRef.current.get(focusId) : undefined;
     const cur = focusedRef.current;
+    // The pin just clicked has its window open. Note it before the held pins go back: one of
+    // them may stand on the same spot, the two merge into a cluster and the window closes.
+    const open = entry?.markers.find((m) => m.isPopupOpen());
     if (cur && (cur.id !== focusId || entry?.markers !== cur.markers)) {
+      // Moving pins in and out of the clusters closes windows: that is not the reader closing
+      // one, so it must not end the focus.
       relayeringRef.current = true;
       holder.clearLayers();
-      relayeringRef.current = false;
       if (markersRef.current.get(cur.id)?.markers === cur.markers) group.addLayers(cur.markers);
+      relayeringRef.current = false;
       focusedRef.current = null;
     }
     if (entry && focusId && !focusedRef.current) {
-      const open = entry.markers.find((m) => m.isPopupOpen());
       relayeringRef.current = true;
       group.removeLayers(entry.markers);
       entry.markers.forEach((m) => holder.addLayer(m));

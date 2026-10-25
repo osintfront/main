@@ -773,6 +773,15 @@ async function pollTelegram(dry: boolean) {
 
 const TG_PARALLEL = 6;
 
+// Channels are read in parallel, but posts are processed one at a time: the same news from
+// two channels in the same minute must find the first one's event (one event, two sources).
+let postChain: Promise<unknown> = Promise.resolve();
+function oneAtATime<T>(job: () => Promise<T>): Promise<T> {
+  const run = postChain.then(job, job);
+  postChain = run.catch(() => undefined);
+  return run;
+}
+
 // deno-lint-ignore no-explicit-any
 async function pollChannel(ch: any, dry: boolean, out: Record<string, unknown>[]) {
   {
@@ -816,10 +825,10 @@ async function pollChannel(ch: any, dry: boolean, out: Record<string, unknown>[]
           try {
             results.push({
               post: p.post,
-              ...(await processOne({
+              ...(await oneAtATime(() => processOne({
                 msg_id: p.post, platform: "telegram", url: p.url, chat: title || name,
                 sender: p.forwardedFrom ?? undefined, sent_at: p.date ?? now, text: p.text, media,
-              })),
+              }))),
             });
           } catch (e) {
             results.push({ post: p.post, status: "error", error: String((e as Error)?.message ?? e).slice(0, 300) });
