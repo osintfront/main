@@ -119,7 +119,7 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   const newSince = sinceMinutes ? new Date(now.getTime() - sinceMinutes * 60000) : new Date(lastRun.getTime() - 3 * 60000);
   const poolSince = new Date(Math.min(newSince.getTime(), now.getTime()) - 12 * 3600_000);
 
-  const cols = "id,created_at,occurred_at,title,description,country,location_name,category_id,sources,source_name,source_url,translations";
+  const cols = "id,created_at,occurred_at,title,description,country,location_name,category_id,sources,source_name,source_url,translations,ai_suggestions";
   const { data: pool } = await db.from("events").select(cols)
     .is("deleted_at", null).eq("status", "published").gte("occurred_at", poolSince.toISOString())
     .eq("hfc_areas", "{}")
@@ -133,7 +133,10 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   const slug = new Map<string, string>((cats ?? []).map((c: any) => [c.id, c.slug]));
   // Could a and b be one incident? Close in time, same kind, same country (when both known).
   const H6 = 6 * 3600_000;
+  // Siblings split from one report (one event per category) are never duplicates of each other.
+  const root = (r: Row) => (r as any).ai_suggestions?.split_from ?? r.id;
   const close = (a: Row, b: Row) => {
+    if (root(a) === root(b)) return false;
     if (Math.abs(Date.parse(a.occurred_at) - Date.parse(b.occurred_at)) > H6) return false;
     if (family(slug.get(a.category_id ?? "")) !== family(slug.get(b.category_id ?? ""))) return false;
     const ca = countryKey(a.country), cb = countryKey(b.country);

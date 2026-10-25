@@ -18,6 +18,7 @@ import { inRegion } from "../_shared/region.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, formatCategoryLessons, formatDescription, isTransient, locationsForDb, mainCountry, mainPoint, translationsFor, type EditorSource } from "../_shared/editor.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
+import { splitEventByCategory } from "../_shared/splitEvent.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "intel-crawler");
@@ -364,6 +365,7 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         .is("deleted_at", null).in("status", ["published"]).gte("occurred_at", since).order("occurred_at", { ascending: false }).limit(40);
       const r = await editReport({
         text, mode: "crawler", categories, candidates: candidates ?? [], allowedDomains, categoryLessons,
+        detailedPlaces: true, maxPlaces: 15,
         origin: { name: item.source.name, url: item.url, sentAt: articleDate ?? undefined },
         contextOnly: tooOld,
       });
@@ -415,7 +417,7 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         // No coordinates: the database pins the event on the first named place,
         // or else on the country it is about (shown as an approximate location).
         city: r.city, region: r.region, country: mainCountry(r),
-        locations: locationsForDb(r),
+        locations: locationsForDb(r, 15),
         latitude: pt?.lat ?? null, longitude: pt?.lng ?? null,
         location_precision: pt ? pt.precision : null,
         source_type: "news_website",
@@ -437,6 +439,8 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         ({ data: ins, error } = await db.from("events").insert({ ...row, status: "draft" }).select("id,status").single());
       }
       if (error) throw error;
+      // Places of several categories → one event per category.
+      try { await splitEventByCategory(db, ins!.id); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }
       const published = ins!.status === "published";
       if (published) result.published = (result.published as number) + 1;
       await db.from("intel_sources").update({ events_created: item.source.events_created + 1 }).eq("id", item.source.id);

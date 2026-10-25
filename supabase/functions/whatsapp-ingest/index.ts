@@ -12,6 +12,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translateBrief, translationsFor, type EditResult } from "../_shared/editor.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
+import { splitEventByCategory } from "../_shared/splitEvent.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -660,7 +661,7 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     ai_suggestions: { ...(row.ai_suggestions as object), editor_model: edited.model, countries: edited.countries },
   };
   // All places the report names (one pin each); the country is the fallback pin.
-  update.locations = locationsForDb(edited);
+  update.locations = locationsForDb(edited, 15);
   if (!row.country && mainCountry(edited)) update.country = mainCountry(edited);
   if (edited.title) update.title = clip(edited.title, 200);
   if (edited.summary) update.description = formatDescription(edited);
@@ -700,6 +701,8 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
       if (pubErr) console.error("publish after placing failed", pubErr.message);
     }
   }
+  // Places of several categories → one event per category.
+  try { await splitEventByCategory(db, eventId); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }
 }
 
 let editorDomains: string[] | null = null;
@@ -709,8 +712,11 @@ async function runEditor(text: string, srcLabel: string, url: string | null, sen
       const { data } = await db.from("intel_sources").select("url").eq("active", true);
       editorDomains = [...new Set((data ?? []).map((s: any) => new URL(s.url).hostname.replace(/^www\./, "")))];
     }
+    // Every place with its own category: an event spanning several categories is split later.
+    const cats = (await categories()).filter((c) => !["home-front-alerts", "other", "uncategorized"].includes(c.slug));
     const work = editReport({
       text, mode: "whatsapp", allowedDomains: editorDomains,
+      categories: cats, detailedPlaces: true, maxPlaces: 15,
       origin: { name: srcLabel, url, sentAt },
     });
     const timeout = new Promise<null>((r) => setTimeout(() => r(null), 120_000));
