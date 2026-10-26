@@ -62,7 +62,7 @@ function VideoStill({ still }: { still: Still }) {
       <button
         type="button"
         onClick={() => void play()}
-        disabled={state === 'loading' || state === 'too_big' || state === 'unavailable'}
+        disabled={state === 'loading' || state === 'too_big'}
         aria-label={t('media.play')}
         className="relative block w-full overflow-hidden rounded-lg bg-slate-900 disabled:cursor-default"
       >

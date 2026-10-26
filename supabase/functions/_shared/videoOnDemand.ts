@@ -1,6 +1,7 @@
 // Video on demand: a reader pressed play on a video thumbnail. Fetch the video of that
 // public Telegram post (max 50 MB) into the "event-media" bucket, once, and return its URL.
 // Storage is kept under 90% by deleting the oldest videos first (FIFO).
+// A failed fetch is tried again on a later play (after 2 min, then 15 min); the third failure is final.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 
 export const VIDEO_MAX = 50 * 1024 * 1024;
@@ -8,6 +9,8 @@ const STORAGE_LIMIT = Number(Deno.env.get("MEDIA_STORAGE_LIMIT_BYTES") ?? 1024 *
 const HIGH_WATER = 0.9;
 const LOW_WATER = 0.8;
 const UA = "Mozilla/5.0 (compatible; OsintfrontBot/1.0; +https://osintfront.com)";
+/** Wait before try 2 and try 3 (index = failures so far - 1). After that, "unavailable" is final. */
+const RETRY_AFTER_MS = [2 * 60_000, 15 * 60_000];
 
 export type VideoAnswer =
   | { state: "ready"; url: string; width: number | null; height: number | null }
@@ -73,7 +76,7 @@ async function postVideoUrls(postUrl: string): Promise<{ urls: string[]; why: st
 
 export async function videoForThumb(db: SupabaseClient, thumbId: string): Promise<VideoAnswer | null> {
   const { data: thumb } = await db.from("event_media")
-    .select("id,event_id,kind,source_url,source_index,video_state,video_state_at,video_bytes,width,height")
+    .select("id,event_id,kind,source_url,source_index,video_state,video_state_at,video_bytes,video_tries,width,height")
     .eq("id", thumbId).maybeSingle();
   if (!thumb || thumb.kind !== "video_thumb") return null;
   const { data: ev } = await db.from("events").select("status,deleted_at").eq("id", thumb.event_id).maybeSingle();
@@ -83,7 +86,13 @@ export async function videoForThumb(db: SupabaseClient, thumbId: string): Promis
     .eq("thumb_id", thumb.id).eq("kind", "video").eq("ready", true).maybeSingle();
   if (have) return { state: "ready", url: have.public_url, width: have.width, height: have.height };
   if (thumb.video_state === "too_big") return { state: "too_big", bytes: thumb.video_bytes };
-  if (thumb.video_state === "unavailable") return { state: "unavailable", link: thumb.source_url };
+  const tries = Number(thumb.video_tries ?? 0);
+  if (thumb.video_state === "unavailable") {
+    const wait = RETRY_AFTER_MS[Math.max(1, tries) - 1];
+    const since = Date.now() - Date.parse(thumb.video_state_at ?? "");
+    // Final after the last try; otherwise not yet time to try again.
+    if (wait === undefined || !(since >= wait)) return { state: "unavailable", link: thumb.source_url };
+  }
   if (!thumb.source_url) return { state: "unavailable", link: null };
   // Someone else is fetching it right now.
   if (thumb.video_state === "loading" && Date.now() - Date.parse(thumb.video_state_at ?? "") < 120_000) return { state: "loading" };
@@ -91,6 +100,11 @@ export async function videoForThumb(db: SupabaseClient, thumbId: string): Promis
   const mark = (video_state: string | null, extra: Record<string, unknown> = {}) =>
     db.from("event_media").update({ video_state, video_state_at: new Date().toISOString(), ...extra }).eq("id", thumb.id);
   await mark("loading");
+  const fail = async (why: string): Promise<VideoAnswer> => {
+    console.log("video unavailable", thumb.source_url, `try ${tries + 1}`, why);
+    await mark("unavailable", { video_tries: tries + 1, video_why: why.slice(0, 300) });
+    return { state: "unavailable", link: thumb.source_url, why };
+  };
   try {
     const { urls, why } = await postVideoUrls(thumb.source_url);
     const src = urls[Number(thumb.source_index ?? 0)] ?? urls[0];
@@ -100,16 +114,9 @@ export async function videoForThumb(db: SupabaseClient, thumbId: string): Promis
       await mark("too_big");
       return { state: "too_big", bytes: null };
     }
-    if (!src) {
-      console.log("video unavailable", thumb.source_url, why);
-      await mark("unavailable");
-      return { state: "unavailable", link: thumb.source_url, why };
-    }
+    if (!src) return await fail(`no video on the page (${why})`);
     const res = await fetch(src, { headers: { "User-Agent": UA } });
-    if (!res.ok || !res.body) {
-      await mark("unavailable");
-      return { state: "unavailable", link: thumb.source_url };
-    }
+    if (!res.ok || !res.body) return await fail(`file ${res.status}`);
     const declared = Number(res.headers.get("content-length") ?? 0);
     if (declared > VIDEO_MAX) {
       await res.body.cancel();
@@ -149,7 +156,7 @@ export async function videoForThumb(db: SupabaseClient, thumbId: string): Promis
       ready: true, thumb_id: thumb.id, width: thumb.width, height: thumb.height, source_msg_key: "on-demand",
     });
     if (error) throw new Error(error.message);
-    await mark("ready", { video_bytes: size });
+    await mark("ready", { video_bytes: size, video_why: null });
     return { state: "ready", url, width: thumb.width, height: thumb.height };
   } catch (e) {
     await mark(null);
