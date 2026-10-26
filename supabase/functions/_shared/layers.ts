@@ -123,10 +123,10 @@ const SECT_CATEGORIES: Record<string, string> = {
 };
 
 /** Wikipedia API, politely: one request at a time, waits and retries when asked to slow down. */
-async function wiki(params: URLSearchParams): Promise<any> {
+async function wiki(params: URLSearchParams, host = "en.wikipedia.org"): Promise<any> {
   for (let attempt = 0; attempt < 5; attempt++) {
     await new Promise((r) => setTimeout(r, attempt ? 3000 * attempt : 400));
-    const res = await fetch(`https://en.wikipedia.org/w/api.php?${params}&maxlag=5`, {
+    const res = await fetch(`https://${host}/w/api.php?${params}&maxlag=5`, {
       headers: { "user-agent": "OsintfrontMapBot/1.0 (https://osintfront.com)", "api-user-agent": "OsintfrontMapBot/1.0 (https://osintfront.com)" },
     });
     if (res.status === 429 || res.status === 503) {
@@ -189,4 +189,66 @@ export async function sectsSync(db: Db) {
   }
   await db.from("layer_sync").upsert({ layer: "sects", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: rows.length, source: "https://en.wikipedia.org/wiki/Category:Religion_in_Lebanon", detail: `${noCoords} without coordinates skipped` }, { onConflict: "layer" });
   return { ok: true, places: rows.length, skipped_no_coords: noCoords };
+}
+
+// ── South Lebanon: every village the encyclopedias list, taught to the place database ──
+const SOUTH_DISTRICTS: { en: string; ar: string }[] = [
+  { en: "Tyre_District", ar: "صور" }, { en: "Bint_Jbeil_District", ar: "بنت جبيل" }, { en: "Marjayoun_District", ar: "مرجعيون" },
+  { en: "Nabatieh_District", ar: "النبطية" }, { en: "Hasbaya_District", ar: "حاصبيا" }, { en: "Sidon_District", ar: "صيدا" },
+  { en: "Jezzine_District", ar: "جزين" },
+];
+
+type Village = { name_ar: string | null; name_en: string | null; name_he: string | null; lat: number; lng: number; source: string };
+
+async function categoryPlaces(host: string, category: string, other: string): Promise<Village[]> {
+  const out = new Map<string, Village>();
+  let cont: Record<string, string> = {};
+  for (let page = 0; page < 15; page++) {
+    const params = new URLSearchParams({
+      action: "query", format: "json", generator: "categorymembers", gcmtitle: `Category:${category}`, gcmnamespace: "0", gcmlimit: "200",
+      prop: "coordinates|langlinks", colimit: "max", lllimit: "max", ...cont,
+    });
+    const res = await wiki(params, host);
+    for (const p of Object.values(res?.query?.pages ?? {}) as any[]) {
+      const title = String(p?.title ?? "");
+      const c = p?.coordinates?.[0];
+      const links = p?.langlinks ?? [];
+      const ll = (lang: string) => links.find((l: any) => l?.lang === lang)?.["*"] ?? null;
+      const prev = out.get(title);
+      const v: Village = prev ?? {
+        name_ar: host.startsWith("ar") ? title : ll("ar"),
+        name_en: host.startsWith("en") ? title : ll(other === "en" ? "en" : "en"),
+        name_he: ll("he"),
+        lat: c?.lat ?? 0, lng: c?.lon ?? 0, source: `${host}/${category}`,
+      };
+      if (prev) {
+        if (!v.lat && c) { v.lat = c.lat; v.lng = c.lon; }
+        v.name_he ??= ll("he");
+        if (host.startsWith("ar")) v.name_en ??= ll("en"); else v.name_ar ??= ll("ar");
+      }
+      out.set(title, v);
+    }
+    if (!res?.continue) break;
+    cont = Object.fromEntries(Object.entries(res.continue).map(([k, v]) => [k, String(v)]));
+  }
+  return [...out.values()];
+}
+
+export async function learnSouthLebanon(db: Db) {
+  const all: Village[] = [];
+  for (const d of SOUTH_DISTRICTS) {
+    all.push(...await categoryPlaces("en.wikipedia.org", `Populated_places_in_${d.en}`, "ar"));
+    all.push(...await categoryPlaces("ar.wikipedia.org", `أماكن_مأهولة_في_قضاء_${d.ar.replace(/ /g, "_")}`, "en"));
+  }
+  // Southern Lebanon only (south of the Awali river), with coordinates.
+  const south = all.filter((v) => v.lat > 33.04 && v.lat < 33.62 && v.lng > 35.1 && v.lng < 35.95);
+  let matched = 0, added = 0;
+  for (let i = 0; i < south.length; i += 100) {
+    const { data, error } = await db.rpc("learn_places", { p_rows: south.slice(i, i + 100), p_country: "LB" });
+    if (error) throw new Error(error.message);
+    matched += Number(data?.matched ?? 0);
+    added += Number(data?.added ?? 0);
+  }
+  await db.from("layer_sync").upsert({ layer: "south_lebanon_places", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: south.length, source: "Wikipedia (en + ar): populated places by district", detail: `${matched} matched to GeoNames, ${added} added, ${all.length - south.length} outside / no coordinates` }, { onConflict: "layer" });
+  return { ok: true, found: all.length, south: south.length, matched, added, with_hebrew: south.filter((v) => v.name_he).length };
 }

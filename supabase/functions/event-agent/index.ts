@@ -34,7 +34,7 @@ import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
 import { imageAsBase64 } from "../whatsapp-ingest/telegram.ts";
 import { makeRoom } from "../_shared/videoOnDemand.ts";
 import { alreadyHas, hashImage } from "../_shared/imageHash.ts";
-import { controlSync, sectsSync } from "../_shared/layers.ts";
+import { controlSync, learnSouthLebanon, sectsSync } from "../_shared/layers.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -480,9 +480,9 @@ async function handle(req: Request): Promise<Response> {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
   }
-  if (action === "control_sync" || action === "sects_sync") {
+  if (action === "control_sync" || action === "sects_sync" || action === "learn_south_lebanon") {
     try {
-      return json(action === "control_sync" ? await controlSync(db) : await sectsSync(db));
+      return json(action === "control_sync" ? await controlSync(db) : action === "sects_sync" ? await sectsSync(db) : await learnSouthLebanon(db));
     } catch (e) {
       return json({ ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }
