@@ -41,6 +41,7 @@ const PUBLIC_EVENT_COLUMNS = [
   'category_color',
   'category_marker_color',
   'media_kinds',
+  'report_group',
 ].join(',');
 
 interface PublishedEventRow {
@@ -74,6 +75,7 @@ interface PublishedEventRow {
   category_color: string | null;
   category_marker_color: string | null;
   media_kinds?: string[] | null;
+  report_group?: string | null;
 }
 
 function toNumber(value: number | string | null): number | null {
@@ -199,6 +201,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     isVerified: !!row.is_verified,
     category,
     translations: row.translations && typeof row.translations === 'object' ? (row.translations as PublicEvent['translations']) : {},
+    reportGroup: typeof row.report_group === 'string' && row.report_group ? row.report_group : null,
     mediaKinds: Array.isArray(row.media_kinds) ? (row.media_kinds.filter((k) => k === 'image' || k === 'video' || k === 'document') as MediaKind[]) : [],
   };
 }

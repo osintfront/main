@@ -537,7 +537,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           ))}
         </div>
       </nav>
-      {detailsEvent ? <EventDetailsDialog event={detailsEvent} onClose={closeDetails} onLocate={locateFromDetails} /> : null}
+      {detailsEvent ? <EventDetailsDialog event={detailsEvent} onClose={closeDetails} onLocate={locateFromDetails} onChanged={reload} onMovePin={canMove ? startMoveMain : undefined} related={detailsEvent.reportGroup ? allEvents.filter((e) => e.reportGroup === detailsEvent.reportGroup && e.id !== detailsEvent.id) : undefined} onOpenRelated={openDetailsFromSheet} /> : null}
     </div>
   );
 }

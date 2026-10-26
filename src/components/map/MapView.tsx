@@ -156,6 +156,7 @@ export function MapView({
   const focusedRef = useRef<{ id: string; markers: L.Marker[] } | null>(null);
   /** Moving pins between layers closes their popup: that close must not end the focus. */
   const relayeringRef = useRef(false);
+  const topOverlayRef = useRef<HTMLDivElement>(null);
   const [legendOpen, setLegendOpen] = useState(false);
   const alertLayerRef = useRef<L.LayerGroup | null>(null);
   const alertEntriesRef = useRef(new Map<string, AlertEntry>());
@@ -219,8 +220,13 @@ export function MapView({
       const popup = e.popup as L.Popup & { _adjustPan?: () => void };
       const fit = () => {
         if (!map.hasLayer(popup)) return;
-        popup.options.maxHeight = Math.max(160, map.getSize().y - 90);
-        popup.options.autoPanPaddingTopLeft = L.point(24, 24);
+        // The bars along the top of the map (red-alert banner, "ask the map") sit above
+        // Leaflet's panes: keep the window below them, or its top is hidden behind them.
+        const box = container.getBoundingClientRect();
+        const bar = topOverlayRef.current?.getBoundingClientRect();
+        const top = bar && bar.height > 0 ? Math.max(24, Math.round(bar.bottom - box.top) + 12) : 24;
+        popup.options.maxHeight = Math.max(160, map.getSize().y - top - 66);
+        popup.options.autoPanPaddingTopLeft = L.point(24, top);
         popup.options.autoPanPaddingBottomRight = L.point(24, 24);
         popup.update();
         popup._adjustPan?.();
@@ -726,6 +732,23 @@ export function MapView({
         }).addTo(links);
       }
     }
+    // Events split from the same report (one per category): a thin line to each of them.
+    const group = entry?.event.reportGroup;
+    if (links && entry && group) {
+      const [from] = eventPoints(entry.event);
+      for (const other of markersRef.current.values()) {
+        if (other === entry || other.event.reportGroup !== group) continue;
+        for (const point of eventPoints(other.event)) {
+          L.polyline([from, point], {
+            color: other.event.category.markerColor,
+            weight: 1.5,
+            opacity: 0.7,
+            dashArray: '2 6',
+            interactive: false,
+          }).addTo(links);
+        }
+      }
+    }
   }, [selectedId, focusId, markersVersion]);
 
   // 6b. The focused event's pins leave the clusters (they stay visible, with their links,
@@ -862,6 +885,11 @@ export function MapView({
         if (!map.getBounds().pad(-0.05).contains(bounds)) {
           const z = Math.min(map.getZoom(), map.getBoundsZoom(bounds, false, pad));
           map.flyTo(bounds.getCenter(), z, { duration: prefersReducedMotion() ? 0 : 0.6 });
+          // Zooming out moves the open window with its pin: bring it back into view after.
+          map.once('moveend', () => {
+            const p = entry.markers.find((m) => m.isPopupOpen())?.getPopup() as (L.Popup & { _adjustPan?: () => void }) | undefined;
+            p?._adjustPan?.();
+          });
         }
       }
       if (!compact && !main.isPopupOpen() && !entry.markers.some((m) => m.isPopupOpen())) main.openPopup();
@@ -945,7 +973,7 @@ export function MapView({
     <div className="relative isolate h-full w-full">
       <div ref={containerRef} className="ofm-map h-full w-full" role="region" aria-label={t('map.label')} />
       {alerts.length > 0 || topSlot ? (
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-[500] flex flex-col items-center gap-2 px-16">
+        <div ref={topOverlayRef} className="pointer-events-none absolute inset-x-0 top-3 z-[500] flex flex-col items-center gap-2 px-16">
           {alerts.length > 0 ? (
             <button
               type="button"

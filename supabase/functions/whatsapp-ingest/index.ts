@@ -14,6 +14,7 @@ import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { translateBriefChain } from "../_shared/translate.ts";
+import { alreadyHas, hashImage } from "../_shared/imageHash.ts";
 import { AGENT_EXCLUDED_CATEGORIES, CATEGORY_RULES } from "../_shared/categoryRules.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -128,12 +129,18 @@ async function storeMedia(eventId: string, key: string, media?: InMedia[], postU
   // Only public posts can be fetched later (t.me/<channel>/<n>; not private t.me/c/… links).
   const fetchable = postUrl && /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{3,}\/\d+$/.test(postUrl) ? postUrl : null;
   const d = new Date();
+  // Pictures the event already has: another channel's copy of the same photo is skipped.
+  const { data: had } = await db.from("event_media").select("sha256,phash").eq("event_id", eventId);
+  const known: { sha?: string | null; phash?: string | null }[] = (had ?? []).map((r: any) => ({ sha: r.sha256, phash: r.phash }));
   for (const [i, m] of media.slice(0, 4).entries()) {
     try {
       const bytes = Uint8Array.from(atob(String(m.data)), (c) => c.charCodeAt(0));
       if (!bytes.length || bytes.length > 2_000_000) continue;
-      await makeRoom(bytes.length);
       const mime = ["image/jpeg", "image/png", "image/webp"].includes(String(m.mime)) ? String(m.mime) : "image/jpeg";
+      const fp = await hashImage(bytes, mime);
+      if (alreadyHas(known, fp)) continue;
+      known.push(fp);
+      await makeRoom(bytes.length);
       const ext = mime === "image/jpeg" ? "jpg" : mime.split("/")[1];
       const path = `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${eventId}/${key.replace(/[^a-zA-Z0-9_-]/g, "_")}-${i}.${ext}`;
       const up = await db.storage.from("event-media").upload(path, bytes, { contentType: mime, upsert: true });
@@ -142,7 +149,7 @@ async function storeMedia(eventId: string, key: string, media?: InMedia[], postU
       await db.from("event_media").upsert({
         event_id: eventId, kind: m.kind === "video_thumb" ? "video_thumb" : "image", storage_path: path, public_url: url,
         width: Number.isFinite(m.width) ? Math.round(m.width!) : null, height: Number.isFinite(m.height) ? Math.round(m.height!) : null,
-        bytes: bytes.length, source_msg_key: key,
+        bytes: bytes.length, source_msg_key: key, sha256: fp.sha, phash: fp.phash,
         ...(m.kind === "video_thumb" ? { source_url: fetchable, source_index: videoIndex++ } : {}),
       }, { onConflict: "storage_path" });
       n++;
@@ -467,6 +474,21 @@ function samePlace(e: any, keys: Set<string>, rawNames: (string | null | undefin
   });
 }
 
+/**
+ * Does the message text name the candidate's place in any spelling it has (Arabic, Hebrew,
+ * English)? A candidate with no place cannot be checked (true).
+ */
+function mentionsPlaceOf(e: any, text: string): boolean {
+  const norm = (x: string) => x.toLowerCase().normalize("NFKD").replace(/[̀-ًͯ-ٟ֑-ׇ]/g, "").replace(/[إأآ]/g, "ا").replace(/ة/g, "ه");
+  const names = [e.location_name, e.ai_suggestions?.place_en, e.ai_suggestions?.location_resolution?.matched_on,
+    ...(Array.isArray(e.locations) ? e.locations.flatMap((l: any) => [l?.name, l?.name_en]) : [])]
+    .map((n) => norm(String(n ?? "")).replace(/^(ال|al[- ]|el[- ])/, "").trim())
+    .filter((n) => n.length >= 3);
+  if (!names.length) return true;
+  const hay = norm(text);
+  return names.some((n) => hay.includes(n));
+}
+
 /** The same place within the hour: another channel reporting the same incident. */
 function samePlaceEvent(pool: any[], keys: Set<string>, sentAt: Date, excludeId?: string): any | null {
   if (!keys.size) return null;
@@ -505,7 +527,7 @@ async function processOne(m: InMsg) {
   const to = new Date(sentAt.getTime() + DUP_WINDOW_MIN * 60000).toISOString();
   const { data: pool } = await db
     .from("events")
-    .select("id,title,original_report_text,occurred_at,source_name,description,sources,location_name,ai_suggestions,created_at")
+    .select("id,title,original_report_text,occurred_at,source_name,description,sources,location_name,locations,ai_suggestions,created_at")
     .is("deleted_at", null)
     .gte("occurred_at", from)
     .lte("occurred_at", to)
@@ -544,8 +566,18 @@ async function processOne(m: InMsg) {
   if (!same && c.decision === "duplicate") {
     const cand = (candidates ?? []).find((x) => x.id === c.duplicate_of);
     const mine = placeKeys(c.location_name, c.location_name_en);
-    if (cand && mine.size && !samePlace(cand, mine, [c.location_name, c.location_name_en])) {
-      c.reason = `not a duplicate: other place (${c.location_name || c.location_name_en}) — ${c.reason ?? ""}`;
+    // The classifier sometimes says "duplicate" while its own reason says it is not one
+    // ("Not a duplicate; shooting at settlers' vehicle near Tuqu'").
+    const denies = /\bnot\s+(a\s+)?(duplicate|the same)\b|\bdifferent\s+(incident|event)\b|\bunrelated\b/i.test(String(c.reason ?? ""));
+    const why = denies
+      ? "the classifier's reason says it is a different incident"
+      : cand && mine.size && !samePlace(cand, mine, [c.location_name, c.location_name_en])
+      ? `other place (${c.location_name || c.location_name_en})`
+      : cand && !mine.size && !mentionsPlaceOf(cand, text)
+      ? "the message names no place, and not the candidate's place"
+      : "";
+    if (why) {
+      c.reason = `not a duplicate: ${why} — ${c.reason ?? ""}`;
       c.decision = c.category_slug ? "event" : "uncertain";
       c.duplicate_of = undefined;
     }
@@ -723,7 +755,7 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     ai_suggestions: { ...(row.ai_suggestions as object), editor_model: edited.model, countries: edited.countries },
   };
   // All places the report names (one pin each); the country is the fallback pin.
-  update.locations = locationsForDb(edited, 15);
+  update.locations = locationsForDb(edited, 30);
   if (!row.country && mainCountry(edited)) update.country = mainCountry(edited);
   if (edited.title) update.title = clip(edited.title, 200);
   if (edited.summary) update.description = formatDescription(edited);
@@ -781,7 +813,7 @@ async function runEditor(text: string, srcLabel: string, url: string | null, sen
     const cats = (await categories()).filter((c) => !["home-front-alerts", "other", "uncategorized"].includes(c.slug));
     const work = editReport({
       text, mode: "whatsapp", allowedDomains: editorDomains,
-      categories: cats, detailedPlaces: true, maxPlaces: 15,
+      categories: cats, detailedPlaces: true, maxPlaces: 30,
       origin: { name: srcLabel, url, sentAt },
     });
     const timeout = new Promise<null>((r) => setTimeout(() => r(null), 120_000));

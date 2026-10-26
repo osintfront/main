@@ -8,11 +8,18 @@ import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/co
 import { EventMedia } from './EventMedia';
 import { EventText, eventTexts } from './EventText';
 import { whereLabel } from '@/utils/places';
+import { EventStaffEdit } from './EventStaffEdit';
 
 interface EventDetailsDialogProps {
   event: PublicEvent;
   onClose: () => void;
   onLocate: (id: string) => void;
+  /** Staff edits: reload after a change, and move the pin on the map. */
+  onChanged?: () => void;
+  onMovePin?: (id: string) => void;
+  /** Other events split from the same report (one per category), and opening one of them. */
+  related?: PublicEvent[];
+  onOpenRelated?: (id: string) => void;
 }
 
 /**
@@ -20,7 +27,7 @@ interface EventDetailsDialogProps {
  * source. A centred window on desktop, a full-height sheet on phones.
  * Event text is rendered as plain text — never as HTML.
  */
-export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDialogProps) {
+export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMovePin, related, onOpenRelated }: EventDetailsDialogProps) {
   const { t, locale, lang } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
   const { title } = eventTexts(event, lang);
@@ -108,6 +115,30 @@ export function EventDetailsDialog({ event, onClose, onLocate }: EventDetailsDia
             </ul>
           ) : null}
           <EventText event={event} />
+          {related && related.length ? (
+            <section aria-labelledby="event-related-title" className="mt-4 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
+              <h3 id="event-related-title" className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t('details.sameReport', { count: related.length })}
+              </h3>
+              <ul className="space-y-1.5">
+                {related.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenRelated?.(r.id)}
+                      className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-start text-sm text-slate-700 hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <CategoryBadge category={r.category} />
+                      <span className="min-w-0 flex-1 truncate" dir="auto">
+                        {eventTexts(r, lang).title}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          <EventStaffEdit event={event} onChanged={onChanged} onMovePin={onMovePin} />
           <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
           {event.sources && event.sources.length ? (
             <section aria-labelledby="event-sources-title" className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">

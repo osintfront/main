@@ -33,6 +33,7 @@ import { classifyChannels } from "../_shared/channels.ts";
 import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
 import { imageAsBase64 } from "../whatsapp-ingest/telegram.ts";
 import { makeRoom } from "../_shared/videoOnDemand.ts";
+import { alreadyHas, hashImage } from "../_shared/imageHash.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -110,14 +111,17 @@ async function expand(id: string) {
 
 async function edit(id: string) {
   const { data: ev } = await db.from("events")
-    .select("id,title,description,original_report_text,source_name,source_url,occurred_at,country,translations,ai_suggestions,latitude")
+    .select("id,title,description,original_report_text,source_name,source_url,occurred_at,country,translations,ai_suggestions,latitude,coordinates_manually_corrected")
     .eq("id", id).maybeSingle();
   if (!ev) return json({ error: "not found" }, 404);
+  // Every place the report names, each with what happened there (split per category below).
+  const { data: catRows } = await db.from("event_categories").select("slug,name").eq("is_active", true);
+  const cats = (catRows ?? []).filter((c: any) => !["home-front-alerts", "other", "uncategorized"].includes(c.slug));
   const ai = { ...(ev.ai_suggestions ?? {}), sent_to_editor: new Date().toISOString() };
   await db.from("events").update({ ai_suggestions: ai }).eq("id", id);
   // The text the person published (they may have edited it), else the original report.
   const text = foreignShare(`${ev.title} ${ev.description}`) > 0.4 ? `${ev.title}\n\n${ev.description}` : ev.original_report_text || `${ev.title}\n\n${ev.description}`;
-  const r = await editReport({ text, mode: "whatsapp", origin: { name: ev.source_name ?? "", url: ev.source_url, sentAt: ev.occurred_at } });
+  const r = await editReport({ text, mode: "whatsapp", categories: cats, detailedPlaces: true, maxPlaces: 30, origin: { name: ev.source_name ?? "", url: ev.source_url, sentAt: ev.occurred_at } });
   const update: Record<string, unknown> = {
     ai_suggestions: { ...ai, editor_model: r.model, countries: r.countries },
     translations: { ...asTr(ev.translations), ...translationsFor(r) },
@@ -125,10 +129,19 @@ async function edit(id: string) {
   if (r.title) update.title = r.title.slice(0, 200);
   if (r.summary) update.description = formatDescription(r);
   if (!ev.country && mainCountry(r)) update.country = mainCountry(r);
-  if (ev.latitude == null) update.locations = locationsForDb(r);
+  // A place a person corrected by hand stays; otherwise the editor's places replace the old ones.
+  if (!ev.coordinates_manually_corrected) {
+    update.locations = locationsForDb(r, 30);
+    const pt = mainPoint(r);
+    if (pt) Object.assign(update, { latitude: pt.lat, longitude: pt.lng, location_name: pt.name.slice(0, 200), location_precision: pt.precision });
+  }
   const { error } = await db.from("events").update(update).eq("id", id);
   if (error) return json({ error: error.message }, 500);
-  return json({ ok: true, id, title: update.title });
+  let siblings: string[] = [];
+  if (!ev.ai_suggestions?.split_from && !ev.ai_suggestions?.split_into) {
+    try { siblings = await splitEventByCategory(db, id); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }
+  }
+  return json({ ok: true, id, title: update.title, places: Array.isArray(update.locations) ? (update.locations as unknown[]).length : null, siblings });
 }
 
 async function translate(limit: number, drafts = false) {
@@ -293,11 +306,16 @@ async function attachMedia(body: Record<string, unknown>) {
   const items = (Array.isArray(body?.media) ? body.media : []).slice(0, 4) as { url?: string; kind?: string }[];
   const d = new Date();
   let n = 0, videoIndex = 0;
+  const { data: had } = await db.from("event_media").select("sha256,phash").eq("event_id", eventId);
+  const known: { sha?: string | null; phash?: string | null }[] = (had ?? []).map((r: any) => ({ sha: r.sha256, phash: r.phash }));
   for (const [i, m] of items.entries()) {
     if (typeof m?.url !== "string" || !/^https:\/\//.test(m.url)) continue;
     const img = await imageAsBase64(m.url);
     if (!img) continue;
     const bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
+    const fp = await hashImage(bytes, img.mime);
+    if (alreadyHas(known, fp)) continue;
+    known.push(fp);
     await makeRoom(db, bytes.length);
     const ext = img.mime === "image/jpeg" ? "jpg" : img.mime.split("/")[1];
     const path = `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${eventId}/link-${i}.${ext}`;
@@ -307,12 +325,54 @@ async function attachMedia(body: Record<string, unknown>) {
     const video = m.kind === "video_thumb";
     await db.from("event_media").upsert({
       event_id: eventId, kind: video ? "video_thumb" : "image", storage_path: path, public_url: url, bytes: bytes.length,
-      source_msg_key: `link:${eventId}`,
+      source_msg_key: `link:${eventId}`, sha256: fp.sha, phash: fp.phash,
       ...(video ? { source_url: postUrl, source_index: videoIndex++ } : {}),
     }, { onConflict: "storage_path" });
     n++;
   }
   return json({ ok: true, saved: n });
+}
+
+/**
+ * The same photo posted by several channels (or brought in when two events were merged):
+ * fingerprint the pictures of recent events that have none yet, then keep one copy of each
+ * (a video thumbnail before a plain picture, then the oldest) and delete the rest.
+ */
+async function mediaDedupe(hours: number) {
+  const since = new Date(Date.now() - hours * 3600_000).toISOString();
+  const { data: rows } = await db.from("event_media")
+    .select("id,event_id,kind,storage_path,public_url,sha256,phash,created_at,mime")
+    .in("kind", ["image", "video_thumb"]).gte("created_at", since).order("created_at").limit(2000);
+  let hashed = 0;
+  for (const r of rows ?? []) {
+    if (r.sha256) continue;
+    try {
+      const res = await fetch(r.public_url);
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const fp = await hashImage(bytes, /\.png$/i.test(r.storage_path) ? "image/png" : /\.webp$/i.test(r.storage_path) ? "image/webp" : "image/jpeg");
+      r.sha256 = fp.sha;
+      r.phash = fp.phash;
+      await db.from("event_media").update({ sha256: fp.sha, phash: fp.phash }).eq("id", r.id);
+      hashed++;
+    } catch { /* try again next run */ }
+  }
+  const byEvent = new Map<string, any[]>();
+  for (const r of rows ?? []) if (r.sha256) byEvent.set(r.event_id, [...(byEvent.get(r.event_id) ?? []), r]);
+  const drop: any[] = [];
+  for (const list of byEvent.values()) {
+    list.sort((a, b) => (a.kind === b.kind ? a.created_at.localeCompare(b.created_at) : a.kind === "video_thumb" ? -1 : 1));
+    const kept: { sha?: string | null; phash?: string | null }[] = [];
+    for (const r of list) {
+      if (alreadyHas(kept, { sha: r.sha256, phash: r.phash })) drop.push(r);
+      else kept.push({ sha: r.sha256, phash: r.phash });
+    }
+  }
+  if (drop.length) {
+    await db.storage.from("event-media").remove(drop.map((r) => r.storage_path));
+    await db.from("event_media").delete().in("id", drop.map((r) => r.id));
+  }
+  return json({ ok: true, checked: rows?.length ?? 0, hashed, removed: drop.length, events: [...new Set(drop.map((r) => r.event_id))].length });
 }
 
 async function handle(req: Request): Promise<Response> {
@@ -411,6 +471,7 @@ async function handle(req: Request): Promise<Response> {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
   }
+  if (action === "media_dedupe") return await mediaDedupe(Math.min(24 * 30, Math.max(1, Number(body?.hours) || 48)));
   if (action === "translate_test") {
     // Health check of the site's translation chain (each free provider on its own).
     const url = TRANSLATE_API_URL, secret = Deno.env.get("TRANSLATE_SECRET") ?? "";

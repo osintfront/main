@@ -6,7 +6,7 @@ import { Button } from '@/components/common/Form';
 import { LocationPicker } from './LocationPicker';
 
 interface QuickLocationDialogProps {
-  event: AdminEvent;
+  event: Pick<AdminEvent, 'title' | 'latitude' | 'longitude' | 'locationName'>;
   iconName: string;
   color: string;
   busy: boolean;

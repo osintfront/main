@@ -108,6 +108,8 @@ export interface PublicEvent {
   translations: EventTranslations;
   /** Kinds of media attached (for the media filter). */
   mediaKinds?: MediaKind[];
+  /** Events split from one report (one per category) share this id; the map links them. */
+  reportGroup?: string | null;
 }
 
 /** Full event as staff see it in the back office. */
