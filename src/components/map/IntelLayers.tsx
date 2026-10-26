@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import { Plane as PlaneIcon, RefreshCw, Satellite, Ship, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
+import { AreaLayersPanel, useAreaLayers } from './areaLayers';
 import {
   EMERGENCY_SQUAWKS, SAT_SOURCES, SHIP_COLORS, SHIP_KINDS, fetchPlanes, fetchVessels, satDays, satKey, satTiles, shipFlag, shipKind,
   type Plane, type SatDay, type SatSource, type ShipKind, type Vessel,
@@ -60,6 +61,7 @@ interface IntelLayersProps {
 export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate }: IntelLayersProps) {
   const { lang, dir } = useI18n();
   const T: Txt = TXT[lang === 'he' ? 'he' : 'en'];
+  const areaLayers = useAreaLayers(map, lang, dir);
 
   // ── Satellite ──
   const [satOn, setSatOn] = useState(false);
@@ -609,6 +611,9 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
               </div>
             ) : null}
           </section>
+          <div className="mt-3">
+            <AreaLayersPanel s={areaLayers} />
+          </div>
         </div>
       ) : null}
     </>
