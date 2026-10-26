@@ -344,8 +344,10 @@ async function mediaDedupe(hours: number) {
     .select("id,event_id,kind,storage_path,public_url,sha256,phash,created_at,mime")
     .in("kind", ["image", "video_thumb"]).gte("created_at", since).order("created_at").limit(2000);
   let hashed = 0;
+  // Decoding pictures costs CPU: a few dozen per run, the rest on the next runs.
   for (const r of rows ?? []) {
     if (r.sha256) continue;
+    if (hashed >= 30) break;
     try {
       const res = await fetch(r.public_url);
       if (!res.ok) continue;
@@ -372,7 +374,7 @@ async function mediaDedupe(hours: number) {
     await db.storage.from("event-media").remove(drop.map((r) => r.storage_path));
     await db.from("event_media").delete().in("id", drop.map((r) => r.id));
   }
-  return json({ ok: true, checked: rows?.length ?? 0, hashed, removed: drop.length, events: [...new Set(drop.map((r) => r.event_id))].length });
+  return json({ ok: true, checked: rows?.length ?? 0, hashed, left: (rows ?? []).filter((r) => !r.sha256).length, removed: drop.length, events: [...new Set(drop.map((r) => r.event_id))].length });
 }
 
 async function handle(req: Request): Promise<Response> {
