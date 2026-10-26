@@ -260,7 +260,7 @@ export async function learnSouthLebanon(db: Db) {
  * from the Arabic name; marked he_from_ai). One batch per call.
  */
 export async function hebrewNamesSouthLebanon(db: Db, limit = 120) {
-  const key = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+  const key = (Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("Whatsapp_Key") || "").trim();
   if (!key) throw new Error("ANTHROPIC_API_KEY not set");
   const { data: rows, error } = await db.rpc("south_lebanon_missing_hebrew", { p_limit: limit });
   if (error) throw new Error(error.message);
