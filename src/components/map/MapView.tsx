@@ -55,6 +55,9 @@ interface MapViewProps {
   onMoveEnd?: () => void;
   /** Save the new pin; resolve true when stored. */
   onMoveSave?: (target: MoveTarget, lat: number, lng: number, mode: 'move' | 'copy' | 'remove') => Promise<boolean>;
+  /** Staff: change one icon's category, or set its place by search. */
+  onPlaceCategory?: (target: MoveTarget, slug: string) => void;
+  onPlaceLocate?: (target: MoveTarget) => void;
   /** Editors/admins: the move bar also offers "remove from map". */
   canRemovePin?: boolean;
   /** Shown at the top centre, under the alerts banner (e.g. "ask the map"). */
@@ -139,6 +142,8 @@ export function MapView({
   onMoveRequest,
   onMoveEnd,
   onMoveSave,
+  onPlaceCategory,
+  onPlaceLocate,
   canRemovePin = false,
   topSlot,
   fitTo = null,
@@ -183,6 +188,10 @@ export function MapView({
   onBackgroundClickRef.current = onBackgroundClick;
   const onMoveRequestRef = useRef(onMoveRequest);
   onMoveRequestRef.current = onMoveRequest;
+  const onPlaceCategoryRef = useRef(onPlaceCategory);
+  onPlaceCategoryRef.current = onPlaceCategory;
+  const onPlaceLocateRef = useRef(onPlaceLocate);
+  onPlaceLocateRef.current = onPlaceLocate;
   const onMoveEndRef = useRef(onMoveEnd);
   onMoveEndRef.current = onMoveEnd;
   const onMoveSaveRef = useRef(onMoveSave);
@@ -443,7 +452,6 @@ export function MapView({
               buildPopupContent(
                 event,
                 {
-                  categoryLabel: categoryLabel(event.category.slug, event.category.name),
                   severityLabel: t(`severity.${event.severity}`),
                   verified: t('feed.verified'),
                   breaking: t('feed.breaking'),
@@ -453,9 +461,23 @@ export function MapView({
                   locale,
                   dir,
                   moveLocation: canMove ? t('move.button') : undefined,
+                  locatePlace: canMove ? t('list.quickLocation') : undefined,
+                  // Each icon shows its own kind; staff can switch it here.
+                  categoryLabel: categoryLabel(own?.slug ?? event.category.slug, own?.name ?? event.category.name),
+                  categorySlug: own?.slug ?? event.category.slug,
+                  chipColor: own?.color ?? event.category.color,
+                  categories: canMove
+                    ? DEFAULT_CATEGORIES.filter((c) => !['home-front-alerts', 'other', 'uncategorized'].includes(c.slug)).map((c) => ({ slug: c.slug, label: categoryLabel(c.slug, c.name) }))
+                    : undefined,
                 },
                 (id) => onViewEventRef.current(id),
-                canMove ? (id) => onMoveRequestRef.current?.({ id, place: place.place }) : undefined,
+                canMove
+                  ? {
+                      onMove: (id) => onMoveRequestRef.current?.({ id, place: place.place }),
+                      onLocate: () => onPlaceLocateRef.current?.({ id: event.id, place: place.place }),
+                      onCategory: (slug) => onPlaceCategoryRef.current?.({ id: event.id, place: place.place }, slug),
+                    }
+                  : {},
               ),
             { maxWidth: 320, minWidth: 240, autoPanPadding: [28, 28], className: 'ofm-popup-shell' },
           );

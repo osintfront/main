@@ -29,7 +29,8 @@ import { HFC_CATEGORY } from '@/config/hfcThreats';
 import { useEeis } from '@/hooks/useEeis';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/common/Toast';
-import { addEventPlace, moveEventPin, moveEventPlace, removeEventPin } from '@/services/eventAdminService';
+import { addEventPlace, moveEventPin, moveEventPlace, removeEventPin, setPlaceCategory, setPlaceLocation } from '@/services/eventAdminService';
+import { QuickLocationDialog } from '@/components/admin/events/QuickLocationDialog';
 import { fetchPublicEvent } from '@/services/eventService';
 import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
@@ -298,6 +299,40 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     },
     [toast, t, reload, can],
   );
+  // Staff, from an icon's window: another category for this icon, or its place by search.
+  const placeCategory = useCallback(
+    async (target: MoveTarget, slug: string) => {
+      try {
+        await setPlaceCategory(target.id, target.place, slug);
+        toast.success(can('event.publish') ? t('move.saved') : t('list.sentForReview'));
+        reload();
+      } catch (err) {
+        toast.error(friendlyError(err, t));
+      }
+    },
+    [toast, t, reload, can],
+  );
+  const [locating, setLocating] = useState<MoveTarget | null>(null);
+  const [locBusy, setLocBusy] = useState(false);
+  const locatingEvent = locating ? allEvents.find((e) => e.id === locating.id) ?? null : null;
+  const locatingPlace = locating && locating.place !== null ? locatingEvent?.places?.find((p) => p.index === locating.place) ?? null : null;
+  const savePlaceLocation = useCallback(
+    async (lat: number, lng: number, name: string) => {
+      if (!locating) return;
+      setLocBusy(true);
+      try {
+        await setPlaceLocation(locating.id, locating.place, lat, lng, name);
+        toast.success(can('event.publish') ? t('move.saved') : t('list.sentForReview'));
+        setLocating(null);
+        reload();
+      } catch (err) {
+        toast.error(friendlyError(err, t));
+      } finally {
+        setLocBusy(false);
+      }
+    },
+    [locating, toast, t, reload, can],
+  );
   // A shared link (?event=<id>) opens that event — from the live list, else fetched (archive).
   const [linkedEvent, setLinkedEvent] = useState<PublicEvent | null>(null);
   const linkHandled = useRef(false);
@@ -487,6 +522,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               onMoveRequest={canMove ? startMove : undefined}
               onMoveEnd={endMove}
               onMoveSave={saveMove}
+              onPlaceCategory={canMove ? (target, slug) => void placeCategory(target, slug) : undefined}
+              onPlaceLocate={canMove ? setLocating : undefined}
               canRemovePin={!isDemo && can('event.edit.any')}
               topSlot={canAsk ? <AskMap result={ask} onResult={handleAskResult} onCite={handleLocate} /> : undefined}
               fitTo={askFit}
@@ -537,6 +574,21 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           ))}
         </div>
       </nav>
+      {locating && locatingEvent ? (
+        <QuickLocationDialog
+          event={{
+            title: locatingPlace ? `${locatingEvent.title} — ${locatingPlace.name || locatingPlace.nameEn}` : locatingEvent.title,
+            latitude: locatingPlace ? locatingPlace.latitude : locatingEvent.latitude,
+            longitude: locatingPlace ? locatingPlace.longitude : locatingEvent.longitude,
+            locationName: locatingPlace ? locatingPlace.name || locatingPlace.nameEn : locatingEvent.locationName,
+          }}
+          iconName={locatingEvent.category.icon || 'CircleDot'}
+          color={locatingEvent.category.markerColor || '#0284c7'}
+          busy={locBusy}
+          onCancel={() => setLocating(null)}
+          onSave={(a, b, n) => void savePlaceLocation(a, b, n)}
+        />
+      ) : null}
       {detailsEvent ? <EventDetailsDialog event={detailsEvent} onClose={closeDetails} onLocate={locateFromDetails} onChanged={reload} onMovePin={canMove ? startMoveMain : undefined} related={detailsEvent.reportGroup ? allEvents.filter((e) => e.reportGroup === detailsEvent.reportGroup && e.id !== detailsEvent.id) : undefined} onOpenRelated={openDetailsFromSheet} /> : null}
     </div>
   );

@@ -238,6 +238,13 @@
   color: color-mix(in srgb, var(--chip-color) 55%, white);
   background: color-mix(in srgb, var(--chip-color) 18%, transparent);
 }
+.ofm-popup__category--edit {
+  cursor: pointer;
+  border: 1px dashed color-mix(in srgb, var(--chip-color) 60%, transparent);
+  padding: 1px 4px;
+  font-family: inherit;
+  max-width: 190px;
+}
 .ofm-popup__severity--low {
   background: #ecfdf5;
   color: #065f46;

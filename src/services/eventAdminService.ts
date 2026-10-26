@@ -464,3 +464,16 @@ export async function addEventPlace(id: string, latitude: number, longitude: num
   const { error } = await client().rpc('add_event_place', { p_id: id, p_lat: latitude, p_lng: longitude, p_from: fromIndex });
   if (error) throw toServiceError(error);
 }
+
+/** Map icon: give one place of a report another category (it moves to that kind's event). Returns the event that now holds it. */
+export async function setPlaceCategory(id: string, index: number | null, slug: string): Promise<string> {
+  const { data, error } = await client().rpc('set_place_category', { p_id: id, p_index: index, p_slug: slug });
+  if (error) throw toServiceError(error);
+  return String(data ?? id);
+}
+
+/** Map icon: put one place (null = the main pin) on a searched place; the place is learned. */
+export async function setPlaceLocation(id: string, index: number | null, latitude: number, longitude: number, name: string): Promise<void> {
+  const { error } = await client().rpc('set_place_location', { p_id: id, p_index: index, p_lat: latitude, p_lng: longitude, p_name: name });
+  if (error) throw toServiceError(error);
+}

@@ -18,6 +18,18 @@ export interface PopupLabels {
   dir: 'ltr' | 'rtl';
   /** Staff only: "change location" button. */
   moveLocation?: string;
+  /** Staff only: "set place by search" button. */
+  locatePlace?: string;
+  /** Staff only: the categories this icon can be switched to (slug + label); the current one is categorySlug. */
+  categories?: { slug: string; label: string }[];
+  categorySlug?: string;
+  chipColor?: string;
+}
+
+export interface PopupStaffActions {
+  onMove?: (id: string) => void;
+  onLocate?: () => void;
+  onCategory?: (slug: string) => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -35,18 +47,36 @@ export function buildPopupContent(
   event: PublicEvent,
   labels: PopupLabels,
   onView: (id: string) => void,
-  /** Staff only: move the pin (opens the re-pin mode on the map). */
-  onMove?: (id: string) => void,
+  /** Staff only: move the pin (opens the re-pin mode on the map), search its place, change its category. */
+  staff: PopupStaffActions = {},
 ): HTMLElement {
+  const onMove = staff.onMove;
   const lang = labels.dir === 'rtl' ? 'he' : 'en';
   const tr = event.translations[lang] ?? {};
   const root = el('div', 'ofm-popup');
   root.dir = labels.dir;
 
   const meta = el('div', 'ofm-popup__meta');
-  const category = el('span', 'ofm-popup__category', labels.categoryLabel);
-  category.style.setProperty('--chip-color', event.category.color);
-  meta.append(category);
+  if (staff.onCategory && labels.categories?.length) {
+    // Staff: the chip is a list — pick another kind for this icon.
+    const select = el('select', 'ofm-popup__category ofm-popup__category--edit');
+    select.style.setProperty('--chip-color', labels.chipColor ?? event.category.color);
+    for (const c of labels.categories) {
+      const o = el('option', '', c.label);
+      o.value = c.slug;
+      if (c.slug === labels.categorySlug) o.selected = true;
+      select.append(o);
+    }
+    select.addEventListener('change', () => {
+      select.disabled = true;
+      staff.onCategory?.(select.value);
+    });
+    meta.append(select);
+  } else {
+    const category = el('span', 'ofm-popup__category', labels.categoryLabel);
+    category.style.setProperty('--chip-color', labels.chipColor ?? event.category.color);
+    meta.append(category);
+  }
   const sev = el('span', `ofm-popup__severity ofm-popup__severity--${event.severity}`, labels.severityLabel);
   meta.append(sev);
   if (event.isBreaking) meta.append(el('span', 'ofm-popup__breaking', labels.breaking));
@@ -139,6 +169,12 @@ export function buildPopupContent(
   button.type = 'button';
   button.addEventListener('click', () => onView(event.id));
   footer.append(button);
+  if (staff.onLocate && labels.locatePlace) {
+    const locate = el('button', 'ofm-popup__move', labels.locatePlace);
+    locate.type = 'button';
+    locate.addEventListener('click', () => staff.onLocate?.());
+    footer.append(locate);
+  }
   if (onMove && labels.moveLocation) {
     const move = el('button', 'ofm-popup__move', labels.moveLocation);
     move.type = 'button';
