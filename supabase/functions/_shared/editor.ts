@@ -83,9 +83,9 @@ const STRONG_MODELS = [
   Deno.env.get("EDITOR_MODEL") ?? "claude-sonnet-5-5",
   Deno.env.get("EDITOR_FALLBACK_MODEL") ?? "claude-sonnet-4-5",
 ].filter((m, i, a) => a.indexOf(m) === i);
-/** "Expand" and "ask the map": the strongest model (falls back to the editor's models). */
+/** "Expand" and "ask the map": Haiku 5.5 (cost); Sonnet only when Haiku fails. Was Opus 5.5. */
 const OPUS_MODELS = [
-  Deno.env.get("DEEP_MODEL") ?? "claude-opus-5-5",
+  Deno.env.get("EXPAND_MODEL") ?? "claude-haiku-5-5",
   ...STRONG_MODELS,
 ].filter((m, i, a) => a.indexOf(m) === i);
 const FAST_MODELS = [

@@ -86,7 +86,18 @@ export interface AskResult {
   candidates: number;
 }
 
+/** Same question within 15 minutes → the saved answer (public.ai_cache), no AI call. */
 export async function askMap(db: Db, question: string): Promise<AskResult> {
+  const key = question.replace(/\s+/g, " ").trim().toLowerCase();
+  const { data: hit } = await db.from("ai_cache").select("result").eq("kind", "ask").eq("key", key)
+    .gte("created_at", new Date(Date.now() - 15 * 60_000).toISOString()).maybeSingle();
+  if (hit?.result) return hit.result as AskResult;
+  const result = await askMapUncached(db, question);
+  await db.from("ai_cache").upsert({ kind: "ask", key, result, created_at: new Date().toISOString() }, { onConflict: "kind,key" });
+  return result;
+}
+
+async function askMapUncached(db: Db, question: string): Promise<AskResult> {
   const { data: cats } = await db.from("event_categories").select("slug,name").eq("is_active", true);
   const catList = (cats ?? []).map((c: any) => `${c.slug} (${c.name})`).join(", ");
   const nowIl = israelNow();

@@ -4,6 +4,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 
 /** USD per million tokens [input, output]. Cache reads cost 10% of input, cache writes 125%. */
 const PRICES: Record<string, [number, number]> = {
+  "free:": [0, 0], // free providers (Groq, Gemini, Cloudflare, Ollama, OpenRouter free)
   "claude-sonnet-5-5": [2, 10],
   "claude-sonnet-4-5": [3, 15],
   "claude-haiku-5-5": [0.1, 0.5],

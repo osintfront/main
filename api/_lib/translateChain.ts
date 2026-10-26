@@ -3,17 +3,17 @@
 // read from environment variables and never reaches the browser.
 //
 // Order (free first, paid last):
-//   1. Cohere (trial key, free — best quality; ~1,000 calls a month)   COHERE_API_KEY
+//   1. Groq (free tier)                      GROQ_API_KEY
 //   2. Google Gemini (AI Studio free tier)   GEMINI_API_KEY
-//   3. Groq (free tier)                      GROQ_API_KEY
-//   4. OpenRouter (free models only)         OPENROUTER_API_KEY
-//   5. Hugging Face Inference Providers      HF_TOKEN (monthly free credit)
-//   6. Cloudflare Workers AI (free daily allocation; a chat model)   CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
-//   7. Ollama Cloud (free plan)              OLLAMA_API_KEY
-//   8. Requesty (free models only)           REQUESTY_API_KEY
-//   9. LLM7.io (free "turbo" tier only)      LLM7_API_KEY
-//  10. Kilo Gateway (anonymous, ":free" models only — no key)
-//  11. OVHcloud AI Endpoints (anonymous, no key: free, 2 requests / minute)
+//   3. OpenRouter (free models only)         OPENROUTER_API_KEY
+//   4. Hugging Face Inference Providers      HF_TOKEN (monthly free credit)
+//   5. Cloudflare Workers AI (free daily allocation; a chat model)   CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
+//   6. Ollama Cloud (free plan)              OLLAMA_API_KEY
+//   7. Requesty (free models only)           REQUESTY_API_KEY
+//   8. LLM7.io (free "turbo" tier only)      LLM7_API_KEY
+//   9. Kilo Gateway (anonymous, ":free" models only — no key)
+//  10. OVHcloud AI Endpoints (anonymous, no key: free, 2 requests / minute)
+//  11. Cohere (trial key, free — best quality, but only ~1,000 calls a MONTH: kept near the end)   COHERE_API_KEY
 //  12. Anthropic Claude Haiku — PAID, last   ANTHROPIC_API_KEY (or ANTHROPIC_ADMIN_KEY)
 // (Cloudflare's translation-only model m2m100 changed the meaning of news text; a chat model
 // is used instead.)
@@ -123,25 +123,14 @@ const freeOnly = (ok: boolean, model: string) => {
 
 const PROVIDERS: Provider[] = [
   {
-    // https://docs.cohere.com/docs/command-a-translate — free on trial keys until the rate limits.
-    name: 'cohere',
-    enabled: () => !!env('COHERE_API_KEY'),
-    model: () => env('COHERE_MODEL') || 'command-a-translate-08-2025',
-    run: async (text, target, source) => {
-      const out = await post('https://api.cohere.com/v2/chat', { authorization: `Bearer ${env('COHERE_API_KEY')}` }, {
-        model: env('COHERE_MODEL') || 'command-a-translate-08-2025',
-        temperature: 0,
-        messages: [
-          { role: 'system', content: instructions(target, source) },
-          { role: 'user', content: text },
-        ],
-      });
-      const content: any[] = out?.message?.content ?? [];
-      return {
-        text: content.filter((c) => c?.type === 'text').map((c) => c.text).join(''),
-        usage: out?.usage?.tokens ? { input: Number(out.usage.tokens.input_tokens ?? 0), output: Number(out.usage.tokens.output_tokens ?? 0) } : undefined,
-      };
-    },
+    // https://console.groq.com/docs/models — free tier: openai/gpt-oss-120b (Llama 3.3 left the free tier in Aug 2026).
+    name: 'groq',
+    enabled: () => !!env('GROQ_API_KEY'),
+    model: () => env('GROQ_MODEL') || 'openai/gpt-oss-120b',
+    run: (text, target, source) =>
+      openAiChat('https://api.groq.com/openai/v1/chat/completions', env('GROQ_API_KEY'), env('GROQ_MODEL') || 'openai/gpt-oss-120b', text, target, source, {
+        reasoning_effort: 'low',
+      }),
   },
   {
     // https://ai.google.dev/gemini-api/docs — Flash-Lite is on the AI Studio free tier.
@@ -165,16 +154,6 @@ const PROVIDERS: Provider[] = [
         usage: out?.usageMetadata ? { input: Number(out.usageMetadata.promptTokenCount ?? 0), output: Number(out.usageMetadata.candidatesTokenCount ?? 0) } : undefined,
       };
     },
-  },
-  {
-    // https://console.groq.com/docs/models — free tier: openai/gpt-oss-120b (Llama 3.3 left the free tier in Aug 2026).
-    name: 'groq',
-    enabled: () => !!env('GROQ_API_KEY'),
-    model: () => env('GROQ_MODEL') || 'openai/gpt-oss-120b',
-    run: (text, target, source) =>
-      openAiChat('https://api.groq.com/openai/v1/chat/completions', env('GROQ_API_KEY'), env('GROQ_MODEL') || 'openai/gpt-oss-120b', text, target, source, {
-        reasoning_effort: 'low',
-      }),
   },
   {
     // https://openrouter.ai — "openrouter/free" routes only to free models (no charge possible).
@@ -259,6 +238,27 @@ const PROVIDERS: Provider[] = [
     model: () => env('OVH_MODEL') || 'Meta-Llama-3_3-70B-Instruct',
     run: (text, target, source) =>
       openAiChat('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions', '', env('OVH_MODEL') || 'Meta-Llama-3_3-70B-Instruct', text, target, source),
+  },
+  {
+    // https://docs.cohere.com/docs/command-a-translate — free on trial keys until the rate limits.
+    name: 'cohere',
+    enabled: () => !!env('COHERE_API_KEY'),
+    model: () => env('COHERE_MODEL') || 'command-a-translate-08-2025',
+    run: async (text, target, source) => {
+      const out = await post('https://api.cohere.com/v2/chat', { authorization: `Bearer ${env('COHERE_API_KEY')}` }, {
+        model: env('COHERE_MODEL') || 'command-a-translate-08-2025',
+        temperature: 0,
+        messages: [
+          { role: 'system', content: instructions(target, source) },
+          { role: 'user', content: text },
+        ],
+      });
+      const content: any[] = out?.message?.content ?? [];
+      return {
+        text: content.filter((c) => c?.type === 'text').map((c) => c.text).join(''),
+        usage: out?.usage?.tokens ? { input: Number(out.usage.tokens.input_tokens ?? 0), output: Number(out.usage.tokens.output_tokens ?? 0) } : undefined,
+      };
+    },
   },
   {
     // PAID — last resort, cheapest Claude model only.
