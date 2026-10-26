@@ -58,3 +58,29 @@ end;
 $$;
 revoke execute on function public.learn_places(jsonb, text) from public, anon, authenticated;
 grant execute on function public.learn_places(jsonb, text) to service_role;
+
+-- Places waiting to be taught (filled by the agent; processed in the database, which has no
+-- 8-second limit there): select public.learn_places_queue();
+create table if not exists public.place_learn_queue (
+  key        text primary key,          -- source + title
+  row        jsonb not null,
+  country    text not null default 'LB',
+  added_at   timestamptz not null default now(),
+  done_at    timestamptz
+);
+alter table public.place_learn_queue enable row level security;
+revoke all on public.place_learn_queue from anon, authenticated;
+
+create or replace function public.learn_places_queue(p_limit integer default 1000)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_rows jsonb; v_keys text[]; v_out jsonb;
+begin
+  select jsonb_agg(row), array_agg(key) into v_rows, v_keys
+  from (select key, row from public.place_learn_queue where done_at is null order by added_at limit p_limit) q;
+  if v_rows is null then return jsonb_build_object('matched', 0, 'added', 0, 'left', 0); end if;
+  v_out := public.learn_places(v_rows, 'LB');
+  update public.place_learn_queue set done_at = now() where key = any (v_keys);
+  return v_out || jsonb_build_object('left', (select count(*) from public.place_learn_queue where done_at is null));
+end;
+$$;
+revoke execute on function public.learn_places_queue(integer) from public, anon, authenticated;

@@ -242,13 +242,14 @@ export async function learnSouthLebanon(db: Db) {
   }
   // Southern Lebanon only (south of the Awali river), with coordinates.
   const south = all.filter((v) => v.lat > 33.04 && v.lat < 33.62 && v.lng > 35.1 && v.lng < 35.95);
-  let matched = 0, added = 0;
-  for (let i = 0; i < south.length; i += 100) {
-    const { data, error } = await db.rpc("learn_places", { p_rows: south.slice(i, i + 100), p_country: "LB" });
+  // Queued: teaching the database is slow (each place updates a large table), so the database
+  // works through the queue itself (cron), outside this request's time limit.
+  const rows = south.map((v) => ({ key: `${v.source}|${v.name_ar ?? v.name_en}`.slice(0, 400), row: v, country: "LB", done_at: null }));
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error } = await db.from("place_learn_queue").upsert(rows.slice(i, i + 200), { onConflict: "key" });
     if (error) throw new Error(error.message);
-    matched += Number(data?.matched ?? 0);
-    added += Number(data?.added ?? 0);
   }
-  await db.from("layer_sync").upsert({ layer: "south_lebanon_places", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: south.length, source: "Wikipedia (en + ar): populated places by district", detail: `${matched} matched to GeoNames, ${added} added, ${all.length - south.length} outside / no coordinates` }, { onConflict: "layer" });
-  return { ok: true, found: all.length, south: south.length, matched, added, with_hebrew: south.filter((v) => v.name_he).length };
+  const matched = 0, added = 0;
+  await db.from("layer_sync").upsert({ layer: "south_lebanon_places", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: south.length, source: "Wikipedia (en + ar): populated places by district", detail: `${south.length} queued, ${all.length - south.length} outside / no coordinates` }, { onConflict: "layer" });
+  return { ok: true, found: all.length, south: south.length, queued: rows.length, matched, added, with_hebrew: south.filter((v) => v.name_he).length };
 }
