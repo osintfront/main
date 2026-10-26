@@ -1,3 +1,4 @@
+import { logUsage } from "./usage.ts";
 // Map layers kept from outside sources:
 //  controlSync — areas of control (Israel in Lebanon and Syria, Yemen, Gaza) from a public
 //                Google My Maps war map, as KML; run once a day.
@@ -252,4 +253,39 @@ export async function learnSouthLebanon(db: Db) {
   const matched = 0, added = 0;
   await db.from("layer_sync").upsert({ layer: "south_lebanon_places", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: south.length, source: "Wikipedia (en + ar): populated places by district", detail: `${south.length} queued, ${all.length - south.length} outside / no coordinates` }, { onConflict: "layer" });
   return { ok: true, found: all.length, south: south.length, queued: rows.length, matched, added, with_hebrew: south.filter((v) => v.name_he).length };
+}
+
+/**
+ * Hebrew names for villages of south Lebanon that have none yet (Claude Haiku transliterates
+ * from the Arabic name; marked he_from_ai). One batch per call.
+ */
+export async function hebrewNamesSouthLebanon(db: Db, limit = 120) {
+  const key = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+  if (!key) throw new Error("ANTHROPIC_API_KEY not set");
+  const { data: rows, error } = await db.rpc("south_lebanon_missing_hebrew", { p_limit: limit });
+  if (error) throw new Error(error.message);
+  const list = (rows ?? []) as { geonameid: number; name_ar: string | null; name: string }[];
+  if (!list.length) return { ok: true, done: 0, left: 0 };
+  const model = "claude-haiku-5-5";
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model, max_tokens: 6000,
+      system: "You write the usual Hebrew spelling (as in Israeli media) of village names in south Lebanon. " +
+        "Transliterate from the Arabic name; keep the Arabic article as א-/אל- the way Israeli media do (e.g. מרון א-ראס, עייתא א-שעב, כפר כלא, בינת ג'בייל). " +
+        "Answer ONLY with JSON: {\"<id>\": \"<Hebrew name>\", ...}. No other text.",
+      messages: [{ role: "user", content: JSON.stringify(Object.fromEntries(list.map((r) => [r.geonameid, `${r.name_ar ?? ""} | ${r.name}`]))) }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
+  const out = await res.json();
+  logUsage("place-names", model, out?.usage ? { input_tokens: out.usage.input_tokens, output_tokens: out.usage.output_tokens } as any : undefined);
+  const text = (out?.content ?? []).filter((b: any) => b?.type === "text").map((b: any) => b.text).join("");
+  const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  const names = Object.entries(json).map(([id, he]) => ({ geonameid: Number(id), name_he: String(he).trim().slice(0, 80) }))
+    .filter((r) => Number.isFinite(r.geonameid) && /[\u05D0-\u05EA]/.test(r.name_he) && !/[\u0600-\u06FF]/.test(r.name_he));
+  const { data: done, error: e2 } = await db.rpc("set_hebrew_place_names", { p_rows: names });
+  if (e2) throw new Error(e2.message);
+  return { ok: true, done: Number(done ?? 0), asked: list.length };
 }

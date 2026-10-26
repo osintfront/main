@@ -84,3 +84,27 @@ begin
 end;
 $$;
 revoke execute on function public.learn_places_queue(integer) from public, anon, authenticated;
+
+-- Villages of south Lebanon still without a Hebrew name (for the AI transliteration batch).
+create or replace function public.south_lebanon_missing_hebrew(p_limit integer default 120)
+returns table (geonameid bigint, name_ar text, name text) language sql stable security definer set search_path = '' as $$
+  select g.geonameid, g.name_ar, g.name from public.geo_places g
+  where g.country_code = 'LB' and g.feature_class = 'P' and g.name_he is null
+    and extensions.st_y(g.geom) between 33.04 and 33.62 and extensions.st_x(g.geom) between 35.1 and 35.95
+  order by g.population desc, g.geonameid limit p_limit
+$$;
+create or replace function public.set_hebrew_place_names(p_rows jsonb)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare v_n integer;
+begin
+  update public.geo_places g set name_he = r.name_he, he_from_ai = true,
+    names = (select array_agg(distinct n) from unnest(g.names || public.normalize_place(r.name_he)) n)
+  from jsonb_to_recordset(p_rows) as r(geonameid bigint, name_he text)
+  where g.geonameid = r.geonameid and g.name_he is null and coalesce(r.name_he, '') <> '';
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+revoke execute on function public.south_lebanon_missing_hebrew(integer) from public, anon, authenticated;
+revoke execute on function public.set_hebrew_place_names(jsonb) from public, anon, authenticated;
+grant execute on function public.south_lebanon_missing_hebrew(integer), public.set_hebrew_place_names(jsonb) to service_role;

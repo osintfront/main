@@ -34,7 +34,7 @@ import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
 import { imageAsBase64 } from "../whatsapp-ingest/telegram.ts";
 import { makeRoom } from "../_shared/videoOnDemand.ts";
 import { alreadyHas, hashImage } from "../_shared/imageHash.ts";
-import { controlSync, learnSouthLebanon, sectsSync } from "../_shared/layers.ts";
+import { controlSync, hebrewNamesSouthLebanon, learnSouthLebanon, sectsSync } from "../_shared/layers.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -479,6 +479,13 @@ async function handle(req: Request): Promise<Response> {
   if (action === "edit") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
+  }
+  if (action === "hebrew_south_lebanon") {
+    try {
+      return json(await hebrewNamesSouthLebanon(db, Math.min(200, Number(body?.limit) || 120)));
+    } catch (e) {
+      return json({ ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
   }
   if (action === "control_sync" || action === "sects_sync" || action === "learn_south_lebanon") {
     try {
