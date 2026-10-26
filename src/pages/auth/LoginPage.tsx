@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/i18n';
 import { loginLockRemaining, type SignInFailure } from '@/services/authService';
 import { isValidEmail, safeRedirectPath } from '@/utils/url';
-import { LogoFull } from '@/components/common/Logo';
+import { LiveBadge, LoginGlobe, LoginTicker } from '@/components/auth/LoginShowcase';
 import { LanguageToggle, ThemeToggle } from '@/components/common/Toggles';
 import { SetupNotice } from '@/components/auth/SetupNotice';
 import { Alert, FullScreenLoader } from '@/components/common/Feedback';
@@ -95,34 +95,41 @@ export function LoginPage() {
 
   return (
     <div className="ofm-login relative flex min-h-dvh flex-col overflow-hidden bg-slate-950 text-white">
-      {/* Backdrop: a dark map grid, a slow radar sweep and a few live pins (decorative). */}
+      {/* Backdrop: dark map grid and glow (decorative). */}
       <div className="ofm-login__grid pointer-events-none absolute inset-0" aria-hidden />
       <div className="ofm-login__glow pointer-events-none absolute inset-0" aria-hidden />
-      <div className="ofm-login__radar pointer-events-none absolute start-1/2 top-1/2 size-[140vmax] -translate-x-1/2 -translate-y-1/2 rtl:translate-x-1/2" aria-hidden />
-      {[
-        ['18%', '30%', '#f43f5e', '0s'],
-        ['68%', '22%', '#f97316', '1.2s'],
-        ['77%', '64%', '#38bdf8', '2.1s'],
-        ['28%', '72%', '#a855f7', '0.6s'],
-        ['52%', '48%', '#f43f5e', '1.7s'],
-      ].map(([left, top, color, delay]) => (
-        <span key={left + top} className="ofm-login__pin pointer-events-none absolute" style={{ left, top, color, animationDelay: delay }} aria-hidden />
-      ))}
+      <LoginGlobe className="pointer-events-none absolute start-1/2 top-[38%] size-[120vmin] -translate-x-1/2 -translate-y-1/2 opacity-50 rtl:translate-x-1/2 lg:hidden" />
 
       <header className="relative z-10 flex h-14 items-center justify-end gap-0.5 px-4 [&_button]:text-slate-300 [&_button:hover]:bg-white/10 [&_button:hover]:text-white">
         <LanguageToggle />
         <ThemeToggle />
       </header>
 
-      <main className="relative z-10 flex flex-1 items-center justify-center px-4 pb-16">
-        <div className="w-full max-w-sm">
-          <div className="mb-7 flex flex-col items-center text-center">
-            <div className="relative">
-              <span className="absolute inset-0 animate-ping rounded-2xl bg-sky-400/20 motion-reduce:animate-none" aria-hidden />
-              <LogoFull className="relative h-28 drop-shadow-[0_0_24px_rgba(56,189,248,0.45)]" />
-            </div>
-            <h1 className="mt-4 text-3xl font-black tracking-tight">{t('app.name')}</h1>
+      <main className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 items-center gap-10 px-4 pb-16 lg:grid-cols-[1.15fr_1fr]">
+        {/* Showcase: what members get. */}
+        <section className="hidden flex-col items-center lg:flex">
+          <div className="relative aspect-square w-full max-w-[520px]">
+            <LoginGlobe className="absolute inset-0 size-full" />
+            <div className="absolute top-4 start-4"><LiveBadge label={t('login.live')} /></div>
+          </div>
+          <div className="-mt-10 flex w-full flex-col items-center gap-4">
+            <LoginTicker />
+            <p className="text-[11px] text-slate-500">{t('login.demoNote')}</p>
+          </div>
+        </section>
+
+        <div className="mx-auto w-full max-w-sm">
+          <div className="mb-6 flex flex-col items-center text-center">
+            <img src="/logo-mark.png" alt="" aria-hidden className="ofm-login__mark h-24 w-auto drop-shadow-[0_0_30px_rgba(56,189,248,0.55)]" />
+            <h1 className="mt-2 text-4xl font-black tracking-tight" dir="ltr">
+              <span className="text-white">OSINT</span><span className="bg-gradient-to-r from-sky-400 to-cyan-300 bg-clip-text text-transparent">Front</span>
+            </h1>
             <p className="mt-1 text-sm font-medium text-sky-200/80">{t('login.tagline')}</p>
+            <ul className="mt-4 flex flex-wrap justify-center gap-2 text-[11px] font-semibold text-slate-300">
+              {(['login.perk1', 'login.perk2', 'login.perk3'] as const).map((k) => (
+                <li key={k} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">{t(k)}</li>
+              ))}
+            </ul>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/95 p-6 text-slate-900 shadow-2xl shadow-sky-950/50 backdrop-blur sm:p-7 dark:bg-slate-900/90 dark:text-white">
@@ -187,6 +194,10 @@ export function LoginPage() {
         </p>
       </form>
           </div>
+
+          <Link to="/contact" className="mt-5 flex items-center justify-center gap-2 rounded-xl border border-sky-400/30 bg-gradient-to-r from-sky-500/15 to-indigo-500/15 px-4 py-3 text-sm font-semibold text-sky-100 transition hover:border-sky-300/60 hover:from-sky-500/25 hover:to-indigo-500/25">
+            {t('login.subscribe')}
+          </Link>
 
           <nav className="mt-6 flex justify-center gap-4 text-xs text-slate-400">
             <Link to="/about" className="hover:text-white">{t('login.about')}</Link>

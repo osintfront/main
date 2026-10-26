@@ -236,6 +236,12 @@ export const he: Record<TranslationKey, string> = {
   'perm.settings.manage': 'ניהול הגדרות מערכת',
 
   'login.tagline': "מפת אירועים חיה · המזרח התיכון",
+  'login.live': "שידור חי",
+  'login.demoNote': "ידיעות לדוגמה בלבד",
+  'login.perk1': "מפה חיה 24/7",
+  'login.perk2': "התראות בזמן אמת",
+  'login.perk3': "ניתוח מקורות גלויים",
+  'login.subscribe': "עוד אין לך גישה? הצטרפו למנוי ←",
   'login.title': "כניסה למערכת",
   'login.subtitle': "האתר פתוח למשתמשים רשומים בלבד. התחברו עם הדוא\"ל והסיסמה שלכם.",
   'login.about': "אודות",

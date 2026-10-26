@@ -3,7 +3,7 @@ import { useI18n } from '@/i18n';
 import { cn } from '@/utils/cn';
 
 export function LogoMark({ className }: { className?: string }) {
-  return <img src="/logo-mark.png" alt="" aria-hidden className={cn('size-8 rounded-lg object-cover', className)} />;
+  return <img src="/logo-mark.png" alt="" aria-hidden className={cn('size-8 object-contain', className)} />;
 }
 
 /** The full logo (emblem + OSINTFront wordmark), for large places such as the login page. */

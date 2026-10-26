@@ -234,6 +234,12 @@ export const en = {
   'perm.settings.manage': 'Manage system settings',
 
   'login.tagline': "Live event map · Middle East",
+  'login.live': "Live",
+  'login.demoNote': "Example reports only",
+  'login.perk1': "Live map 24/7",
+  'login.perk2': "Real-time alerts",
+  'login.perk3': "Open-source analysis",
+  'login.subscribe': "No access yet? Get a subscription →",
   'login.title': "Sign in",
   'login.subtitle': "The site is for registered users only. Sign in with your email and password.",
   'login.about': "About",
