@@ -122,6 +122,26 @@ const SECT_CATEGORIES: Record<string, string> = {
   christian: "Christian_communities_in_Lebanon",
 };
 
+/** Wikipedia API, politely: one request at a time, waits and retries when asked to slow down. */
+async function wiki(params: URLSearchParams): Promise<any> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await new Promise((r) => setTimeout(r, attempt ? 3000 * attempt : 400));
+    const res = await fetch(`https://en.wikipedia.org/w/api.php?${params}&maxlag=5`, {
+      headers: { "user-agent": "OsintfrontMapBot/1.0 (https://osintfront.com)", "api-user-agent": "OsintfrontMapBot/1.0 (https://osintfront.com)" },
+    });
+    if (res.status === 429 || res.status === 503) {
+      const wait = Number(res.headers.get("retry-after"));
+      if (Number.isFinite(wait) && wait > 0) await new Promise((r) => setTimeout(r, Math.min(20, wait) * 1000));
+      continue;
+    }
+    if (!res.ok) throw new Error(`wikipedia HTTP ${res.status}`);
+    const out = await res.json();
+    if (out?.error?.code === "maxlag") continue;
+    return out;
+  }
+  throw new Error("wikipedia: too many requests, try later");
+}
+
 export async function sectsSync(db: Db) {
   const places = new Map<string, { title: string; name_en: string; name_he: string | null; name_ar: string | null; lat: number; lng: number; sects: Set<string> }>();
   let noCoords = 0;
@@ -132,9 +152,7 @@ export async function sectsSync(db: Db) {
         action: "query", format: "json", generator: "categorymembers", gcmtitle: `Category:${cat}`, gcmnamespace: "0", gcmlimit: "200",
         prop: "coordinates|langlinks", colimit: "max", lllimit: "max", ...cont,
       });
-      const res = await fetch(`https://en.wikipedia.org/w/api.php?${params}`, { headers: { "user-agent": "osintfront.com/1.0 (map layer)" } });
-      if (!res.ok) throw new Error(`wikipedia HTTP ${res.status}`);
-      const out = await res.json();
+      const out = await wiki(params);
       for (const p of Object.values(out?.query?.pages ?? {}) as any[]) {
         const title = String(p?.title ?? "");
         const c = p?.coordinates?.[0];
