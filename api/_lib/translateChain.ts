@@ -8,14 +8,21 @@
 //   3. Groq (free tier)                      GROQ_API_KEY
 //   4. OpenRouter (free models only)         OPENROUTER_API_KEY
 //   5. Hugging Face Inference Providers      HF_TOKEN (monthly free credit)
-//   6. Anthropic Claude Haiku — PAID, last   ANTHROPIC_API_KEY (or ANTHROPIC_ADMIN_KEY)
-// Cloudflare Workers AI (m2m100) was removed on 2026-10-26: it changed the meaning of news
-// text ("artillery" came out as "the Israeli ambassador").
+//   6. Cloudflare Workers AI (free daily allocation; a chat model)   CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
+//   7. Ollama Cloud (free plan)              OLLAMA_API_KEY
+//   8. Requesty (free models only)           REQUESTY_API_KEY
+//   9. LLM7.io (free "turbo" tier only)      LLM7_API_KEY
+//  10. Kilo Gateway (anonymous, ":free" models only — no key)
+//  11. OVHcloud AI Endpoints (anonymous, no key: free, 2 requests / minute)
+//  12. Anthropic Claude Haiku — PAID, last   ANTHROPIC_API_KEY (or ANTHROPIC_ADMIN_KEY)
+// (Cloudflare's translation-only model m2m100 changed the meaning of news text; a chat model
+// is used instead.)
 // A provider without its key is skipped. Any error, a 10-second timeout or a rate-limit /
 // quota answer (429) moves on to the next one. If all fail, the caller gets null.
 //
-// Models were checked against the providers' docs on 2026-10-25; free lists change, so each
-// one can be overridden with an environment variable (GEMINI_MODEL, GROQ_MODEL, …).
+// Models were checked against the providers' docs / model lists on 2026-10-26; free lists
+// change, so each one can be overridden with an environment variable (GEMINI_MODEL, …) — but a
+// model that is not free is refused for the free-only providers.
 
 export type Lang = 'he' | 'en' | 'ar' | 'fa' | 'auto';
 
@@ -78,9 +85,9 @@ async function post(url: string, headers: Record<string, string>, body: unknown)
   }
 }
 
-/** OpenAI-style chat completion (Groq, OpenRouter, Hugging Face router). */
+/** OpenAI-style chat completion (Groq, OpenRouter, Hugging Face, Cloudflare, Ollama, Requesty, LLM7, Kilo, OVH). An empty key = anonymous. */
 async function openAiChat(url: string, key: string, model: string, text: string, target: Lang, source: Lang, extra: Record<string, unknown> = {}) {
-  const out = await post(url, { authorization: `Bearer ${key}` }, {
+  const out = await post(url, key ? { authorization: `Bearer ${key}` } : {}, {
     model,
     temperature: 0,
     max_tokens: Math.min(4000, 200 + text.length * 2),
@@ -103,6 +110,16 @@ interface Provider {
   model: () => string;
   run: (text: string, target: Lang, source: Lang) => Promise<{ text: string; usage?: { input: number; output: number } }>;
 }
+
+// Free models only (from the providers' own free lists, 2026-10-26).
+const REQUESTY_FREE = new Set([
+  'google/gemma-4-31b-it', 'nvidia/nemotron-3-ultra-550b-a55b', 'nvidia/nemotron-3-super-120b-a12b', 'nvidia/nemotron-3-nano-30b-a3b',
+  'nvidia/nemotron-3.5-lightning-30b-a3b', 'mistral/leanstral-1-5', 'novita/ling-3.1-flash', 'poolside/laguna-m.1',
+]);
+const LLM7_FREE = new Set(['gpt-oss:20b', 'mistral-Nemo-Instruct-2407', 'codestral-latest', 'minimax-m2.7', 'nemotron-3-nano:30b']);
+const freeOnly = (ok: boolean, model: string) => {
+  if (!ok) throw new ProviderError(`not a free model: ${model}`);
+};
 
 const PROVIDERS: Provider[] = [
   {
@@ -181,6 +198,69 @@ const PROVIDERS: Provider[] = [
       openAiChat('https://router.huggingface.co/v1/chat/completions', env('HF_TOKEN'), env('HF_MODEL') || 'openai/gpt-oss-20b:cheapest', text, target, source),
   },
   {
+    // https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility — free daily
+    // allocation (on the free plan requests stop when it is used up; nothing is charged).
+    name: 'cloudflare',
+    enabled: () => !!env('CLOUDFLARE_API_TOKEN') && !!env('CLOUDFLARE_ACCOUNT_ID'),
+    model: () => env('CLOUDFLARE_MODEL') || '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    run: (text, target, source) =>
+      openAiChat(
+        `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env('CLOUDFLARE_ACCOUNT_ID'))}/ai/v1/chat/completions`,
+        env('CLOUDFLARE_API_TOKEN'), env('CLOUDFLARE_MODEL') || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', text, target, source,
+      ),
+  },
+  {
+    // https://docs.ollama.com/cloud — cloud models with an API key (free plan has usage limits).
+    name: 'ollama',
+    enabled: () => !!env('OLLAMA_API_KEY'),
+    model: () => env('OLLAMA_MODEL') || 'gemma4:31b',
+    run: (text, target, source) =>
+      openAiChat('https://ollama.com/v1/chat/completions', env('OLLAMA_API_KEY'), env('OLLAMA_MODEL') || 'gemma4:31b', text, target, source),
+  },
+  {
+    // https://docs.requesty.ai/features/free-models — free models only (200 requests / day).
+    name: 'requesty',
+    enabled: () => !!env('REQUESTY_API_KEY'),
+    model: () => env('REQUESTY_MODEL') || 'google/gemma-4-31b-it',
+    run: (text, target, source) => {
+      const model = env('REQUESTY_MODEL') || 'google/gemma-4-31b-it';
+      freeOnly(REQUESTY_FREE.has(model), model);
+      return openAiChat('https://router.requesty.ai/v1/chat/completions', env('REQUESTY_API_KEY'), model, text, target, source);
+    },
+  },
+  {
+    // https://api.llm7.io/v1/models — the free token covers the "turbo" tier only.
+    name: 'llm7',
+    enabled: () => !!env('LLM7_API_KEY'),
+    model: () => env('LLM7_MODEL') || 'gpt-oss:20b',
+    run: (text, target, source) => {
+      const model = env('LLM7_MODEL') || 'gpt-oss:20b';
+      freeOnly(LLM7_FREE.has(model), model);
+      return openAiChat('https://api.llm7.io/v1/chat/completions', env('LLM7_API_KEY'), model, text, target, source);
+    },
+  },
+  {
+    // https://api.kilo.ai/api/gateway/models — anonymous use of ":free" models (no key). The
+    // upstream provider may log prompts: only public news text is sent here.
+    name: 'kilo',
+    enabled: () => env('KILO_DISABLED') !== '1',
+    model: () => env('KILO_MODEL') || 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    run: (text, target, source) => {
+      const model = env('KILO_MODEL') || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+      freeOnly(model.endsWith(':free') || model === 'kilo-auto/free', model);
+      return openAiChat('https://api.kilo.ai/api/gateway/chat/completions', '', model, text, target, source);
+    },
+  },
+  {
+    // https://help.ovhcloud.com (AI Endpoints) — anonymous access without a key is free and limited
+    // to 2 requests per minute per IP and model. A key is never sent (a key would be billed).
+    name: 'ovhcloud',
+    enabled: () => env('OVH_DISABLED') !== '1',
+    model: () => env('OVH_MODEL') || 'Meta-Llama-3_3-70B-Instruct',
+    run: (text, target, source) =>
+      openAiChat('https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions', '', env('OVH_MODEL') || 'Meta-Llama-3_3-70B-Instruct', text, target, source),
+  },
+  {
     // PAID — last resort, cheapest Claude model only.
     name: 'claude',
     paid: true,
@@ -223,9 +303,10 @@ export function badOutput(out: string, target: Lang): string | null {
 }
 
 /** Health check: run every provider that has a key on its own (no fallback, no cache). */
-export async function testProviders(text: string, target: Lang, source: Lang, includePaid = false) {
+export async function testProviders(text: string, target: Lang, source: Lang, includePaid = false, only: string[] = []) {
   const out: { name: string; model: string; paid: boolean; configured: boolean; ok: boolean; ms: number; result?: string; error?: string }[] = [];
   for (const p of PROVIDERS) {
+    if (only.length && !only.includes(p.name)) continue;
     if (!p.enabled()) {
       out.push({ name: p.name, model: p.model(), paid: !!p.paid, configured: false, ok: false, ms: 0 });
       continue;
@@ -264,6 +345,11 @@ export async function translateWithFallback(
 ): Promise<ChainResult | null> {
   for (const p of PROVIDERS) {
     if (!p.enabled()) continue; // no key: skipped silently
+    // Keep time for the last (paid) fallback: free providers stop 12 seconds before the deadline.
+    if (!p.paid && Date.now() > deadline - 12_000) {
+      log(`[translate] skipping ${p.name}: keeping time for the last fallback`);
+      continue;
+    }
     if (Date.now() > deadline - 2_000) {
       log(`[translate] out of time before ${p.name}`);
       break;

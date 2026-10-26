@@ -504,7 +504,7 @@ async function handle(req: Request): Promise<Response> {
     if (!url || !secret) return json({ ok: false, error: "TRANSLATE_API_URL / TRANSLATE_SECRET not set in Supabase" });
     const chainReq = body?.chain === true
       ? fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-translate-secret": secret }, body: JSON.stringify({ texts: [String(body?.text ?? "")], target: body?.target === "en" ? "en" : "he" }) })
-      : fetch(`${url}?test=1${body?.paid === true ? "&paid=1" : ""}`, { headers: { "x-translate-secret": secret } });
+      : fetch(`${url}?test=1${body?.paid === true ? "&paid=1" : ""}${typeof body?.only === "string" ? `&only=${encodeURIComponent(body.only)}` : ""}`, { headers: { "x-translate-secret": secret } });
     const res = await chainReq;
     return json({ ok: res.ok, status: res.status, body: await res.json().catch(() => null) });
   }
