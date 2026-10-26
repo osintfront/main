@@ -342,11 +342,13 @@ async function attachMedia(body: Record<string, unknown>) {
  * fingerprint the pictures of recent events that have none yet, then keep one copy of each
  * (a video thumbnail before a plain picture, then the oldest) and delete the rest.
  */
-async function mediaDedupe(hours: number) {
+async function mediaDedupe(hours: number, eventIds: string[] = []) {
   const since = new Date(Date.now() - hours * 3600_000).toISOString();
-  const { data: rows } = await db.from("event_media")
+  let q = db.from("event_media")
     .select("id,event_id,kind,storage_path,public_url,sha256,phash,created_at,mime")
-    .in("kind", ["image", "video_thumb"]).gte("created_at", since).order("created_at").limit(2000);
+    .in("kind", ["image", "video_thumb"]);
+  q = eventIds.length ? q.in("event_id", eventIds) : q.gte("created_at", since);
+  const { data: rows } = await q.order("created_at").limit(2000);
   let hashed = 0;
   // Decoding pictures costs CPU: a few dozen per run, the rest on the next runs.
   for (const r of rows ?? []) {
@@ -477,7 +479,10 @@ async function handle(req: Request): Promise<Response> {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
   }
-  if (action === "media_dedupe") return await mediaDedupe(Math.min(24 * 30, Math.max(1, Number(body?.hours) || 48)));
+  if (action === "media_dedupe") {
+    const ids = (Array.isArray(body?.event_ids) ? body.event_ids : []).map(String).filter((x: string) => UUID.test(x)).slice(0, 50);
+    return await mediaDedupe(Math.min(24 * 30, Math.max(1, Number(body?.hours) || 48)), ids);
+  }
   if (action === "translate_test") {
     // Health check of the site's translation chain (each free provider on its own).
     const url = TRANSLATE_API_URL, secret = Deno.env.get("TRANSLATE_SECRET") ?? "";
