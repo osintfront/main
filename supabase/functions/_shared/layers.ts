@@ -77,7 +77,8 @@ export async function controlSync(db: Db) {
         geometry = lines.length === 1 ? { type: "LineString", coordinates: lines[0] } : { type: "MultiLineString", coordinates: lines };
         pts = lines.flat();
       }
-      const region = regionOf(pts);
+      // The name wins over the box (the Golan / Hermon sit inside Lebanon's box).
+      const region = /syria|golan|hermon|quneitra|suwayda|daraa/i.test(name) ? "syria" : regionOf(pts);
       if (!region) continue;
       const geoText = JSON.stringify(geometry);
       rows.push({ id: await hash(`${folder}|${name}|${geoText}`), region, name, kind, color, geometry, folder });
