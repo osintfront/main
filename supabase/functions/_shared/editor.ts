@@ -575,9 +575,11 @@ export function translationsFor(r: EditResult): Record<string, { title?: string;
 }
 
 /** Places for events.locations (the database looks up the ones without coordinates). */
-export function locationsForDb(r: EditResult, max = 10): { name: string; name_en: string; lat: number | null; lng: number | null; precision?: string; category_slug?: string }[] {
+export function locationsForDb(r: EditResult, max = 10): { name: string; name_en: string; name_ar?: string; lat: number | null; lng: number | null; precision?: string; category_slug?: string }[] {
   return r.locations.slice(0, max).map((l) => ({
     name: l.name, name_en: l.name_en, lat: l.lat, lng: l.lng,
+    // The Arabic spelling finds small villages in GeoNames that the Hebrew/English one misses.
+    ...(l.name_ar ? { name_ar: l.name_ar } : {}),
     ...(l.precision ? { precision: l.precision } : {}),
     ...(l.category_slug ? { category_slug: l.category_slug } : {}),
   }));
