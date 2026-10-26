@@ -127,8 +127,8 @@ const DEMO: Record<'he' | 'en', [string, string, string][]> = {
 
 /** Example reports popping in (demo content, labelled as such). */
 export function LoginTicker() {
-  const { locale } = useI18n();
-  const items = DEMO[locale === 'he' ? 'he' : 'en'];
+  const { lang } = useI18n();
+  const items = DEMO[lang === 'he' ? 'he' : 'en'];
   const [i, setI] = useState(0);
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
