@@ -9,7 +9,7 @@ import type { AppRole } from '@/types/user';
  */
 export const authConfig = {
   requireMfaForRoles: [] as AppRole[],
-  minPasswordLength: 10,
+  minPasswordLength: 12,
   /** Client-side brake on repeated failures. Supabase Auth rate limits apply server-side too. */
   loginThrottle: {
     freeAttempts: 5,

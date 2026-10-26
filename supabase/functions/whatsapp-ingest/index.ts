@@ -51,6 +51,10 @@ type InMsg = {
   agent?: string;
   /** Telegram worker, cheap mode: classify only (Haiku) — skip the Sonnet editor. */
   light?: boolean;
+  /** Telegram: the post this one replies to ("<channel>/<n>", same channel). */
+  reply_to?: string;
+  /** Telegram: album id ("<channel>/g<id>") — photos sent together. */
+  group_id?: string;
 };
 const platformName = (m: InMsg) => (m.platform === "telegram" ? "Telegram" : "WhatsApp");
 const sourceUrl = (m: InMsg, text: string) => m.url ?? firstUrl(text);
@@ -309,6 +313,17 @@ async function categoryLessons(): Promise<string> {
   return lessons.text;
 }
 
+/** The event of the post this one replies to, or of another post of the same album (still on the map). */
+async function linkedEvent(m: InMsg): Promise<{ id: string; description: string | null; sources: unknown } | null> {
+  let q = db.from("whatsapp_ingest_log").select("event_id").not("event_id", "is", null).order("sent_at").limit(1);
+  q = m.reply_to ? q.eq("msg_key", `tg:${m.reply_to}`) : q.eq("tg_group", String(m.group_id));
+  const { data } = await q;
+  const id = data?.[0]?.event_id;
+  if (!id) return null;
+  const { data: ev } = await db.from("events").select("id,description,sources").eq("id", id).is("deleted_at", null).maybeSingle();
+  return ev ?? null;
+}
+
 /** Cache: the exact same text was already classified in the last 7 days → reuse, no AI call. */
 async function cachedDecision(text: string): Promise<Record<string, any> | null> {
   const { data } = await db.rpc("ingest_cached_decision", { p_text: text });
@@ -532,7 +547,8 @@ function samePlaceEvent(pool: any[], keys: Set<string>, sentAt: Date, excludeId?
 async function processOne(m: InMsg) {
   const text = String(m.text ?? "").trim();
   const sentAt = new Date(m.sent_at);
-  if (!text || isNaN(sentAt.getTime())) return { status: "invalid" };
+  const linkable = m.platform === "telegram" && !!(m.reply_to || m.group_id);
+  if ((!text && !(linkable && m.media?.length)) || isNaN(sentAt.getTime())) return { status: "invalid" };
   if (m.platform !== "telegram" && !ALLOWED_CHATS.includes(m.chat)) return { status: "ignored_chat" };
   const sentIso = sentAt.toISOString();
   const key = m.platform === "telegram" ? `tg:${m.msg_id}` : m.msg_id ? `wa:${m.msg_id}` : `h:${await sha(sentIso + "|" + text)}`;
@@ -551,6 +567,35 @@ async function processOne(m: InMsg) {
     .eq("message_text", text)
     .limit(1);
   if (seen2?.length) return { key, status: "already_processed" };
+
+  // Telegram reply / album: belongs to the event of the post it replies to (or of its album) —
+  // no AI call, no duplicate check. A picture without text is added to that event.
+  if (linkable) {
+    const linked = await linkedEvent(m);
+    if (linked) {
+      const entry = { name: clip(`Telegram – ${m.chat}`, 200), url: sourceUrl(m, text), at: sentIso };
+      const current: any[] = Array.isArray(linked.sources) ? linked.sources : [];
+      const known = current.some((x) => (x?.url && entry.url ? x.url === entry.url : x?.name === entry.name));
+      const update: Record<string, unknown> = {};
+      if (!known && text) update.sources = [...current, entry].slice(-MAX_SOURCES);
+      // Text in the reply: an update line (Hebrew as is; other languages only as a source).
+      if (text.replace(/https?:\/\/\S+/g, "").trim().length >= 10 && foreignShare(text) <= 0.4) {
+        const hhmm = sentAt.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" });
+        update.description = clip(`${linked.description ?? ""}\n\nעדכון (${hhmm}): ${text}`, 5000);
+      }
+      if (Object.keys(update).length) {
+        const { error } = await db.from("events").update(update).eq("id", linked.id);
+        if (error) throw error;
+      }
+      await db.from("whatsapp_ingest_log").upsert(
+        { msg_key: key, chat_name: m.chat, sender: clip(m.sender, 200), sent_at: sentIso, message_text: text, decision: "merged_duplicate", event_id: linked.id, tg_group: m.group_id ?? null, reason: m.reply_to ? `reply to ${m.reply_to}` : `album ${m.group_id}` },
+        { onConflict: "msg_key", ignoreDuplicates: true },
+      );
+      const media_saved = await storeMedia(linked.id, key, m.media, m.url);
+      return { key, status: "linked", event_id: linked.id, added_text: !!update.description, media_saved };
+    }
+    if (!text) return { key, status: "skipped_no_text" }; // a picture whose post is not on the map
+  }
 
   // Duplicate candidates: other channels often repost the same incident hours later, so look
   // back DUP_LOOKBACK_H hours, but send the classifier only the closest matches (cheap word overlap
@@ -575,7 +620,7 @@ async function processOne(m: InMsg) {
     : (await cachedDecision(text)) ?? await classify({ ...m, text, sent_at: sentIso }, candidates ?? []);
   const log = async (decision: string, event_id: string | null) =>
     db.from("whatsapp_ingest_log").upsert(
-      { msg_key: key, chat_name: m.chat, sender: clip(m.sender, 200), sent_at: sentIso, message_text: text, decision, event_id, reason: clip(c.reason, 500) },
+      { msg_key: key, chat_name: m.chat, sender: clip(m.sender, 200), sent_at: sentIso, message_text: text, decision, event_id, reason: clip(c.reason, 500), tg_group: m.group_id ?? null },
       { onConflict: "msg_key", ignoreDuplicates: true },
     );
 
@@ -917,7 +962,7 @@ async function pollChannel(ch: any, dry: boolean, out: Record<string, unknown>[]
       let done = last;
       const results: unknown[] = [];
       for (const p of fresh) {
-        if (p.text.trim().length >= 3) {
+        if (p.text.trim().length >= 3 || (p.replyTo && p.photos.length)) {
           const media: InMedia[] = [];
           for (const [i, u] of p.photos.entries()) {
             const img = await imageAsBase64(u);
@@ -929,6 +974,7 @@ async function pollChannel(ch: any, dry: boolean, out: Record<string, unknown>[]
               ...(await oneAtATime(() => processOne({
                 msg_id: p.post, platform: "telegram", url: p.url, chat: title || name,
                 sender: p.forwardedFrom ?? undefined, sent_at: p.date ?? now, text: p.text, media,
+                reply_to: p.replyTo ?? undefined,
               }))),
             });
           } catch (e) {
@@ -991,6 +1037,14 @@ async function drainPending(limit: number) {
   }
 }
 
+let pausedCache = { value: false, at: 0 };
+async function whatsappPaused(): Promise<boolean> {
+  if (Date.now() - pausedCache.at < 60_000) return pausedCache.value;
+  const { data } = await db.from("ingest_config").select("value").eq("key", "whatsapp_paused").maybeSingle();
+  pausedCache = { value: String(data?.value ?? "") === "true", at: Date.now() };
+  return pausedCache.value;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -1040,6 +1094,9 @@ Deno.serve(async (req) => {
     const { data } = await db.from("event_media").update({ ready: true }).eq("storage_path", path).eq("kind", "video").select("id");
     return json({ ok: !!data?.length });
   }
+
+  // WhatsApp paused (ingest_config.whatsapp_paused = 'true'): messages are not taken. Telegram is not affected.
+  if (await whatsappPaused()) return json({ ok: false, paused: true, error: "WhatsApp ingestion is paused" }, 503);
 
   const msgs: InMsg[] = Array.isArray(body?.messages) ? body.messages.slice(0, 20) : [];
   msgs.sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at)));

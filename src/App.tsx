@@ -19,6 +19,7 @@ import { EventsListPage } from '@/pages/admin/EventsListPage';
 import { EventEditorPage } from '@/pages/admin/EventEditorPage';
 import { ToastProvider } from '@/components/common/Toast';
 import { AccountPage } from '@/pages/admin/AccountPage';
+import { MemberAccountPage } from '@/pages/MemberAccountPage';
 import { SettingsPage } from '@/pages/admin/SettingsPage';
 import { NewsAgentsPage } from '@/pages/admin/NewsAgentsPage';
 import { LearningPage } from '@/pages/admin/LearningPage';
@@ -64,6 +65,7 @@ export function App() {
               <Route path="/privacy" element={<SitePage page="privacy" />} />
               <Route path="/contact" element={<SitePage page="contact" />} />
               <Route path="/" element={<RequireAuth><MapPage /></RequireAuth>} />
+              <Route path="/account" element={<RequireAuth><MemberAccountPage /></RequireAuth>} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />

@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/i18n';
 import { loginLockRemaining, type SignInFailure } from '@/services/authService';
 import { isValidEmail, safeRedirectPath } from '@/utils/url';
-import { LogoMark } from '@/components/common/Logo';
+import { LogoFull } from '@/components/common/Logo';
 import { LanguageToggle, ThemeToggle } from '@/components/common/Toggles';
 import { SetupNotice } from '@/components/auth/SetupNotice';
 import { Alert, FullScreenLoader } from '@/components/common/Feedback';
@@ -119,7 +119,7 @@ export function LoginPage() {
           <div className="mb-7 flex flex-col items-center text-center">
             <div className="relative">
               <span className="absolute inset-0 animate-ping rounded-2xl bg-sky-400/20 motion-reduce:animate-none" aria-hidden />
-              <LogoMark className="relative size-16 drop-shadow-[0_0_24px_rgba(56,189,248,0.45)]" />
+              <LogoFull className="relative h-28 drop-shadow-[0_0_24px_rgba(56,189,248,0.45)]" />
             </div>
             <h1 className="mt-4 text-3xl font-black tracking-tight">{t('app.name')}</h1>
             <p className="mt-1 text-sm font-medium text-sky-200/80">{t('login.tagline')}</p>

@@ -109,6 +109,21 @@ export async function sendPasswordResetEmail(email: string): Promise<{ error: st
   return { error: null };
 }
 
+/** 12+ characters with an uppercase letter, a lowercase letter, a digit and a special character. */
+export function strongPassword(p: string): boolean {
+  return p.length >= 12 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /\d/.test(p) && /[^A-Za-z0-9]/.test(p);
+}
+
+/** Is this the signed-in user's current password? (signs in again with it) */
+export async function checkCurrentPassword(password: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { data } = await supabase.auth.getUser();
+  const email = data.user?.email;
+  if (!email || !password) return false;
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  return !error;
+}
+
 export async function updatePassword(password: string): Promise<{ error: string | null }> {
   if (!supabase) return { error: 'Supabase is not configured.' };
   const { error } = await supabase.auth.updateUser({ password });

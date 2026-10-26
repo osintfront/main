@@ -68,17 +68,15 @@ export function UserMenu() {
             {profile ? <p className="mt-1 text-[11px] font-medium text-sky-700 dark:text-sky-400">{t(`role.${profile.role}`)}</p> : null}
           </div>
           {staff ? (
-            <>
-              <Link role="menuitem" to="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                <LayoutDashboard className="size-4" aria-hidden />
-                {t('nav.admin')}
-              </Link>
-              <Link role="menuitem" to="/admin/account" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
-                <UserCog className="size-4" aria-hidden />
-                {t('user.account')}
-              </Link>
-            </>
+            <Link role="menuitem" to="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+              <LayoutDashboard className="size-4" aria-hidden />
+              {t('nav.admin')}
+            </Link>
           ) : null}
+          <Link role="menuitem" to={staff ? '/admin/account' : '/account'} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+            <UserCog className="size-4" aria-hidden />
+            {t('user.account')}
+          </Link>
           <button
             role="menuitem"
             type="button"

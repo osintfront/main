@@ -84,7 +84,7 @@ export function AccountPage() {
 
       <Card title={t('account.password')}>
         {passwordSaved ? <Alert tone="success" className="mb-4">{t('auth.passwordUpdated')}</Alert> : null}
-        <PasswordForm onSaved={() => setPasswordSaved(true)} />
+        <PasswordForm requireCurrent onSaved={() => setPasswordSaved(true)} />
       </Card>
 
       <Card title={t('account.security')}>

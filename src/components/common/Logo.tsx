@@ -3,14 +3,12 @@ import { useI18n } from '@/i18n';
 import { cn } from '@/utils/cn';
 
 export function LogoMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={cn('size-8', className)} aria-hidden>
-      <rect width="32" height="32" rx="8" className="fill-slate-900 dark:fill-slate-800" />
-      <circle cx="16" cy="16" r="9" fill="none" stroke="#38bdf8" strokeWidth="2" />
-      <circle cx="16" cy="16" r="3.5" fill="#f43f5e" />
-      <path d="M16 3v5M16 24v5M3 16h5M24 16h5" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
+  return <img src="/logo-mark.png" alt="" aria-hidden className={cn('size-8 rounded-lg object-cover', className)} />;
+}
+
+/** The full logo (emblem + OSINTFront wordmark), for large places such as the login page. */
+export function LogoFull({ className }: { className?: string }) {
+  return <img src="/logo.png" alt="OSINTFront" className={cn('h-24 w-auto rounded-2xl', className)} />;
 }
 
 export function Logo({ to = '/', subtitle }: { to?: string; subtitle?: string }) {

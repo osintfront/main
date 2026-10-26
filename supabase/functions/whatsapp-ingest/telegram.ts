@@ -11,6 +11,8 @@ export interface TgPost {
   /** Per photo: "video_thumb" when it is the still of a video (the video is fetched only on demand). */
   photoKinds: ("image" | "video_thumb")[];
   forwardedFrom: string | null;
+  /** The post this one replies to ("<channel>/<n>"), from the "reply" quote. */
+  replyTo: string | null;
 }
 
 const UA = "Mozilla/5.0 (compatible; OsintfrontBot/1.0; +https://main-drab-chi.vercel.app)";
@@ -80,6 +82,8 @@ export async function fetchChannel(name: string, before?: number): Promise<{ tit
     const photos = found.map((m) => m.url);
     const photoKinds = found.map((m) => m.kind);
     const fwd = (chunk.match(/tgme_widget_message_forwarded_from_name[^>]*>(?:<span[^>]*>)?([^<]+)/) ?? [])[1];
+    const reply = chunk.match(/class="tgme_widget_message_reply"[^>]*href="https:\/\/t\.me\/([A-Za-z0-9_]+)\/(\d+)/) ??
+      chunk.match(/href="https:\/\/t\.me\/([A-Za-z0-9_]+)\/(\d+)"[^>]*class="tgme_widget_message_reply"/);
     posts.push({
       id,
       post: `${s[1]}/${id}`,
@@ -89,6 +93,7 @@ export async function fetchChannel(name: string, before?: number): Promise<{ tit
       photos,
       photoKinds,
       forwardedFrom: fwd ? decode(fwd).trim() : null,
+      replyTo: reply && reply[1].toLowerCase() === s[1].toLowerCase() ? `${s[1]}/${reply[2]}` : null,
     });
   }
   posts.sort((a, b) => a.id - b.id);

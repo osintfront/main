@@ -26,6 +26,21 @@ export function UsersPage() {
   const toast = useToast();
   const roles = useMemo(() => assignableRoles(me), [me]);
   const [users, setUsers] = useState<Profile[]>([]);
+  // Column filters: name = free text (contains, name or email); the others = one of the values in the list today.
+  const [fName, setFName] = useState('');
+  const [fRole, setFRole] = useState('');
+  const [fStatus, setFStatus] = useState('');
+  const [fLogin, setFLogin] = useState('');
+  const loginDay = useCallback((u: Profile) => (u.lastLoginAt ? u.lastLoginAt.slice(0, 10) : 'never'), []);
+  const shown = useMemo(() => {
+    const q = fName.trim().toLowerCase();
+    return users.filter((u) =>
+      (!q || `${u.fullName ?? ''} ${u.email ?? ''}`.toLowerCase().includes(q)) &&
+      (!fRole || u.role === fRole) &&
+      (!fStatus || u.status === fStatus) &&
+      (!fLogin || loginDay(u) === fLogin));
+  }, [users, fName, fRole, fStatus, fLogin, loginDay]);
+  const uniq = (xs: string[]) => [...new Set(xs)].sort();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -178,9 +193,33 @@ export function UsersPage() {
               <th className="px-3 py-2.5 text-start">{t('users.lastLogin')}</th>
               <th className="px-3 py-2.5" />
             </tr>
+            <tr className="normal-case tracking-normal">
+              <th className="px-4 pb-2.5 text-start font-normal">
+                <input value={fName} onChange={(e) => setFName(e.target.value)} placeholder={t('users.filterName')} aria-label={t('users.filterName')} className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white" dir="auto" />
+              </th>
+              <th className="px-3 pb-2.5 text-start font-normal">
+                <select value={fRole} onChange={(e) => setFRole(e.target.value)} aria-label={t('users.role')} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                  <option value="">{t('users.filterAll')}</option>
+                  {uniq(users.map((u) => u.role)).map((r) => <option key={r} value={r}>{t(`role.${r}`)}</option>)}
+                </select>
+              </th>
+              <th className="px-3 pb-2.5 text-start font-normal">
+                <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label={t('users.status')} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                  <option value="">{t('users.filterAll')}</option>
+                  {uniq(users.map((u) => u.status)).map((v) => <option key={v} value={v}>{t(`users.status.${v}`)}</option>)}
+                </select>
+              </th>
+              <th className="px-3 pb-2.5 text-start font-normal">
+                <select value={fLogin} onChange={(e) => setFLogin(e.target.value)} aria-label={t('users.lastLogin')} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                  <option value="">{t('users.filterAll')}</option>
+                  {uniq(users.map(loginDay)).reverse().map((v) => <option key={v} value={v}>{v === 'never' ? t('common.never') : v.split('-').reverse().join('/')}</option>)}
+                </select>
+              </th>
+              <th className="px-3 pb-2.5" />
+            </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {users.map((u) => {
+            {shown.map((u) => {
               const can_ = manageable(u);
               const isBusy = busy === u.id;
               return (

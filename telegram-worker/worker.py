@@ -240,7 +240,18 @@ async def to_payload(client: TelegramClient, msg: types.Message, cid: int) -> di
     if not ch:
         return None
     mode = PUBLIC_MODE if ch["username"] else PRIVATE_MODE
-    if mode == "off" or not worth_sending(text):
+    prefix = ch["username"] or f"c{cid}"
+    # Reply to an earlier post of the same channel / part of an album: the site adds it to that
+    # post's event (a picture without text too), so it skips the "worth sending" text check.
+    rt = msg.reply_to
+    reply_to = f"{prefix}/{rt.reply_to_msg_id}" if isinstance(rt, types.MessageReplyHeader) and rt.reply_to_msg_id and not rt.reply_to_peer_id else None
+    group_id = f"{prefix}/g{msg.grouped_id}" if msg.grouped_id else None
+    linked = bool(reply_to or group_id)
+    if mode == "off":
+        return None
+    if not linked and not worth_sending(text):
+        return None
+    if linked and not text and not (msg.photo or msg.video):
         return None
     light = mode == "light" and is_hebrew(text)
     username = ch["username"]
@@ -262,6 +273,8 @@ async def to_payload(client: TelegramClient, msg: types.Message, cid: int) -> di
         "text": text[:8000],
         "media": media,
         "light": light,
+        **({"reply_to": reply_to} if reply_to else {}),
+        **({"group_id": group_id} if group_id else {}),
         "_cid": cid,
         "_id": msg.id,
     }
