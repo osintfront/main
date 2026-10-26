@@ -137,14 +137,15 @@ async function edit(id: string) {
   }
   const { error } = await db.from("events").update(update).eq("id", id);
   if (error) return json({ error: error.message }, 500);
+  const { data: after } = await db.from("events").select("locations").eq("id", id).maybeSingle();
+  // Places the database could not pin (not found in the gazetteer or GeoNames).
+  const kept = new Set(((after?.locations ?? []) as any[]).map((l) => l?.name_en || l?.name));
+  const lost = Array.isArray(update.locations) ? (update.locations as any[]).filter((l) => !kept.has(l?.name_en || l?.name)).map((l) => [l.name, l.name_en, l.name_ar ?? ""].join(" / ")) : [];
   let siblings: string[] = [];
   if (!ev.ai_suggestions?.split_from && !ev.ai_suggestions?.split_into) {
     try { siblings = await splitEventByCategory(db, id); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }
   }
-  const { data: after } = await db.from("events").select("locations").eq("id", id).maybeSingle();
-  const kept = new Set(((after?.locations ?? []) as any[]).map((l) => l?.name_en || l?.name));
-  const lost = Array.isArray(update.locations) ? (update.locations as any[]).filter((l) => !kept.has(l?.name_en || l?.name)).map((l) => [l.name, l.name_en, l.name_ar ?? ""].join(" / ")) : [];
-  return json({ ok: true, id, title: update.title, places: Array.isArray(update.locations) ? (update.locations as unknown[]).length : null, siblings, not_found: siblings.length ? undefined : lost });
+  return json({ ok: true, id, title: update.title, places: Array.isArray(update.locations) ? (update.locations as unknown[]).length : null, siblings, not_found: lost });
 }
 
 async function translate(limit: number, drafts = false) {
