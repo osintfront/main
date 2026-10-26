@@ -16,6 +16,8 @@ const PROVIDERS: Provider[] = [
 ];
 
 const resting = new Map<string, number>();
+/** What the last call tried (diagnostics). */
+export let lastTried: string[] = [];
 
 /** Which providers have keys here (names only — never the keys). */
 export const freeProvidersReady = () => PROVIDERS.filter((p) => p.ready()).map((p) => p.name);
@@ -38,6 +40,7 @@ export async function freeJson(
   opts: { maxTokens?: number; timeoutMs?: number; only?: string[] } = {},
 ): Promise<{ data: Record<string, unknown>; provider: string; model: string; tried: string[] } | null> {
   const tried: string[] = [];
+  lastTried = tried;
   for (const p of PROVIDERS) {
     if (!p.ready() || (opts.only && !opts.only.includes(p.name))) continue;
     if ((resting.get(p.name) ?? 0) > Date.now()) { tried.push(`${p.name}:resting`); continue; }

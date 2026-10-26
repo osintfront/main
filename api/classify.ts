@@ -3,7 +3,7 @@
 // Only our Supabase functions may call it (header x-translate-secret = TRANSLATE_SECRET).
 // Request: { system, user, decisions[], slugs[], ids[], only?[] }  →  { data, provider, model, tried } or { data: null, tried }
 // The caller falls back to Claude Haiku when data is null.
-import { freeJson, freeProvidersReady } from './_lib/freeJson.js';
+import { freeJson, freeProvidersReady, lastTried } from './_lib/freeJson.js';
 
 const env = (k: string) => (process.env[k] ?? '').trim();
 const json = (body: unknown, status = 200) =>
@@ -31,5 +31,5 @@ export async function POST(req: Request) {
     if (d === 'duplicate' && !ids.has(String(o.duplicate_of ?? ''))) return false;
     return typeof o.reason === 'string' || o.reason === undefined;
   }, { only: Array.isArray(b.only) ? b.only.map(String) : undefined, timeoutMs: 12_000 });
-  return json(r ?? { data: null });
+  return json(r ?? { data: null, tried: lastTried });
 }
