@@ -59,7 +59,7 @@ function details(mmsi: number, s: any): Row {
   };
 }
 
-async function listen(): Promise<{ messages: number; saved: number; error?: string }> {
+async function listen(boxes = BOXES, ms = LISTEN_MS): Promise<{ messages: number; saved: number; error?: string }> {
   const positions = new Map<number, Row>();
   const statics = new Map<number, Row>();
   let messages = 0, saved = 0;
@@ -82,10 +82,10 @@ async function listen(): Promise<{ messages: number; saved: number; error?: stri
   await new Promise<void>((done) => {
     const ws = new WebSocket("wss://stream.aisstream.io/v0/stream");
     const timer = setInterval(() => void flush(), FLUSH_MS);
-    const stop = setTimeout(() => ws.close(), LISTEN_MS);
+    const stop = setTimeout(() => ws.close(), ms);
     ws.onopen = () => ws.send(JSON.stringify({
       APIKey: KEY,
-      BoundingBoxes: BOXES,
+      BoundingBoxes: boxes,
       FilterMessageTypes: ["PositionReport", "StandardClassBPositionReport", "ExtendedClassBPositionReport", "ShipStaticData", "StaticDataReport"],
     }));
     ws.onmessage = async (ev) => {
@@ -132,7 +132,10 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   if (body?.wait === true) {
     // Manual test: wait for the result.
-    return new Response(JSON.stringify({ ok: true, ...(await listen()) }), { headers: { "content-type": "application/json" } });
+    // Optional: only some areas (indexes into BOXES), for a shorter time — to see what each area gets.
+    const pick = Array.isArray(body?.boxes) ? BOXES.filter((_, i) => body.boxes.includes(i)) : BOXES;
+    const ms = Math.min(LISTEN_MS, Math.max(5_000, Number(body?.ms) || LISTEN_MS));
+    return new Response(JSON.stringify({ ok: true, ...(await listen(pick.length ? pick : BOXES, ms)) }), { headers: { "content-type": "application/json" } });
   }
   EdgeRuntime.waitUntil(listen().then((r) => console.log("ais", JSON.stringify(r))));
   return new Response(JSON.stringify({ ok: true, listening: LISTEN_MS / 1000 }), { headers: { "content-type": "application/json" } });
