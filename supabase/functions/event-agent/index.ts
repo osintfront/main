@@ -34,6 +34,7 @@ import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
 import { imageAsBase64 } from "../whatsapp-ingest/telegram.ts";
 import { makeRoom } from "../_shared/videoOnDemand.ts";
 import { alreadyHas, hashImage } from "../_shared/imageHash.ts";
+import { controlSync, sectsSync } from "../_shared/layers.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -478,6 +479,13 @@ async function handle(req: Request): Promise<Response> {
   if (action === "edit") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
     return await edit(id);
+  }
+  if (action === "control_sync" || action === "sects_sync") {
+    try {
+      return json(action === "control_sync" ? await controlSync(db) : await sectsSync(db));
+    } catch (e) {
+      return json({ ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
   }
   if (action === "media_dedupe") {
     const ids = (Array.isArray(body?.event_ids) ? body.event_ids : []).map(String).filter((x: string) => UUID.test(x)).slice(0, 50);
