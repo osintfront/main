@@ -506,7 +506,10 @@ async function handle(req: Request): Promise<Response> {
       ? fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-translate-secret": secret }, body: JSON.stringify({ texts: [String(body?.text ?? "")], target: body?.target === "en" ? "en" : "he" }) })
       : fetch(`${url}?test=1${body?.paid === true ? "&paid=1" : ""}${typeof body?.only === "string" ? `&only=${encodeURIComponent(body.only)}` : ""}`, { headers: { "x-translate-secret": secret } });
     const res = await chainReq;
-    return json({ ok: res.ok, status: res.status, body: await res.json().catch(() => null) });
+    const out = { ok: res.ok, status: res.status, body: await res.json().catch(() => null) };
+    // Kept for reading later (the answer of a long test may not reach the caller).
+    await db.from("layer_sync").upsert({ layer: "translate_test", synced_at: new Date().toISOString(), detail: JSON.stringify(out).slice(0, 20000) }, { onConflict: "layer" });
+    return json(out);
   }
   if (action === "split") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
