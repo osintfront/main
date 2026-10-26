@@ -55,11 +55,16 @@ export function LoginGlobe({ className }: { className?: string }) {
       halo.addColorStop(1, 'rgba(56,189,248,0)');
       ctx.fillStyle = halo;
       ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = 'rgba(56,189,248,0.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.stroke();
       for (const [x, y, z] of pts) {
         const [px, py, pz] = proj(x, y, z);
         if (pz < -0.05) continue;
-        ctx.fillStyle = `rgba(125,211,252,${0.12 + pz * 0.5})`;
-        ctx.fillRect(px, py, 1.4, 1.4);
+        ctx.fillStyle = `rgba(125,211,252,${0.2 + pz * 0.7})`;
+        ctx.fillRect(px, py, 1.9, 1.9);
       }
       if (!reduce && now - last > 650) { spawn(now); last = now; }
       if (reduce && !evs.length) for (let i = 0; i < 12; i++) spawn(now - i * 400);
