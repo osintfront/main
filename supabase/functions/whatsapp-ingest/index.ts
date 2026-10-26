@@ -486,7 +486,13 @@ function mentionsPlaceOf(e: any, text: string): boolean {
     .filter((n) => n.length >= 3);
   if (!names.length) return true;
   const hay = norm(text);
-  return names.some((n) => hay.includes(n));
+  if (names.some((n) => hay.includes(n))) return true;
+  // Any distinctive word of the place ("غرب مدينة غزة" → "غزه"): words like west / city / near don't count.
+  const GENERIC = new Set(["غرب", "شرق", "شمال", "جنوب", "وسط", "مدينه", "بلده", "قريه", "محيط", "قرب", "حي", "شارع", "مخيم", "منطقه", "اطراف",
+    "west", "east", "north", "south", "central", "city", "town", "village", "near", "area", "district", "street", "camp", "the", "of",
+    "מערב", "מזרח", "צפון", "דרום", "העיר", "עיר", "שכונת", "רחוב", "מחנה", "אזור", "ליד"]);
+  const words = new Set(names.flatMap((n) => n.split(/[\s,،\-–/()]+/)).map((w) => w.replace(/^(ال|ה)/, "")).filter((w) => w.length >= 3 && !GENERIC.has(w)));
+  return [...words].some((w) => hay.includes(w));
 }
 
 /** The same place within the hour: another channel reporting the same incident. */
