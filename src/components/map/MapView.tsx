@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
-import { BookOpen, Check, Globe2, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
+import { BookOpen, Check, Globe2, Layers, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
 import { octagon, pointInPolygon, type LatLng } from '@/lib/eventFilters';
 import type { Severity } from '@/types/event';
 import { mapConfig } from '@/config/map';
@@ -19,6 +19,7 @@ import { createMarkerIcon } from './markerIcon';
 import { DEFAULT_CATEGORIES } from '@/data/categoryRegistry';
 import { buildPopupContent } from './popupContent';
 import { IconButton } from '@/components/common/IconButton';
+import { IntelLayers } from './IntelLayers';
 
 interface MapViewProps {
   events: PublicEvent[];
@@ -196,6 +197,14 @@ export function MapView({
   const [styleFailed, setStyleFailed] = useState<BaseStyle | null>(null);
   const [stylesOpen, setStylesOpen] = useState(false);
   const [firesOn, setFiresOn] = useState(loadFiresOn);
+  // Intelligence layers (satellite, ships, aircraft): their own panel; the fires follow the satellite day.
+  const [leafletMap, setLeafletMap] = useState<L.Map | null>(null);
+  const [intelOpen, setIntelOpen] = useState(false);
+  const [firesDate, setFiresDate] = useState<string | null>(null);
+  const toggleFires = useCallback((on: boolean) => {
+    setFiresOn(on);
+    saveFiresOn(on);
+  }, []);
   const firesLayerRef = useRef<L.Layer | null>(null);
   const eventsRef = useRef(events);
   eventsRef.current = events;
@@ -250,6 +259,7 @@ export function MapView({
     }).addTo(map);
     focusLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+    setLeafletMap(map);
     map.on('click', (e: L.LeafletMouseEvent) => {
       if (drawClickRef.current) drawClickRef.current([e.latlng.lat, e.latlng.lng]);
       else {
@@ -271,6 +281,7 @@ export function MapView({
       observer.disconnect();
       map.remove();
       mapRef.current = null;
+      setLeafletMap(null);
       markerLayerRef.current = null;
       linkLayerRef.current = null;
       drawLayerRef.current = null;
@@ -334,11 +345,11 @@ export function MapView({
     }
     if (!firesOn) return;
     try {
-      firesLayerRef.current = createFiresLayer().addTo(map);
+      firesLayerRef.current = createFiresLayer(firesDate).addTo(map);
     } catch {
       /* overlay is optional */
     }
-  }, [firesOn]);
+  }, [firesOn, firesDate]);
 
   // 3. Zoom control sits on the side away from the feed and follows the language.
   useEffect(() => {
@@ -1005,12 +1016,27 @@ export function MapView({
         </IconButton>
         <IconButton
           label={t('map.styles')}
-          onClick={() => setStylesOpen((v) => !v)}
+          onClick={() => {
+            setIntelOpen(false);
+            setStylesOpen((v) => !v);
+          }}
           aria-expanded={stylesOpen}
           className="pointer-events-auto shadow-md"
           variant="map"
         >
           <MapIcon className="size-4" aria-hidden />
+        </IconButton>
+        <IconButton
+          label={lang === 'he' ? 'שכבות מודיעין: לוויין, אוניות, מטוסים' : 'Intelligence layers: satellite, ships, aircraft'}
+          onClick={() => {
+            setStylesOpen(false);
+            setIntelOpen((v) => !v);
+          }}
+          aria-expanded={intelOpen}
+          className="pointer-events-auto shadow-md"
+          variant="map"
+        >
+          <Layers className="size-4" aria-hidden />
         </IconButton>
 
       </div>
@@ -1096,6 +1122,7 @@ export function MapView({
           </div>
         </div>
       ) : null}
+      <IntelLayers map={leafletMap} open={intelOpen} onClose={() => setIntelOpen(false)} firesOn={firesOn} onFires={toggleFires} onFiresDate={setFiresDate} />
       {stylesOpen ? (
         <div className="absolute start-14 top-3 z-[650] w-52 rounded-xl bg-white/95 p-1.5 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10" role="menu">
           {BASE_STYLES.map((id) => (

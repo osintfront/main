@@ -78,8 +78,10 @@ export function createBaseLayer(theme: MapTheme, provider: TileProviderId = mapC
  * NASA FIRMS active fires (VIIRS thermal anomalies) from NASA GIBS — free, no key.
  * Two days (yesterday + today, UTC) so the night's and the day's passes both show.
  */
-export function createFiresLayer(): L.Layer {
-  const day = (offset: number) => new Date(Date.now() - offset * 86400_000).toISOString().slice(0, 10);
+export function createFiresLayer(date: string | null = null): L.Layer {
+  // A chosen day (the satellite picture's): that day and the one before; else the last two days.
+  const base = date ? Date.parse(`${date}T12:00:00Z`) : Date.now();
+  const day = (offset: number) => new Date(base - offset * 86400_000).toISOString().slice(0, 10);
   const wms = (time: string) =>
     L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi', {
       layers: 'VIIRS_NOAA20_Thermal_Anomalies_375m_All,VIIRS_SNPP_Thermal_Anomalies_375m_All',
