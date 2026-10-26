@@ -7,7 +7,7 @@ const SECRET = Deno.env.get("TRANSLATE_SECRET") ?? "";
 
 export async function freeClassify(body: { system: string; user: string; decisions: string[]; slugs: string[]; ids: string[]; only?: string[] }):
   Promise<{ data: Record<string, unknown>; provider: string; model: string; tried?: string[] } | null> {
-  if (!URL_.endsWith("/api/classify") || !SECRET) return null;
+  if (!URL_.endsWith("/api/classify") || !SECRET) { console.warn("free classify off:", URL_ ? "url shape" : "no url", SECRET ? "" : "no secret"); return null; }
   try {
     const res = await fetch(URL_, {
       method: "POST",
@@ -15,10 +15,12 @@ export async function freeClassify(body: { system: string; user: string; decisio
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(55_000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) { console.warn("free classify http", res.status); return null; }
     const r = await res.json();
+    if (!r?.data) console.warn("free classify none:", JSON.stringify(r?.tried ?? r).slice(0, 300));
     return r?.data ? r : null;
-  } catch {
+  } catch (e) {
+    console.warn("free classify failed:", String((e as Error)?.message ?? e).slice(0, 200));
     return null;
   }
 }
