@@ -141,7 +141,10 @@ async function edit(id: string) {
   if (!ev.ai_suggestions?.split_from && !ev.ai_suggestions?.split_into) {
     try { siblings = await splitEventByCategory(db, id); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }
   }
-  return json({ ok: true, id, title: update.title, places: Array.isArray(update.locations) ? (update.locations as unknown[]).length : null, siblings });
+  const { data: after } = await db.from("events").select("locations").eq("id", id).maybeSingle();
+  const kept = new Set(((after?.locations ?? []) as any[]).map((l) => l?.name_en || l?.name));
+  const lost = Array.isArray(update.locations) ? (update.locations as any[]).filter((l) => !kept.has(l?.name_en || l?.name)).map((l) => [l.name, l.name_en, l.name_ar ?? ""].join(" / ")) : [];
+  return json({ ok: true, id, title: update.title, places: Array.isArray(update.locations) ? (update.locations as unknown[]).length : null, siblings, not_found: siblings.length ? undefined : lost });
 }
 
 async function translate(limit: number, drafts = false) {

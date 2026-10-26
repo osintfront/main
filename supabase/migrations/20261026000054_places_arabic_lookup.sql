@@ -35,7 +35,7 @@ begin
           v_item := v_item || jsonb_build_object($a$,
     $b$        if v_g.geonameid is null and coalesce(v_item ->> 'name_ar', '') <> '' then
           select g.* into v_g from unnest(public.arabic_place_variants(v_item ->> 'name_ar')) as v(n)
-            cross join lateral (select (public.geo_lookup(v.n, new.country)).*) g
+            cross join lateral public.geo_lookup(v.n, new.country) g
           where g.geonameid is not null limit 1;
         end if;
         if v_g.geonameid is not null then
