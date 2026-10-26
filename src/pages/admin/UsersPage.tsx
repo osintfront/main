@@ -200,13 +200,13 @@ export function UsersPage() {
               <th className="px-3 pb-2.5 text-start font-normal">
                 <select value={fRole} onChange={(e) => setFRole(e.target.value)} aria-label={t('users.role')} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white">
                   <option value="">{t('users.filterAll')}</option>
-                  {uniq(users.map((u) => u.role)).map((r) => <option key={r} value={r}>{t(`role.${r}`)}</option>)}
+                  {(uniq(users.map((u) => u.role)) as AppRole[]).map((r) => <option key={r} value={r}>{t(`role.${r}`)}</option>)}
                 </select>
               </th>
               <th className="px-3 pb-2.5 text-start font-normal">
                 <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label={t('users.status')} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white">
                   <option value="">{t('users.filterAll')}</option>
-                  {uniq(users.map((u) => u.status)).map((v) => <option key={v} value={v}>{t(`users.status.${v}`)}</option>)}
+                  {(uniq(users.map((u) => u.status)) as Profile['status'][]).map((v) => <option key={v} value={v}>{t(`users.status.${v}`)}</option>)}
                 </select>
               </th>
               <th className="px-3 pb-2.5 text-start font-normal">
