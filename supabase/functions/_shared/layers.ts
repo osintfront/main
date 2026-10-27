@@ -359,10 +359,11 @@ export async function osmWadis(db: Db, band = "s1") {
   let data: any = null;
   let lastErr = "";
   const t0 = Date.now();
-  for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]) {
-    if (Date.now() - t0 > 110_000) break;
+  // overpass-api.de refuses cloud servers (HTTP 406); the community mirrors answer.
+  for (const host of ["https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]) {
+    if (Date.now() - t0 > 120_000) break;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 55_000);
+    const timer = setTimeout(() => ctrl.abort(), Math.max(10_000, 125_000 - (Date.now() - t0)));
     try {
       const res = await fetch(`${host}?data=${encodeURIComponent(q)}`, {
         headers: { "User-Agent": "Osintfront/1.0 (https://osintfront.com; map of the conflict)", Accept: "application/json, */*;q=0.8", Referer: "https://osintfront.com/" },
