@@ -18,6 +18,7 @@ jobs:
         run: curl -sSfL -o lebanon.osm.pbf https://download.geofabrik.de/asia/lebanon-latest.osm.pbf
       - name: Named waterways and valleys → GeoJSON lines
         run: |
+          mkdir -p data/osm
           osmium tags-filter lebanon.osm.pbf w/waterway=river,stream,wadi,canal,ditch,drain w/natural=valley -o lines.osm.pbf --overwrite
           osmium export lines.osm.pbf -f geojsonseq --geometry-types=linestring -a id -o lines.geojsonseq --overwrite
           # Keep named ones; only the fields the import uses; coordinates to 6 decimals.
