@@ -107,6 +107,18 @@ export async function addLearnedTerm(t: NewTerm): Promise<void> {
   assertChanged(data);
 }
 
+/** Teach a term from a correction; an existing term gets the wrong rendering added. */
+export async function learnTerm(t: { term: string; he: string; en: string; avoid: string[] }, eventId?: string): Promise<void> {
+  const { error } = await client().rpc('learn_term', {
+    p_term: t.term,
+    p_he: t.he,
+    p_en: t.en,
+    p_avoid: t.avoid,
+    p_event: eventId ?? null,
+  });
+  if (error) throw toServiceError(error);
+}
+
 export async function deleteLearnedTerm(id: number): Promise<void> {
   const { data, error } = await client().from('learned_terms').delete().eq('id', id).select('id');
   if (error) throw toServiceError(error);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MapPin, Move, Search, Tag } from 'lucide-react';
+import { MapPin, Move, Pencil, Search, Tag } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { usePermissions } from '@/hooks/usePermissions';
 import { fetchCategories } from '@/services/categoryService';
@@ -9,6 +9,7 @@ import type { EventCategory } from '@/types/category';
 import type { PublicEvent } from '@/types/event';
 import { useToast } from '@/components/common/Toast';
 import { QuickLocationDialog } from '@/components/admin/events/QuickLocationDialog';
+import { EventTextDialog } from './EventTextDialog';
 
 interface EventStaffEditProps {
   event: PublicEvent;
@@ -19,7 +20,7 @@ interface EventStaffEditProps {
 }
 
 /**
- * Analysts and admins: change the event's category and place from its details window.
+ * Analysts and admins: fix the event's text, category and place from its details window.
  * The database checks the permission again (set_event_category / move_event_pin) and learns
  * from the correction; an analyst's change on a live event is sent for review.
  */
@@ -32,6 +33,7 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
   const [categoryId, setCategoryId] = useState(event.category.id ?? '');
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [editingText, setEditingText] = useState(false);
 
   useEffect(() => {
     if (allowed) fetchCategories().then(setCategories).catch(() => undefined);
@@ -102,6 +104,15 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
         <button
           type="button"
           disabled={busy}
+          onClick={() => setEditingText(true)}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <Pencil className="size-4" aria-hidden />
+          {t('textEdit.button')}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
           onClick={() => setLocating(true)}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
         >
@@ -126,6 +137,7 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
           <bdi>{event.locationName}</bdi>
         </p>
       ) : null}
+      {editingText ? <EventTextDialog event={event} onClose={() => setEditingText(false)} onSaved={() => onChanged?.()} /> : null}
       {locating ? (
         <QuickLocationDialog
           event={{ title: event.title, latitude: event.latitude, longitude: event.longitude, locationName: event.locationName }}

@@ -434,6 +434,21 @@ export async function moveEventPin(id: string, latitude: number, longitude: numb
   if (error) throw toServiceError(error);
 }
 
+/** Correct an event's headline and summary in Hebrew and English (staff). */
+export async function editEventText(
+  id: string,
+  text: { titleHe: string; summaryHe: string; titleEn: string; summaryEn: string },
+): Promise<void> {
+  const { error } = await client().rpc('edit_event_text', {
+    p_id: id,
+    p_title_he: text.titleHe,
+    p_summary_he: text.summaryHe,
+    p_title_en: text.titleEn,
+    p_summary_en: text.summaryEn,
+  });
+  if (error) throw toServiceError(error);
+}
+
 /** Change an event's category (staff; the classifier learns from it). */
 export async function setEventCategory(id: string, slug: string): Promise<void> {
   const { error } = await client().rpc('set_event_category', { p_id: id, p_slug: slug });
