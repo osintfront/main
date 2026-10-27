@@ -358,13 +358,17 @@ export async function osmWadis(db: Db, band = "s1") {
     `(way["waterway"~"^(river|stream|wadi|canal|ditch|drain)$"]["name"](${box})(area.lb);way["natural"="valley"]["name"](${box})(area.lb););out tags geom;`;
   let data: any = null;
   let lastErr = "";
-  for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]) {
+  const t0 = Date.now();
+  for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]) {
+    if (Date.now() - t0 > 110_000) break;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 55_000);
     try {
-      const res = await fetch(host, { method: "POST", body: new URLSearchParams({ data: q }), headers: { "User-Agent": "OsintfrontBot/1.0 (+https://osintfront.com)" } });
-      if (!res.ok) { lastErr = `${host} HTTP ${res.status}`; continue; }
+      const res = await fetch(host, { method: "POST", body: new URLSearchParams({ data: q }), headers: { "User-Agent": "OsintfrontBot/1.0 (+https://osintfront.com)" }, signal: ctrl.signal });
+      if (!res.ok) { lastErr += ` ${host} HTTP ${res.status};`; continue; }
       data = await res.json();
       break;
-    } catch (e) { lastErr = String((e as Error)?.message ?? e); }
+    } catch (e) { lastErr += ` ${host} ${String((e as Error)?.message ?? e).slice(0, 80)};`; } finally { clearTimeout(timer); }
   }
   if (!data) throw new Error(`Overpass: ${lastErr}`);
   const rows = (data.elements ?? []).filter((e: any) => e.type === "way" && Array.isArray(e.geometry) && e.geometry.length > 1).map((e: any) => ({
