@@ -24,7 +24,8 @@ import type { HfcAlert } from '@/types/hfcAlert';
 import { SlidersHorizontal } from 'lucide-react';
 import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 import { installAudioUnlock, playChime } from '@/lib/notifySound';
-import { isCategoryAudible, soundScope } from '@/hooks/useSoundSetting';
+import { isCategoryAudible, soundScope, useSoundSetting } from '@/hooks/useSoundSetting';
+import { initPush, syncPush } from '@/lib/push';
 import { HFC_CATEGORY } from '@/config/hfcThreats';
 import { useEeis } from '@/hooks/useEeis';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -173,6 +174,14 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const [filters, setFilters] = useState<EventFilters>(loadFilters);
   // Remember the visitor's choices: a refresh keeps every filter they set.
   useEffect(() => saveFilters(filters), [filters]);
+  // Push notifications follow the same filters and the sound menu's event types.
+  const soundPrefs = useSoundSetting();
+  const { lang } = useI18n();
+  useEffect(() => void initPush(), []);
+  useEffect(() => {
+    const scoped = soundPrefs.scope !== 'all' && activeFilterCount(filters) > 0;
+    syncPush(scoped ? filters : null, [...soundPrefs.mutedCategories], lang);
+  }, [filters, soundPrefs.scope, soundPrefs.mutedCategories, lang]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [drawMode, setDrawMode] = useState<DrawMode | null>(null);
   const effectiveFilters = useMemo(() => (isArchive ? { ...filters, preset: 'live' as const } : filters), [filters, isArchive]);

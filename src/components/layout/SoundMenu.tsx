@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, BellOff, Volume2 } from 'lucide-react';
+import { Bell, BellOff, Smartphone, Volume2 } from 'lucide-react';
 import { DEFAULT_CATEGORIES, getCategoryIcon } from '@/data/categoryRegistry';
 import {
   setAllCategoriesAudible,
@@ -12,6 +12,7 @@ import {
 import { useI18n } from '@/i18n';
 import { playChime, unlockAudio } from '@/lib/notifySound';
 import { cn } from '@/utils/cn';
+import { disablePush, enablePush, usePushState } from '@/lib/push';
 
 const SLUGS = DEFAULT_CATEGORIES.map((c) => c.slug);
 
@@ -25,6 +26,7 @@ export function SoundMenu({ onOpen }: { onOpen?: () => void } = {}) {
   const audioReady = useAudioReady();
   const needsClick = !sound.muted && !audioReady;
   const [open, setOpen] = useState(false);
+  const push = usePushState();
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click / Escape.
@@ -107,6 +109,34 @@ export function SoundMenu({ onOpen }: { onOpen?: () => void } = {}) {
                 )}
               />
             </button>
+          </div>
+
+          {/* Push: sound + alert on this device, also when the site is closed or installed as an app. */}
+          <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <Smartphone className="size-4 shrink-0 text-sky-600 dark:text-sky-400" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{t('push.title')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('push.subtitle')}</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={push === 'on'}
+                aria-label={t('push.title')}
+                disabled={push === 'busy' || push === 'unsupported' || push === 'needs-install' || push === 'denied'}
+                onClick={() => void (push === 'on' ? disablePush() : enablePush())}
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:opacity-50',
+                  push === 'on' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-700',
+                )}
+              >
+                <span className={cn('inline-block size-5 rounded-full bg-white shadow transition-transform', push === 'on' ? 'translate-x-[1.375rem] rtl:-translate-x-[1.375rem]' : 'translate-x-0.5 rtl:-translate-x-0.5')} />
+              </button>
+            </div>
+            {push === 'needs-install' || push === 'unsupported' || push === 'denied' ? (
+              <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">{t(`push.${push}` as 'push.denied')}</p>
+            ) : null}
           </div>
 
           {needsClick ? (

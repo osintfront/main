@@ -12,6 +12,9 @@
   "functions": {
     "api/translate.ts": {
       "maxDuration": 60
+    },
+    "api/push.ts": {
+      "maxDuration": 60
     }
   }
 }
