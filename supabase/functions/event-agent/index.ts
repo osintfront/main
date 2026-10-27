@@ -522,7 +522,7 @@ async function handle(req: Request): Promise<Response> {
   }
   if (action === "osm_wadis") {
     try {
-      return json(await osmWadis(db));
+      return json(await osmWadis(db, String(body?.band ?? "s1")));
     } catch (e) {
       return json({ ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }

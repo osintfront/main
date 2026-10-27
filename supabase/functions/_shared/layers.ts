@@ -325,7 +325,8 @@ export async function hebrewNamesLebanon(db: Db, kind: "village" | "wadi" | "lin
   logUsage("place-names", model, out?.usage ? { input_tokens: out.usage.input_tokens, output_tokens: out.usage.output_tokens } as any : undefined);
   const text = (out?.content ?? []).filter((b: any) => b?.type === "text").map((b: any) => b.text).join("");
   const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
-  const names = Object.entries(json).map(([id, he]) => ({ geonameid: Number(id), name_he: String(he).trim().slice(0, 80) }))
+  // No vowel points (niqqud) in names.
+  const names = Object.entries(json).map(([id, he]) => ({ geonameid: Number(id), name_he: String(he).replace(/[\u0591-\u05C7]/g, "").trim().slice(0, 80) }))
     .filter((r) => Number.isFinite(r.geonameid) && /[\u05D0-\u05EA]/.test(r.name_he) && !/[\u0600-\u06FF]/.test(r.name_he));
   const { data: done, error: e2 } = await db.rpc(kind === "line" ? "set_hebrew_wadi_names" : "set_hebrew_place_names", { p_rows: names });
   if (e2) throw new Error(e2.message);
@@ -334,11 +335,26 @@ export async function hebrewNamesLebanon(db: Db, kind: "village" | "wadi" | "lin
 
 /**
  * Named waterways and valleys of Lebanon from OpenStreetMap (Overpass), as lines → osm_waterways,
- * then joined into one course per wadi (wadi_lines). Run once; again to refresh.
+ * in four latitude bands (one request each, to stay inside the time limit), then "build" joins
+ * them into one course per wadi (wadi_lines). Run once; again to add new ones.
  */
-export async function osmWadis(db: Db) {
-  const q = `[out:json][timeout:170];area["ISO3166-1"="LB"][admin_level=2]->.lb;` +
-    `(way["waterway"~"^(river|stream|wadi|canal|ditch|drain)$"]["name"](area.lb);way["natural"="valley"]["name"](area.lb););out tags geom;`;
+const LEBANON_BANDS: Record<string, string> = {
+  // south, south-centre, centre, north (lat bands; Lebanon's box 33.05–34.70 N, 35.10–36.63 E)
+  s1: "33.05,35.10,33.40,36.10", s2: "33.40,35.10,33.75,36.30", s3: "33.75,35.10,34.15,36.63", s4: "34.15,35.10,34.70,36.63",
+};
+/** Fetch one band (s1…s4) from Overpass into osm_waterways; "build" joins them into wadi_lines. */
+export async function osmWadis(db: Db, band = "s1") {
+  if (band === "build") {
+    const { data: courses, error } = await db.rpc("build_wadi_lines");
+    if (error) throw new Error(error.message);
+    const { count } = await db.from("wadi_lines").select("id", { count: "exact", head: true });
+    await db.from("layer_sync").upsert({ layer: "wadis", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: count ?? 0, source: "OpenStreetMap (waterways and valleys with a name)", detail: `${courses} new courses` }, { onConflict: "layer" });
+    return { ok: true, new_courses: Number(courses ?? 0), courses: count };
+  }
+  const box = LEBANON_BANDS[band];
+  if (!box) throw new Error("band must be s1..s4 or build");
+  const q = `[out:json][timeout:90];area["ISO3166-1"="LB"][admin_level=2]->.lb;` +
+    `(way["waterway"~"^(river|stream|wadi|canal|ditch|drain)$"]["name"](${box})(area.lb);way["natural"="valley"]["name"](${box})(area.lb););out tags geom;`;
   let data: any = null;
   let lastErr = "";
   for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]) {
@@ -365,8 +381,5 @@ export async function osmWadis(db: Db) {
     if (error) throw new Error(error.message);
     saved += Number(n ?? 0);
   }
-  const { data: courses, error } = await db.rpc("build_wadi_lines");
-  if (error) throw new Error(error.message);
-  await db.from("layer_sync").upsert({ layer: "wadis", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: Number(courses ?? 0), source: "OpenStreetMap (waterways and valleys with a name)", detail: `${rows.length} ways` }, { onConflict: "layer" });
-  return { ok: true, ways: rows.length, saved, courses: Number(courses ?? 0) };
+  return { ok: true, band, ways: rows.length, saved };
 }
