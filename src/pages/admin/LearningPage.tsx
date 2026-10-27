@@ -35,7 +35,7 @@ export function LearningPage() {
 
   const load = useCallback(async () => {
     try {
-      const [p, c, tr] = await Promise.all([fetchLearnedPlaces(), fetchCategoryCorrections(), fetchLearnedTerms()]);
+      const [p, c, tr] = await Promise.all([fetchLearnedPlaces(), fetchCategoryCorrections(), fetchLearnedTerms().catch(() => [] as LearnedTerm[])]);
       setPlaces(p);
       setCats(c);
       setTerms(tr);
