@@ -20,6 +20,7 @@ create unique index if not exists learned_terms_term_idx on public.learned_terms
 
 alter table public.learned_terms enable row level security;
 revoke all on public.learned_terms from anon, authenticated;
+revoke all on sequence public.learned_terms_id_seq from anon;
 grant select, insert, update, delete on public.learned_terms to authenticated;
 grant usage on sequence public.learned_terms_id_seq to authenticated;
 drop policy if exists "learned terms: staff read" on public.learned_terms;
@@ -41,7 +42,7 @@ values ('ירי סריקה / تمشيط', 'ירי סריקה', 'automatic fire',
         'ירי אוטומטי מנשק קל', null)
 on conflict do nothing;
 
-update public.categories
+update public.event_categories
    set name = replace(name, 'sweep fire', 'automatic fire'),
        description = replace(description, 'sweep fire', 'automatic fire')
  where name like '%sweep fire%' or description like '%sweep fire%';
