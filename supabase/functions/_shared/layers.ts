@@ -364,7 +364,10 @@ export async function osmWadis(db: Db, band = "s1") {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 55_000);
     try {
-      const res = await fetch(host, { method: "POST", body: new URLSearchParams({ data: q }), headers: { "User-Agent": "OsintfrontBot/1.0 (+https://osintfront.com)" }, signal: ctrl.signal });
+      const res = await fetch(`${host}?data=${encodeURIComponent(q)}`, {
+        headers: { "User-Agent": "Osintfront/1.0 (https://osintfront.com; map of the conflict)", Accept: "application/json, */*;q=0.8", Referer: "https://osintfront.com/" },
+        signal: ctrl.signal,
+      });
       if (!res.ok) { lastErr += ` ${host} HTTP ${res.status};`; continue; }
       data = await res.json();
       break;
