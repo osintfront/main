@@ -355,7 +355,7 @@ export async function osmWadis(db: Db, band = "s1") {
     // The extract the GitHub workflow "OSM wadis (Lebanon)" wrote to the repository (Geofabrik).
     const res = await fetch(`https://raw.githubusercontent.com/osintfront/main/main/data/osm/lebanon-waterways.jsonl?t=${Date.now()}`);
     if (!res.ok) throw new Error(`extract HTTP ${res.status} (run the "OSM wadis" workflow first)`);
-    const rows = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((f: any) => f?.p?.name && Array.isArray(f.c) && f.c.length > 1).map((f: any) => ({
+    const rows = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((f: any) => f?.p?.name && Array.isArray(f.c) && f.c.length > 1 && !["canal", "drain", "ditch"].includes(f.p.waterway)).map((f: any) => ({
       way_id: Number(String(f.id).replace(/\D/g, "")),
       kind: f.p.waterway ?? (f.p.natural === "valley" ? "valley" : "waterway"),
       name: String(f.p.name).slice(0, 200),
