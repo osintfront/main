@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { ServiceError, toServiceError } from './serviceError';
 
-/** What the system learned from editors' corrections (places and categories). */
+/** What the system learned from editors' corrections (places, categories and terms). */
 export interface LearnedPlace {
   id: string;
   name: string;
@@ -65,6 +65,52 @@ export async function fetchCategoryCorrections(): Promise<CategoryCorrection[]> 
     toSlug: String(r.to_slug),
     createdAt: String(r.created_at),
   }));
+}
+
+export interface LearnedTerm {
+  id: number;
+  term: string;
+  he: string;
+  en: string;
+  avoid: string[];
+  note: string;
+  createdAt: string;
+}
+
+export interface NewTerm { term: string; he: string; en: string; avoid: string[]; note: string }
+
+export async function fetchLearnedTerms(): Promise<LearnedTerm[]> {
+  const { data, error } = await client()
+    .from('learned_terms')
+    .select('id,term,he,en,avoid,note,created_at')
+    .order('created_at', { ascending: false })
+    .limit(300);
+  if (error) throw toServiceError(error);
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: Number(r.id),
+    term: String(r.term ?? ''),
+    he: String(r.he ?? ''),
+    en: String(r.en ?? ''),
+    avoid: Array.isArray(r.avoid) ? (r.avoid as unknown[]).map(String) : [],
+    note: String(r.note ?? ''),
+    createdAt: String(r.created_at),
+  }));
+}
+
+export async function addLearnedTerm(t: NewTerm): Promise<void> {
+  const clean = (s: string) => s.trim() || null;
+  const { data, error } = await client()
+    .from('learned_terms')
+    .insert({ term: t.term.trim(), he: clean(t.he), en: clean(t.en), avoid: t.avoid.map((a) => a.trim()).filter(Boolean), note: clean(t.note) })
+    .select('id');
+  if (error) throw toServiceError(error);
+  assertChanged(data);
+}
+
+export async function deleteLearnedTerm(id: number): Promise<void> {
+  const { data, error } = await client().from('learned_terms').delete().eq('id', id).select('id');
+  if (error) throw toServiceError(error);
+  assertChanged(data);
 }
 
 export async function deleteLearnedPlace(id: string): Promise<void> {

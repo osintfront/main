@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { Alert, Spinner } from '@/components/common/Feedback';
 import { useToast } from '@/components/common/Toast';
@@ -6,12 +6,16 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useI18n } from '@/i18n';
 import { friendlyError } from '@/services/serviceError';
 import {
+  addLearnedTerm,
   deleteCategoryCorrection,
   deleteLearnedPlace,
+  deleteLearnedTerm,
   fetchCategoryCorrections,
   fetchLearnedPlaces,
+  fetchLearnedTerms,
   type CategoryCorrection,
   type LearnedPlace,
+  type LearnedTerm,
 } from '@/services/learningService';
 import { formatDateTime } from '@/utils/time';
 
@@ -23,14 +27,18 @@ export function LearningPage() {
   const canManage = can('settings.manage');
   const [places, setPlaces] = useState<LearnedPlace[]>([]);
   const [cats, setCats] = useState<CategoryCorrection[]>([]);
+  const [terms, setTerms] = useState<LearnedTerm[]>([]);
+  const [draft, setDraft] = useState({ term: '', he: '', en: '', avoid: '', note: '' });
+  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [p, c] = await Promise.all([fetchLearnedPlaces(), fetchCategoryCorrections()]);
+      const [p, c, tr] = await Promise.all([fetchLearnedPlaces(), fetchCategoryCorrections(), fetchLearnedTerms()]);
       setPlaces(p);
       setCats(c);
+      setTerms(tr);
       setError(null);
     } catch (err) {
       setError(friendlyError(err, t));
@@ -62,6 +70,31 @@ export function LearningPage() {
     }
   };
 
+  const removeTerm = async (x: LearnedTerm) => {
+    try {
+      await deleteLearnedTerm(x.id);
+      setTerms((l) => l.filter((y) => y.id !== x.id));
+      toast.success(t('learning.removed'));
+    } catch (err) {
+      toast.error(friendlyError(err, t));
+    }
+  };
+  const addTerm = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!draft.term.trim() || (!draft.he.trim() && !draft.en.trim())) return;
+    setSaving(true);
+    try {
+      await addLearnedTerm({ ...draft, avoid: draft.avoid.split(/[,\n،]/) });
+      setDraft({ term: '', he: '', en: '', avoid: '', note: '' });
+      setTerms(await fetchLearnedTerms());
+      toast.success(t('learning.termAdded'));
+    } catch (err) {
+      toast.error(friendlyError(err, t));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <Spinner label={t('common.loading')} />;
 
   const card = 'overflow-hidden rounded-xl bg-white ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10';
@@ -72,6 +105,73 @@ export function LearningPage() {
       <h1 className="text-xl font-bold text-slate-900 dark:text-white">{t('admin.nav.learning')}</h1>
       <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-400">{t('learning.intro')}</p>
       {error ? <Alert tone="error" className="mt-4">{error}</Alert> : null}
+
+      <section className={`mt-5 ${card}`}>
+        <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">{t('learning.terms', { count: String(terms.length) })}</h2>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('learning.termsHint')}</p>
+        </div>
+        {canManage ? (
+          <form onSubmit={(e) => void addTerm(e)} className="grid gap-2 border-b border-slate-100 px-4 py-3 sm:grid-cols-2 lg:grid-cols-6 dark:border-slate-800">
+            {(
+              [
+                ['term', 'learning.termSource', 'lg:col-span-1'],
+                ['he', 'learning.termHe', 'lg:col-span-1'],
+                ['en', 'learning.termEn', 'lg:col-span-1'],
+                ['avoid', 'learning.termAvoid', 'lg:col-span-2'],
+                ['note', 'learning.termNote', 'lg:col-span-1'],
+              ] as const
+            ).map(([k, label, span]) => (
+              <label key={k} className={`text-xs text-slate-600 dark:text-slate-400 ${span}`}>
+                {t(label)}
+                <input
+                  value={draft[k]}
+                  onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))}
+                  dir="auto"
+                  maxLength={k === 'avoid' || k === 'note' ? 300 : 120}
+                  className="mt-1 block h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                />
+              </label>
+            ))}
+            <div className="sm:col-span-2 lg:col-span-6">
+              <button
+                type="submit"
+                disabled={saving || !draft.term.trim() || (!draft.he.trim() && !draft.en.trim())}
+                className="h-9 rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
+              >
+                {t('learning.termAdd')}
+              </button>
+            </div>
+          </form>
+        ) : null}
+        {terms.length === 0 ? (
+          <p className="px-4 py-5 text-sm text-slate-500">{t('learning.termsEmpty')}</p>
+        ) : (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {terms.map((x) => (
+              <li key={x.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-sm">
+                <span className="min-w-0 flex-1" dir="auto">
+                  <span className="font-medium text-slate-800 dark:text-slate-100">{x.term}</span>
+                  <span className="text-slate-400"> → </span>
+                  {x.he ? <span className="text-slate-700 dark:text-slate-300">{x.he}</span> : null}
+                  {x.he && x.en ? <span className="text-slate-400"> · </span> : null}
+                  {x.en ? <span className="font-semibold text-emerald-700 dark:text-emerald-400" dir="ltr">{x.en}</span> : null}
+                  {x.avoid.length ? (
+                    <span className="ms-2 text-xs text-slate-400 line-through" dir="auto">{x.avoid.join(', ')}</span>
+                  ) : null}
+                  {x.note ? <span className="block text-xs text-slate-500">{x.note}</span> : null}
+                </span>
+                <span className="text-xs text-slate-400">{formatDateTime(x.createdAt, locale)}</span>
+                {canManage ? (
+                  <button type="button" onClick={() => void removeTerm(x)} className={del} aria-label={t('learning.remove')}>
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className={`mt-5 ${card}`}>
         <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
