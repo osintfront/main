@@ -289,3 +289,84 @@ export async function hebrewNamesSouthLebanon(db: Db, limit = 120) {
   if (e2) throw new Error(e2.message);
   return { ok: true, done: Number(done ?? 0), asked: list.length };
 }
+
+/**
+ * Hebrew names for Lebanon (Claude Haiku transliterates from the Arabic name; marked he_from_ai).
+ *  kind "village" — every populated place of Lebanon; "wadi" — wadis / streams / valleys of the
+ *  place database; "line" — the wadi courses from OpenStreetMap (wadi_lines). One batch per call;
+ *  part/parts split the work so several batches can run at once.
+ */
+export async function hebrewNamesLebanon(db: Db, kind: "village" | "wadi" | "line", limit = 120, part = 0, parts = 1) {
+  const key = (Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("Whatsapp_Key") || "").trim();
+  if (!key) throw new Error("ANTHROPIC_API_KEY not set");
+  const { data: rows, error } = kind === "line"
+    ? await db.rpc("wadi_lines_missing_hebrew", { p_limit: limit })
+    : await db.rpc("lebanon_missing_hebrew", { p_kind: kind, p_limit: limit, p_part: part, p_parts: parts });
+  if (error) throw new Error(error.message);
+  const list = ((rows ?? []) as { geonameid?: number; id?: number; name_ar: string | null; name: string }[])
+    .map((r) => ({ id: Number(r.geonameid ?? r.id), name_ar: r.name_ar, name: r.name }));
+  if (!list.length) return { ok: true, done: 0, asked: 0 };
+  const what = kind === "village"
+    ? "village and town names in Lebanon. Keep the Arabic article as א-/אל- the way Israeli media do (e.g. מרון א-ראס, עייתא א-שעב, כפר כלא, בינת ג'בייל, בעלבכ, זחלה)."
+    : "names of wadis, streams and valleys in Lebanon. وادي / Wadi → ואדי, نهر / Nahr → נהר, سهل → סהל (e.g. ואדי סלוקי, ואדי אל-חוג'יר, נהר אל-ליטני, ואדי א-שייח'). Keep the Arabic article as א-/אל- as Israeli media do.";
+  const model = "claude-haiku-5-5";
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model, max_tokens: 8000,
+      system: `You write the usual Hebrew spelling (as in Israeli media) of ${what} Transliterate from the Arabic name when given, else from the Latin one. ` +
+        "Answer ONLY with JSON: {\"<id>\": \"<Hebrew name>\", ...}. No other text.",
+      messages: [{ role: "user", content: JSON.stringify(Object.fromEntries(list.map((r) => [r.id, `${r.name_ar ?? ""} | ${r.name}`]))) }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude HTTP ${res.status}`);
+  const out = await res.json();
+  logUsage("place-names", model, out?.usage ? { input_tokens: out.usage.input_tokens, output_tokens: out.usage.output_tokens } as any : undefined);
+  const text = (out?.content ?? []).filter((b: any) => b?.type === "text").map((b: any) => b.text).join("");
+  const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  const names = Object.entries(json).map(([id, he]) => ({ geonameid: Number(id), name_he: String(he).trim().slice(0, 80) }))
+    .filter((r) => Number.isFinite(r.geonameid) && /[\u05D0-\u05EA]/.test(r.name_he) && !/[\u0600-\u06FF]/.test(r.name_he));
+  const { data: done, error: e2 } = await db.rpc(kind === "line" ? "set_hebrew_wadi_names" : "set_hebrew_place_names", { p_rows: names });
+  if (e2) throw new Error(e2.message);
+  return { ok: true, done: Number(done ?? 0), asked: list.length };
+}
+
+/**
+ * Named waterways and valleys of Lebanon from OpenStreetMap (Overpass), as lines → osm_waterways,
+ * then joined into one course per wadi (wadi_lines). Run once; again to refresh.
+ */
+export async function osmWadis(db: Db) {
+  const q = `[out:json][timeout:170];area["ISO3166-1"="LB"][admin_level=2]->.lb;` +
+    `(way["waterway"~"^(river|stream|wadi|canal|ditch|drain)$"]["name"](area.lb);way["natural"="valley"]["name"](area.lb););out tags geom;`;
+  let data: any = null;
+  let lastErr = "";
+  for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]) {
+    try {
+      const res = await fetch(host, { method: "POST", body: new URLSearchParams({ data: q }), headers: { "User-Agent": "OsintfrontBot/1.0 (+https://osintfront.com)" } });
+      if (!res.ok) { lastErr = `${host} HTTP ${res.status}`; continue; }
+      data = await res.json();
+      break;
+    } catch (e) { lastErr = String((e as Error)?.message ?? e); }
+  }
+  if (!data) throw new Error(`Overpass: ${lastErr}`);
+  const rows = (data.elements ?? []).filter((e: any) => e.type === "way" && Array.isArray(e.geometry) && e.geometry.length > 1).map((e: any) => ({
+    way_id: e.id,
+    kind: e.tags?.waterway ?? (e.tags?.natural === "valley" ? "valley" : "waterway"),
+    name: String(e.tags?.name ?? "").slice(0, 200),
+    name_ar: e.tags?.["name:ar"] ?? (/[\u0600-\u06FF]/.test(e.tags?.name ?? "") ? e.tags.name : null),
+    name_en: e.tags?.["name:en"] ?? null,
+    name_he: e.tags?.["name:he"] ?? null,
+    geometry: { type: "LineString", coordinates: e.geometry.map((p: any) => [Math.round(p.lon * 1e6) / 1e6, Math.round(p.lat * 1e6) / 1e6]) },
+  }));
+  let saved = 0;
+  for (let i = 0; i < rows.length; i += 400) {
+    const { data: n, error } = await db.rpc("upsert_osm_waterways", { p_rows: rows.slice(i, i + 400) });
+    if (error) throw new Error(error.message);
+    saved += Number(n ?? 0);
+  }
+  const { data: courses, error } = await db.rpc("build_wadi_lines");
+  if (error) throw new Error(error.message);
+  await db.from("layer_sync").upsert({ layer: "wadis", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: Number(courses ?? 0), source: "OpenStreetMap (waterways and valleys with a name)", detail: `${rows.length} ways` }, { onConflict: "layer" });
+  return { ok: true, ways: rows.length, saved, courses: Number(courses ?? 0) };
+}

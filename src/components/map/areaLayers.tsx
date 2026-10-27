@@ -1,8 +1,9 @@
 // Map layers of areas: who controls what (Israel in Lebanon and Syria, Yemen, Gaza — copied daily
-// from a public war map) and Lebanese villages by religious community (Wikipedia).
+// from a public war map), Lebanese villages by religious community (Wikipedia) and the
+// courses of Lebanon's wadis and streams (OpenStreetMap).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Church, Flag } from 'lucide-react';
+import { Church, Flag, Waves } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 export type ControlRegion = 'lebanon' | 'syria' | 'yemen' | 'gaza';
@@ -22,12 +23,14 @@ const AREA_TXT = {
     control: 'אזורי שליטה', sects: 'עדות בלבנון', lebanon: 'לבנון', syria: 'סוריה', yemen: 'תימן', gaza: 'עזה',
     updated: 'סונכרן', source: 'מקור: מפת המלחמה (Google My Maps)', since: 'במפה מאז', sectsSource: 'מקור: ויקיפדיה (קטגוריות יישובים לפי עדה)',
     mixed: 'מעורב', places: 'יישובים', wiki: 'ויקיפדיה',
+    wadis: 'ואדיות ונחלים בלבנון', wadisSource: 'מקור: OpenStreetMap', courses: 'תוואים', km: 'ק"מ', aiName: 'שם בעברית: תעתיק AI',
     shia: 'שיעים', sunni: 'סונים', druze: 'דרוזים', alawite: 'עלאווים', maronite: 'מרונים', orthodox: 'יוונים-אורתודוקסים', melkite: 'יוונים-קתולים', armenian: 'ארמנים', christian: 'נוצרים (אחר)',
   },
   en: {
     control: 'Areas of control', sects: 'Lebanon: communities', lebanon: 'Lebanon', syria: 'Syria', yemen: 'Yemen', gaza: 'Gaza',
     updated: 'Synced', source: 'Source: war map (Google My Maps)', since: 'On the map since', sectsSource: 'Source: Wikipedia (communities by sect)',
     mixed: 'Mixed', places: 'places', wiki: 'Wikipedia',
+    wadis: 'Lebanon: wadis and streams', wadisSource: 'Source: OpenStreetMap', courses: 'courses', km: 'km', aiName: 'Hebrew name: AI transliteration',
     shia: 'Shia', sunni: 'Sunni', druze: 'Druze', alawite: 'Alawite', maronite: 'Maronite', orthodox: 'Greek Orthodox', melkite: 'Greek Catholic', armenian: 'Armenian', christian: 'Christian (other)',
   },
 } as const;
@@ -58,6 +61,13 @@ export function useAreaLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rtl
   const [sectsOn, setSectsOn] = useState(false);
   const [sects, setSects] = useState<Set<Sect>>(() => new Set(SECTS));
   const [places, setPlaces] = useState<SectPlace[]>([]);
+  const [wadisOn, setWadisOn] = useState(false);
+  const [wadis, setWadis] = useState<GeoJSON.FeatureCollection | null>(null);
+
+  useEffect(() => {
+    if (!supabase || !wadisOn || wadis) return;
+    void supabase.rpc('wadi_lines_geojson').then(({ data }) => setWadis((data as GeoJSON.FeatureCollection) ?? { type: 'FeatureCollection', features: [] }));
+  }, [wadisOn, wadis]);
 
   useEffect(() => {
     if (!supabase || (!controlOn && !sectsOn)) return;
@@ -131,7 +141,26 @@ export function useAreaLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rtl
     return () => void group.remove();
   }, [map, sectsOn, shownPlaces, sects, lang, dir, T]);
 
-  return { T, controlOn, setControlOn, regions, setRegions, areas, synced, sectsOn, setSectsOn, sects, setSects, shownPlaces };
+  useEffect(() => {
+    if (!map || !wadisOn || !wadis) return;
+    const layer = L.geoJSON(wadis, {
+      pane: 'ofmAreas',
+      style: { color: '#0284c7', weight: 2.5, opacity: 0.85 },
+      onEachFeature: (f, l) => {
+        const p = (f.properties ?? {}) as { name: string; ar?: string; en?: string; he?: string; ai?: boolean; km?: number };
+        const name = (lang === 'he' ? p.he : p.en) || p.name;
+        const other = [p.he, p.ar, p.en, p.name].filter((x, i, a) => x && x !== name && a.indexOf(x) === i).join(' · ');
+        l.bindTooltip(esc(name), { sticky: true, direction: 'top' });
+        l.bindPopup(
+          `<div dir="${dir}" style="font-size:12px;line-height:1.5"><b style="font-size:13px">${esc(name)}</b>${other ? `<br/><span style="color:#64748b">${esc(other)}</span>` : ''}${p.km ? `<br/>${p.km} ${T.km}` : ''}${lang === 'he' && p.he && p.ai ? `<br/><span style="color:#64748b">${T.aiName}</span>` : ''}<br/><span style="color:#64748b">${T.wadisSource}</span></div>`,
+        );
+      },
+    });
+    layer.addTo(map);
+    return () => void layer.remove();
+  }, [map, wadisOn, wadis, lang, dir, T]);
+
+  return { T, wadisOn, setWadisOn, wadiCount: wadis?.features.length ?? 0, controlOn, setControlOn, regions, setRegions, areas, synced, sectsOn, setSectsOn, sects, setSects, shownPlaces };
 }
 
 type AreaState = ReturnType<typeof useAreaLayers>;
@@ -191,6 +220,15 @@ export function AreaLayersPanel({ s }: { s: AreaState }) {
             <p className="text-[11px] text-slate-500">{T.sectsSource}</p>
           </div>
         ) : null}
+      </section>
+      <section className="mt-3 space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+          <input type="checkbox" className="size-4 accent-sky-600" checked={s.wadisOn} onChange={(e) => s.setWadisOn(e.target.checked)} />
+          <Waves className="size-4 text-slate-500" aria-hidden />
+          <span className="flex-1">{T.wadis}</span>
+          {s.wadisOn && s.wadiCount ? <span className="text-[11px] font-normal text-slate-500">{s.wadiCount} {T.courses}</span> : null}
+        </label>
+        {s.wadisOn ? <p className="ps-6 text-[11px] text-slate-500">{T.wadisSource}</p> : null}
       </section>
     </>
   );

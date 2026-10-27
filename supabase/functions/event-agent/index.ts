@@ -34,7 +34,7 @@ import { fetchLink, firstUrl, type LinkContent } from "../_shared/linkFetch.ts";
 import { imageAsBase64 } from "../whatsapp-ingest/telegram.ts";
 import { makeRoom } from "../_shared/videoOnDemand.ts";
 import { alreadyHas, hashImage } from "../_shared/imageHash.ts";
-import { controlSync, hebrewNamesSouthLebanon, learnSouthLebanon, sectsSync } from "../_shared/layers.ts";
+import { controlSync, hebrewNamesLebanon, hebrewNamesSouthLebanon, learnSouthLebanon, osmWadis, sectsSync } from "../_shared/layers.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "event-agent");
@@ -508,6 +508,21 @@ async function handle(req: Request): Promise<Response> {
   if (action === "hebrew_south_lebanon") {
     try {
       return json(await hebrewNamesSouthLebanon(db, Math.min(200, Number(body?.limit) || 120)));
+    } catch (e) {
+      return json({ ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "hebrew_lebanon") {
+    const kind = ["village", "wadi", "line"].includes(String(body?.kind)) ? String(body.kind) as "village" | "wadi" | "line" : "village";
+    try {
+      return json(await hebrewNamesLebanon(db, kind, Math.min(200, Number(body?.limit) || 120), Math.max(0, Number(body?.part) || 0), Math.max(1, Number(body?.parts) || 1)));
+    } catch (e) {
+      return json({ ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "osm_wadis") {
+    try {
+      return json(await osmWadis(db));
     } catch (e) {
       return json({ ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }
