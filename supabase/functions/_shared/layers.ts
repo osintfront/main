@@ -351,8 +351,29 @@ export async function osmWadis(db: Db, band = "s1") {
     await db.from("layer_sync").upsert({ layer: "wadis", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: count ?? 0, source: "OpenStreetMap (waterways and valleys with a name)", detail: `${courses} new courses` }, { onConflict: "layer" });
     return { ok: true, new_courses: Number(courses ?? 0), courses: count };
   }
+  if (band === "file") {
+    // The extract the GitHub workflow "OSM wadis (Lebanon)" wrote to the repository (Geofabrik).
+    const res = await fetch(`https://raw.githubusercontent.com/osintfront/main/main/data/osm/lebanon-waterways.jsonl?t=${Date.now()}`);
+    if (!res.ok) throw new Error(`extract HTTP ${res.status} (run the "OSM wadis" workflow first)`);
+    const rows = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((f: any) => f?.p?.name && Array.isArray(f.c) && f.c.length > 1).map((f: any) => ({
+      way_id: Number(String(f.id).replace(/\D/g, "")),
+      kind: f.p.waterway ?? (f.p.natural === "valley" ? "valley" : "waterway"),
+      name: String(f.p.name).slice(0, 200),
+      name_ar: f.p.ar ?? (/[\u0600-\u06FF]/.test(f.p.name) ? f.p.name : null),
+      name_en: f.p.en ?? null,
+      name_he: f.p.he ?? null,
+      geometry: { type: "LineString", coordinates: f.c },
+    })).filter((r: any) => Number.isFinite(r.way_id) && r.way_id > 0);
+    let saved = 0;
+    for (let i = 0; i < rows.length; i += 400) {
+      const { data: n, error } = await db.rpc("upsert_osm_waterways", { p_rows: rows.slice(i, i + 400) });
+      if (error) throw new Error(error.message);
+      saved += Number(n ?? 0);
+    }
+    return { ok: true, band, ways: rows.length, saved };
+  }
   const box = LEBANON_BANDS[band];
-  if (!box) throw new Error("band must be s1..s4 or build");
+  if (!box) throw new Error("band must be file, s1..s4 or build");
   // Lebanon = OSM relation 184843 (area 3600184843).
   const q = `[out:json][timeout:90];area(id:3600184843)->.lb;` +
     `(way["waterway"~"^(river|stream|wadi|canal|ditch|drain)$"]["name"](${box})(area.lb);way["natural"="valley"]["name"](${box})(area.lb););out tags geom;`;

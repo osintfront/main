@@ -1,0 +1,33 @@
+# Lebanon's named waterways and valleys from OpenStreetMap (Geofabrik extract), as GeoJSON lines.
+# The file is read by event-agent {action:"osm_wadis", band:"file"} → osm_waterways → wadi_lines.
+# Run by hand (Actions → "OSM wadis" → Run workflow) to refresh.
+name: OSM wadis (Lebanon)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install osmium
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool jq
+      - name: Download Lebanon extract
+        run: curl -sSfL -o lebanon.osm.pbf https://download.geofabrik.de/asia/lebanon-latest.osm.pbf
+      - name: Named waterways and valleys → GeoJSON lines
+        run: |
+          osmium tags-filter lebanon.osm.pbf w/waterway=river,stream,wadi,canal,ditch,drain w/natural=valley -o lines.osm.pbf --overwrite
+          osmium export lines.osm.pbf -f geojsonseq --geometry-types=linestring -a id -o lines.geojsonseq --overwrite
+          # Keep named ones; only the fields the import uses; coordinates to 6 decimals.
+          jq -c 'select(.properties.name != null) | {id: (.properties["@id"] // .id), p: {name: .properties.name, ar: .properties["name:ar"], en: .properties["name:en"], he: .properties["name:he"], waterway: .properties.waterway, natural: .properties.natural}, c: [.geometry.coordinates[] | [(.[0]*1e6|round/1e6), (.[1]*1e6|round/1e6)]]}' \
+            < <(sed 's/^\x1e//' lines.geojsonseq) > data/osm/lebanon-waterways.jsonl
+          wc -l data/osm/lebanon-waterways.jsonl
+      - name: Commit
+        run: |
+          git config user.name "osm-wadis bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/osm/lebanon-waterways.jsonl
+          git diff --cached --quiet || git commit -m "OSM: Lebanon named waterways and valleys"
+          git push
