@@ -10,6 +10,9 @@
 -- 3. wadi_lines_geojson(): the map layer "Wadis".
 -- ════════════════════════════════════════════════════════════════════
 
+-- Small index so the batches do not scan the whole place table (it overloaded the database).
+create index if not exists geo_places_lb_no_he_idx on public.geo_places (geonameid) where country_code = 'LB' and name_he is null;
+
 create or replace function public.lebanon_missing_hebrew(p_kind text, p_limit integer default 120, p_part integer default 0, p_parts integer default 1)
 returns table (geonameid bigint, name_ar text, name text) language sql stable security definer set search_path = '' as $$
   select g.geonameid, g.name_ar, g.name from public.geo_places g
