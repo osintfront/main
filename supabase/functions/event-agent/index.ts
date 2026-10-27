@@ -65,9 +65,25 @@ function expandedView(tr: Tr) {
   return { he: pick("he"), en: pick("en") };
 }
 
+const SOCIAL = /(^|\.)(twitter\.com|x\.com|facebook\.com|fb\.watch|instagram\.com|tiktok\.com|youtube\.com|youtu\.be|wa\.me|whatsapp\.com|chat\.whatsapp\.com)$/i;
+/** Up to two article links in a report text (not the post's own link, not social networks). */
+function articleLinks(text: string, own?: string | null): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/https?:\/\/[^\s<>"')\]]+/gi)) {
+    const u = m[0].replace(/[.,;:!?]+$/, "");
+    let host = "";
+    try { host = new URL(u).hostname; } catch { continue; }
+    if (SOCIAL.test(host) || (own && u.replace(/\/$/, "") === own.replace(/\/$/, ""))) continue;
+    if (/^(t\.me|telegram\.me)$/i.test(host) && !/\/\d+\/?$/.test(u)) continue; // a channel, not a post
+    if (!out.includes(u)) out.push(u);
+    if (out.length === 2) break;
+  }
+  return out;
+}
+
 async function expand(id: string) {
   const { data: ev } = await db.from("events")
-    .select("id,title,description,original_report_text,source_name,translations,ai_suggestions,status,deleted_at")
+    .select("id,title,description,original_report_text,source_name,source_url,translations,ai_suggestions,status,deleted_at")
     .eq("id", id).maybeSingle();
   if (!ev || ev.deleted_at || !["published", "archived"].includes(ev.status)) return json({ error: "not found" }, 404);
   const tr = asTr(ev.translations);
@@ -76,8 +92,12 @@ async function expand(id: string) {
     .eq("event_id", id).eq("decision", "merged_duplicate").order("sent_at").limit(6);
   const others = (merged ?? []).filter((m: any) => m.message_text && m.message_text !== ev.original_report_text);
   const cached = expandedView(tr);
+  // Links to articles in the report (not the post itself, not social networks): the
+  // expansion reads them. Older expansions written without reading the link are redone once.
+  const links = articleLinks([ev.original_report_text, ...others.map((m: any) => m.message_text)].join("\n"), ev.source_url);
+  const linksDone = !links.length || ev.ai_suggestions?.expand_links_read !== undefined;
   // Cached unless more reports were merged since it was written.
-  if (cached.he && Number(ev.ai_suggestions?.expanded_sources ?? 0) >= others.length && Number(ev.ai_suggestions?.expand_version ?? 1) >= EXPAND_VERSION) {
+  if (cached.he && linksDone && Number(ev.ai_suggestions?.expanded_sources ?? 0) >= others.length && Number(ev.ai_suggestions?.expand_version ?? 1) >= EXPAND_VERSION) {
     return json({ ok: true, cached: true, ...cached });
   }
   // One writer at a time: a second reader within a minute waits for the first.
@@ -85,8 +105,12 @@ async function expand(id: string) {
   if (Number.isFinite(started) && Date.now() - started < 90_000) return json({ ok: true, pending: true }, 202);
   await db.from("events").update({ ai_suggestions: { ...(ev.ai_suggestions ?? {}), expanding_at: new Date().toISOString() } }).eq("id", id);
   try {
+    const pages = (await Promise.all(links.map((u) => fetchLink(u).catch(() => null))))
+      .filter((p): p is LinkContent => !!p && p.text.length > 80);
+    if (links.length) console.log("expand links", id, links.join(" "), `read ${pages.length}`);
     const r = await expandReport({
       text: [ev.original_report_text || ev.description || ev.title,
+        ...pages.map((p) => `--- הכתבה המקושרת (${p.sourceName}, ${p.url}):\n${p.text.slice(0, 6000)}`),
         ...others.map((m: any, i: number) => `--- דיווח נוסף ${i + 1} (${m.chat_name ?? "מקור נוסף"}):\n${String(m.message_text).slice(0, 2000)}`)].join("\n\n"),
       title: ev.title, summary: tr.he?.summary ?? ev.description ?? "", origin: ev.source_name ?? "",
     });
@@ -96,7 +120,8 @@ async function expand(id: string) {
       en: { ...(tr.en ?? {}), details: r.en.details, religious: r.en.religious, implications: r.en.implications },
     };
     const { data: cur } = await db.from("events").select("ai_suggestions").eq("id", id).maybeSingle();
-    const ai = { ...(cur?.ai_suggestions ?? {}), expand_model: r.model, expanded_sources: others.length, expand_version: EXPAND_VERSION };
+    const ai = { ...(cur?.ai_suggestions ?? {}), expand_model: r.model, expanded_sources: others.length, expand_version: EXPAND_VERSION,
+      ...(links.length ? { expand_links_read: pages.length } : {}) };
     delete (ai as Record<string, unknown>).expanding_at;
     await db.from("events").update({ translations: next, ai_suggestions: ai }).eq("id", id);
     return json({ ok: true, cached: false, ...expandedView(next) });
