@@ -353,7 +353,8 @@ export async function osmWadis(db: Db, band = "s1") {
   }
   const box = LEBANON_BANDS[band];
   if (!box) throw new Error("band must be s1..s4 or build");
-  const q = `[out:json][timeout:90];area["ISO3166-1"="LB"][admin_level=2]->.lb;` +
+  // Lebanon = OSM relation 184843 (area 3600184843).
+  const q = `[out:json][timeout:90];area(id:3600184843)->.lb;` +
     `(way["waterway"~"^(river|stream|wadi|canal|ditch|drain)$"]["name"](${box})(area.lb);way["natural"="valley"]["name"](${box})(area.lb););out tags geom;`;
   let data: any = null;
   let lastErr = "";
@@ -381,5 +382,5 @@ export async function osmWadis(db: Db, band = "s1") {
     if (error) throw new Error(error.message);
     saved += Number(n ?? 0);
   }
-  return { ok: true, band, ways: rows.length, saved };
+  return { ok: true, band, ways: rows.length, saved, elements: (data.elements ?? []).length, remark: data.remark ?? null };
 }
