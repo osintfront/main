@@ -125,6 +125,26 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
+/**
+ * Several pins on the very same spot, laid out so each one is visible and easy to tap:
+ * 2–3 side by side, 4–12 in a ring around the spot, more in centred rows. Returns [x, y] pixels.
+ */
+function spread(i: number, n: number): [number, number] {
+  if (n <= 1) return [0, 0];
+  if (n <= 3) return [Math.round((i - (n - 1) / 2) * 38), 0];
+  if (n <= 12) {
+    const r = Math.max(34, (42 * n) / (2 * Math.PI));
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    return [Math.round(r * Math.cos(a)), Math.round(r * Math.sin(a) + r * 0.35)];
+  }
+  const cols = 6;
+  const rows = Math.ceil(n / cols);
+  const row = Math.floor(i / cols);
+  const inRow = row === rows - 1 ? n - row * cols : cols;
+  const col = i % cols;
+  return [Math.round((col - (inRow - 1) / 2) * 38), Math.round((row - (rows - 1) / 2) * 44)];
+}
+
 export function MapView({
   onFilterCategory,
   events,
@@ -532,10 +552,11 @@ export function MapView({
       stacks.forEach((list) => {
         list.sort((a, b) => (a.event.id < b.event.id ? -1 : 1));
         list.forEach(({ marker, event, index }, i) => {
-          const shift = list.length > 1 ? Math.round((i - (list.length - 1) / 2) * 24) : 0;
-          const o = marker.options as { ofmShift?: number; ofmIcon?: string; ofmColor?: string };
-          if ((o.ofmShift ?? 0) === shift) return;
+          const [shift, shiftY] = spread(i, list.length);
+          const o = marker.options as { ofmShift?: number; ofmShiftY?: number; ofmIcon?: string; ofmColor?: string };
+          if ((o.ofmShift ?? 0) === shift && (o.ofmShiftY ?? 0) === shiftY) return;
           o.ofmShift = shift;
+          o.ofmShiftY = shiftY;
           marker.setIcon(
             createMarkerIcon({
               iconName: o.ofmIcon ?? event.category.icon,
@@ -545,6 +566,7 @@ export function MapView({
               breaking: event.isBreaking,
               compact: index > 0,
               shift,
+              shiftY,
             }),
           );
         });
@@ -774,6 +796,7 @@ export function MapView({
             breaking: event.isBreaking,
             compact: index > 0,
             shift: (marker.options as { ofmShift?: number }).ofmShift,
+            shiftY: (marker.options as { ofmShiftY?: number }).ofmShiftY,
           }),
         );
         marker.setZIndexOffset(selected ? 1000 : event.severity === 'critical' ? 400 : 0);

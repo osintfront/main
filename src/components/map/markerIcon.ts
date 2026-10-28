@@ -29,6 +29,8 @@ interface MarkerIconOptions {
   compact?: boolean;
   /** Pixels to the side: pins of several reports on the very same spot stand side by side. */
   shift?: number;
+  /** Pixels down (negative = up): many pins on one spot are laid out in a ring or rows. */
+  shiftY?: number;
 }
 
 const iconCache = new Map<string, L.DivIcon>();
@@ -40,7 +42,7 @@ const iconCache = new Map<string, L.DivIcon>();
  */
 export function createMarkerIcon(opts: MarkerIconOptions): L.DivIcon {
   const color = safeColor(opts.color);
-  const key = `${opts.iconName}|${color}|${opts.severity}|${opts.selected ? 1 : 0}|${opts.breaking ? 1 : 0}|${opts.compact ? 1 : 0}|${opts.shift ?? 0}`;
+  const key = `${opts.iconName}|${color}|${opts.severity}|${opts.selected ? 1 : 0}|${opts.breaking ? 1 : 0}|${opts.compact ? 1 : 0}|${opts.shift ?? 0}|${opts.shiftY ?? 0}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
 
@@ -58,8 +60,8 @@ export function createMarkerIcon(opts: MarkerIconOptions): L.DivIcon {
     className: 'ofm-pin-wrap',
     html: `<div class="${classes}" style="--pin-color:${color};--pin-size:${size}px"><span class="ofm-pin__body"><span class="ofm-pin__glyph">${iconSvg(opts.iconName, opts.compact ? 12 : opts.selected ? 18 : 15)}</span></span></div>`,
     iconSize: [size, size],
-    iconAnchor: [size / 2 - (opts.shift ?? 0), size],
-    popupAnchor: [opts.shift ?? 0, -size + 2],
+    iconAnchor: [size / 2 - (opts.shift ?? 0), size - (opts.shiftY ?? 0)],
+    popupAnchor: [opts.shift ?? 0, -size + 2 + (opts.shiftY ?? 0)],
   });
   iconCache.set(key, icon);
   return icon;
