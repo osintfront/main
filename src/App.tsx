@@ -1,3 +1,4 @@
+import { LicensesPage } from '@/pages/admin/LicensesPage';
 import { LegalPlaceholder } from '@/pages/public/LegalPlaceholder';
 import type { ComponentType, ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
@@ -41,6 +42,7 @@ const IMPLEMENTED: Record<string, ComponentType> = {
   learning: LearningPage,
   aiUsage: AiUsagePage,
   users: UsersPage,
+  licenses: LicensesPage,
 };
 
 /** The back office home: the dashboard, or the events list for editors (no dashboard). */

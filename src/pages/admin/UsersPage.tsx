@@ -1,4 +1,3 @@
-import { LicensePanel } from '@/components/admin/LicensePanel';
 import { PlanCell } from '@/components/admin/PlanCell';
 import { WelcomePanel } from '@/components/admin/WelcomePanel';
 import { latestSessions, type SessionRow } from '@/services/planService';
@@ -168,7 +167,6 @@ export function UsersPage() {
         </form>
       ) : null}
 
-      {superAdmin ? <LicensePanel /> : null}
       {welcome ? <WelcomePanel user={welcome} onClose={() => setWelcome(null)} /> : null}
       {secret ? (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">

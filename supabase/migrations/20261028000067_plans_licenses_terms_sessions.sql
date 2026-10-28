@@ -320,3 +320,17 @@ grant execute on function public.password_changed() to authenticated;
 -- Members read the plan / terms switches (they decide what the site asks of them).
 create policy "settings: members read plan and terms switches" on public.app_settings for select to authenticated
   using (key in ('enforce_plans', 'require_terms', 'terms_version', 'privacy_version') and (select public.is_member()));
+-- Delete a license row (revokes it first; the audit log keeps the record).
+create or replace function public.admin_delete_license(p_key text)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.is_super_admin() then raise exception 'not allowed'; end if;
+  update public.license_keys set revoked = true, revoked_at = now(), revoked_by = auth.uid() where key = p_key;
+  delete from public.license_redemptions where key = p_key;
+  delete from public.license_keys where key = p_key;
+  insert into public.plan_audit (actor, action, details) values (auth.uid(), 'license_deleted', jsonb_build_object('key', p_key));
+end $$;
+revoke all on function public.admin_delete_license(text) from public, anon;
+grant execute on function public.admin_delete_license(text) to authenticated;
+-- Staff (super admin, admin) are on Max.
+update public.profiles set plan = 'max', plan_source = 'default', plan_expires_at = null where role in ('super_admin', 'admin');

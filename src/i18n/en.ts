@@ -384,6 +384,7 @@ export const en = {
   'admin.nav.events': 'Events',
   'admin.nav.newEvent': 'Report event',
   'admin.nav.users': 'Users',
+  'admin.nav.licenses': 'Licenses',
   'admin.nav.categories': 'Categories',
   'admin.nav.audit': 'Audit log',
   'admin.nav.newsAgents': "News agents",
@@ -512,6 +513,7 @@ export const en = {
 
   'admin.module.events': 'Search, filter and moderate every event through draft, review and publication.',
   'admin.module.newEvent': 'Paste a natural-language report and get a suggested category, location and pin.',
+  'admin.module.licenses': 'Create, revoke and delete eval licenses.',
   'admin.module.users': 'Invite staff, change roles, suspend and reactivate accounts.',
   'admin.module.categories': 'Colours, icons and visibility for the event taxonomy.',
   'admin.module.audit': 'Every sensitive action, who did it and when.',

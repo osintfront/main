@@ -6,6 +6,7 @@ import {
   ListChecks,
   Rss,
   ScrollText,
+  KeyRound,
   Settings,
   Tags,
   Users,
@@ -90,6 +91,18 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     anyOf: ['user.manage', 'user.invite'],
     phase: 5,
     backend: ['profiles', 'administrator_invitations', 'role guard trigger', 'last-super-admin protection'],
+    showInNav: true,
+  },
+  {
+    id: 'licenses',
+    path: '/admin/licenses',
+    route: 'licenses',
+    labelKey: 'admin.nav.licenses',
+    descriptionKey: 'admin.module.licenses',
+    icon: KeyRound,
+    anyOf: ['role.manage'], // super admin only
+    phase: 5,
+    backend: ['license_keys', 'license_redemptions', 'plan_audit'],
     showInNav: true,
   },
   {

@@ -13,6 +13,7 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 
 export const createLicense = (plan: 'pro' | 'max', days: 7 | 14 | 30, note: string, maxUses: number) =>
   rpc<string>('admin_create_license', { p_plan: plan, p_days: days, p_note: note || null, p_max_uses: maxUses });
+export const deleteLicense = (key: string) => rpc<void>('admin_delete_license', { p_key: key });
 export const revokeLicense = (key: string) => rpc<void>('admin_revoke_license', { p_key: key });
 export const redeemLicense = (key: string) => rpc<{ ok: boolean; error?: string; plan?: PlanId; expires_at?: string }>('redeem_license', { p_key: key });
 export const setPlan = (user: string, plan: PlanId, source: 'default' | 'eval' | 'paid', expires: string | null) =>

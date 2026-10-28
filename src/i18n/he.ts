@@ -386,6 +386,7 @@ export const he: Record<TranslationKey, string> = {
   'admin.nav.events': 'אירועים',
   'admin.nav.newEvent': 'דיווח אירוע',
   'admin.nav.users': 'משתמשים',
+  'admin.nav.licenses': 'רישוי',
   'admin.nav.categories': 'קטגוריות',
   'admin.nav.audit': 'יומן ביקורת',
   'admin.nav.newsAgents': "סוכני ידיעות",
@@ -514,6 +515,7 @@ export const he: Record<TranslationKey, string> = {
 
   'admin.module.events': 'חיפוש, סינון ומיתון של כל האירועים — מטיוטה, דרך בדיקה ועד פרסום.',
   'admin.module.newEvent': 'הדביקו דיווח בשפה חופשית וקבלו הצעה לקטגוריה, מיקום וסיכה במפה.',
+  'admin.module.licenses': 'יצירה, ביטול ומחיקה של רישיונות Eval.',
   'admin.module.users': 'הזמנת אנשי צוות, שינוי תפקידים, השעיה והפעלה מחדש.',
   'admin.module.categories': 'צבעים, סמלים ונראות של סיווגי האירועים.',
   'admin.module.audit': 'כל פעולה רגישה — מי ביצע ומתי.',

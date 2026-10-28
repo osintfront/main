@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Copy, KeyRound } from 'lucide-react';
-import { createLicense, listLicenses, revokeLicense, type LicenseRow } from '@/services/planService';
+import { createLicense, deleteLicense, listLicenses, revokeLicense, type LicenseRow } from '@/services/planService';
 
 /** Super admin only: "יצירת רישיון Eval" — Pro / Max for 7 / 14 / 30 days. */
 export function LicensePanel() {
@@ -46,7 +46,10 @@ export function LicensePanel() {
                 <tr key={r.key} className={r.revoked ? 'opacity-50' : ''}>
                   <td className="py-1 font-mono" dir="ltr">{r.key}</td><td>{r.plan.toUpperCase()}</td><td>{r.duration_days}</td><td>{r.uses}/{r.max_uses}</td>
                   <td>{r.note ?? ''}</td><td>{new Date(r.redeem_by).toLocaleDateString('he-IL')}</td>
-                  <td>{r.revoked ? 'בוטל' : <button type="button" className="font-semibold text-red-600" onClick={() => void revokeLicense(r.key).then(reload)}>ביטול</button>}</td>
+                  <td className="whitespace-nowrap">
+                    {r.revoked ? 'בוטל' : <button type="button" className="font-semibold text-amber-700 dark:text-amber-400" onClick={() => void revokeLicense(r.key).then(reload)}>ביטול</button>}
+                    <button type="button" className="ms-3 font-semibold text-red-600" onClick={() => { if (window.confirm(`למחוק את ${r.key}? הרישיון יבוטל וימחק לגמרי.`)) void deleteLicense(r.key).then(reload); }}>מחיקה</button>
+                  </td>
                 </tr>
               ))}
             </tbody>

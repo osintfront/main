@@ -14,7 +14,7 @@ export function PlanCell({ u, canEdit, onChanged }: { u: Profile; canEdit: boole
   return (
     <div dir="rtl" className="space-y-1">
       <div>
-        <b>{PLAN_LABEL[plan]}</b> · {SOURCE[u.planSource]}
+        <b>{PLAN_LABEL[plan]}</b>{u.planSource !== 'default' ? ` · ${SOURCE[u.planSource]}` : ''}
         {u.planExpiresAt ? <span className="text-slate-500"> · עד {new Date(u.planExpiresAt).toLocaleDateString('he-IL')} ({left! > 0 ? `${left} ימים` : 'פג'})</span> : null}
       </div>
       {canEdit ? (

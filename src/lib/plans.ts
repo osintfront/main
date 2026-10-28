@@ -38,8 +38,9 @@ export function setPlanUser(p: Profile | null) {
 }
 
 /** The plan in force: an expired plan counts as Free. */
-export function effectivePlan(p: Pick<Profile, 'plan' | 'planExpiresAt'> | null): PlanId {
+export function effectivePlan(p: (Pick<Profile, 'plan' | 'planExpiresAt'> & { role?: Profile['role'] }) | null): PlanId {
   if (!p) return 'free';
+  if (p.role === 'super_admin' || p.role === 'admin') return 'max'; // staff: everything
   if (p.plan !== 'free' && p.planExpiresAt && new Date(p.planExpiresAt).getTime() < Date.now()) return 'free';
   return p.plan;
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, Image as ImageIcon, Mail, MessageCircle, Share2, X } from 'lucide-react';
+import { Copy, Image as ImageIcon, Mail, MessageCircle, X } from 'lucide-react';
 import { SITE_URL, WELCOME_LOGO, welcomeText } from '@/config/welcome';
 
 /**
@@ -13,19 +13,6 @@ export function WelcomePanel({ user, onClose }: { user: { name: string; email: s
   const logoUrl = new URL(WELCOME_LOGO, SITE_URL).href;
 
   const logoBlob = async () => (await fetch(WELCOME_LOGO)).blob();
-  const fileShare = typeof navigator !== 'undefined' && 'canShare' in navigator
-    ? (() => { try { return navigator.canShare({ files: [new File([new Uint8Array(1)], 'logo.png', { type: 'image/png' })] }); } catch { return false; } })()
-    : false;
-
-  const share = async () => {
-    try {
-      const file = new File([await logoBlob()], 'osintfront.png', { type: 'image/png' });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], text });
-        flash('שותף ✓');
-      }
-    } catch { /* cancelled */ }
-  };
   const copyLogo = async () => {
     try {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': logoBlob() })]);
@@ -35,7 +22,7 @@ export function WelcomePanel({ user, onClose }: { user: { name: string; email: s
   const copy = async (v: string, m: string) => { try { await navigator.clipboard.writeText(v); flash(m); } catch { /* ignore */ } };
   const waText = `${logoUrl}\n\n${text}`;
   const mail = `mailto:${encodeURIComponent(user.email)}?subject=${encodeURIComponent('ברוך הבא ל-OSINTFront')}&body=${encodeURIComponent(`${logoUrl}\n\n${text}`)}`;
-  const btn = 'inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700';
+  const btn = 'inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-800 ring-1 ring-slate-300 hover:bg-sky-50 hover:text-sky-800 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-600 dark:hover:bg-slate-700 dark:hover:text-white';
 
   return (
     <div dir="rtl" className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-500/40 dark:bg-emerald-500/10">
@@ -46,14 +33,8 @@ export function WelcomePanel({ user, onClose }: { user: { name: string; email: s
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <code dir="ltr" className="rounded-lg bg-white px-3 py-2 font-mono text-base font-bold text-slate-900 ring-1 ring-emerald-300 dark:bg-slate-900 dark:text-white">{user.password}</code>
         <button type="button" className={btn} onClick={() => void copy(user.password, 'הסיסמה הועתקה ✓')}><Copy className="size-4" />העתק סיסמה</button>
-        {fileShare ? (
-          <button type="button" className={btn} onClick={() => void share()}><Share2 className="size-4" />שתף הודעת ברוכים הבאים</button>
-        ) : (
-          <>
-            <button type="button" className={btn} onClick={() => void copyLogo()}><ImageIcon className="size-4" />העתק לוגו</button>
-            <button type="button" className={btn} onClick={() => void copy(text, 'הטקסט הועתק ✓')}><Copy className="size-4" />העתק טקסט</button>
-          </>
-        )}
+        <button type="button" className={btn} onClick={() => void copy(text, 'ההודעה הועתקה ✓')}><Copy className="size-4" />העתק הודעה</button>
+        <button type="button" className={btn} onClick={() => void copyLogo()}><ImageIcon className="size-4" />העתק לוגו</button>
         <a className={btn} href={`https://wa.me/?text=${encodeURIComponent(waText)}`} target="_blank" rel="noopener noreferrer"><MessageCircle className="size-4" />שלח בוואטסאפ</a>
         <a className={btn} href={mail}><Mail className="size-4" />שלח במייל</a>
         {done ? <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{done}</span> : null}
