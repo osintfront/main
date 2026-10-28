@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, SlidersHorizontal, History, LayoutDashboard, Radio, Search, X } from 'lucide-react';
+import { InstallAppButton } from '@/components/install/InstallAppButton';
 import { SoundMenu } from './SoundMenu';
 import { UserMenu } from './UserMenu';
 import { useToast } from '@/components/common/Toast';
@@ -186,6 +187,7 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
         >
           {mode === 'live' ? <History className="size-4" aria-hidden /> : <Radio className="size-4 text-red-500" aria-hidden />}
         </Link>
+        {mode === 'live' ? <InstallAppButton /> : null}
         {mode === 'live' ? <SoundMenu onOpen={onSoundOpen} /> : null}
         <LanguageToggle />
         <ThemeToggle />

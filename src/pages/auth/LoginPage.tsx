@@ -7,6 +7,7 @@ import { loginLockRemaining, type SignInFailure } from '@/services/authService';
 import { isValidEmail, safeRedirectPath } from '@/utils/url';
 import { LiveBadge, LoginGlobe, LoginTicker } from '@/components/auth/LoginShowcase';
 import { LanguageToggle, ThemeToggle } from '@/components/common/Toggles';
+import { InstallAppButton } from '@/components/install/InstallAppButton';
 import { SetupNotice } from '@/components/auth/SetupNotice';
 import { Alert, FullScreenLoader } from '@/components/common/Feedback';
 import { Button, TextField } from '@/components/common/Form';
@@ -101,6 +102,7 @@ export function LoginPage() {
       <LoginGlobe className="pointer-events-none absolute start-1/2 top-[38%] size-[120vmin] -translate-x-1/2 -translate-y-1/2 opacity-50 rtl:translate-x-1/2 lg:hidden" />
 
       <header className="relative z-10 flex h-14 items-center justify-end gap-0.5 px-4 [&_button]:text-slate-300 [&_button:hover]:bg-white/10 [&_button:hover]:text-white">
+        <InstallAppButton />
         <LanguageToggle />
         <ThemeToggle />
       </header>
