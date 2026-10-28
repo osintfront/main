@@ -2,7 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { AppRole, Profile, UserStatus } from '@/types/user';
 import { ServiceError, toServiceError } from './serviceError';
 
-const PROFILE_COLUMNS = 'id,full_name,email,role,status,can_publish,created_at,last_login_at';
+const PROFILE_COLUMNS = 'id,full_name,email,role,status,can_publish,created_at,last_login_at,plan,plan_source,plan_expires_at,billing_period,must_change_password';
 
 interface ProfileRow {
   id: string;
@@ -13,6 +13,11 @@ interface ProfileRow {
   can_publish: boolean;
   created_at: string;
   last_login_at: string | null;
+  plan?: Profile['plan'];
+  plan_source?: Profile['planSource'];
+  plan_expires_at?: string | null;
+  billing_period?: Profile['billingPeriod'];
+  must_change_password?: boolean;
 }
 
 function mapProfile(row: ProfileRow): Profile {
@@ -25,6 +30,11 @@ function mapProfile(row: ProfileRow): Profile {
     canPublish: row.can_publish,
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
+    plan: row.plan ?? 'free',
+    planSource: row.plan_source ?? 'default',
+    planExpiresAt: row.plan_expires_at ?? null,
+    billingPeriod: row.billing_period ?? null,
+    mustChangePassword: !!row.must_change_password,
   };
 }
 

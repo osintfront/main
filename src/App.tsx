@@ -1,3 +1,4 @@
+import { LegalPlaceholder } from '@/pages/public/LegalPlaceholder';
 import type { ComponentType, ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -64,6 +65,9 @@ export function App() {
               <Route path="/about" element={<SitePage page="about" />} />
               <Route path="/privacy" element={<SitePage page="privacy" />} />
               <Route path="/contact" element={<SitePage page="contact" />} />
+              <Route path="/terms" element={<LegalPlaceholder page="terms" />} />
+              <Route path="/refund-policy" element={<LegalPlaceholder page="refund" />} />
+              <Route path="/cancel-subscription" element={<LegalPlaceholder page="cancel" />} />
               <Route path="/" element={<RequireAuth><MapPage /></RequireAuth>} />
               <Route path="/account" element={<RequireAuth><MemberAccountPage /></RequireAuth>} />
               <Route path="/login" element={<LoginPage />} />

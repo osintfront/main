@@ -1,3 +1,4 @@
+import { hasFeature } from '@/lib/plans';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import L from 'leaflet';
@@ -519,7 +520,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Satellite */}
           <section className="space-y-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-            {sectionHead(Satellite, T.sat, satOn, setSatOn)}
+            {sectionHead(Satellite, T.sat, satOn, (v) => (!v || hasFeature(undefined, 'satellite')) && setSatOn(v))}
             {satOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 <select className={`${box} w-full`} value={src} onChange={(e) => setSrc(e.target.value as SatSource)} aria-label={T.source}>
@@ -575,7 +576,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Ships */}
           <section className="space-y-2 border-b border-slate-100 py-3 dark:border-slate-800">
-            {sectionHead(Ship, T.ships, shipsOn, setShipsOn, shipsOn ? `${shownShips.length} ${T.shown}` : undefined)}
+            {sectionHead(Ship, T.ships, shipsOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft')) && setShipsOn(v), shipsOn ? `${shownShips.length} ${T.shown}` : undefined)}
             {shipsOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {shipErr ? <p className="text-red-600">{shipErr}</p> : !vessels.length ? <p>{T.noShips}</p> : null}
@@ -624,7 +625,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Aircraft */}
           <section className="space-y-2 pt-3">
-            {sectionHead(PlaneIcon, T.planes, planesOn, setPlanesOn, planesOn ? `${shownPlanes.length} ${T.shown}` : undefined)}
+            {sectionHead(PlaneIcon, T.planes, planesOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft')) && setPlanesOn(v), planesOn ? `${shownPlanes.length} ${T.shown}` : undefined)}
             {planesOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {planeErr ? <p className="text-red-600">{planeErr}</p> : null}

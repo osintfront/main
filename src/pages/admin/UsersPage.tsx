@@ -1,3 +1,7 @@
+import { LicensePanel } from '@/components/admin/LicensePanel';
+import { PlanCell } from '@/components/admin/PlanCell';
+import { WelcomePanel } from '@/components/admin/WelcomePanel';
+import { latestSessions, type SessionRow } from '@/services/planService';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Copy, KeyRound, Plus, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -44,15 +48,19 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [form, setForm] = useState({ email: '', name: '', role: (roles.includes('analyst') ? 'analyst' : roles[0]) as AppRole });
+  const [form, setForm] = useState({ email: '', name: '', role: (roles.includes('viewer') ? 'viewer' : roles[0]) as AppRole });
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
+  const [welcome, setWelcome] = useState<{ name: string; email: string; password: string; plan: string } | null>(null);
+  const [sessions, setSessions] = useState<Map<string, SessionRow>>(new Map());
+  const superAdmin = me?.role === 'super_admin';
   const [removing, setRemoving] = useState<Profile | null>(null);
 
   const load = useCallback(async () => {
     try {
       setUsers(await listProfiles());
       setError(null);
+      void latestSessions().then(setSessions).catch(() => {});
     } catch (err) {
       setError(friendlyError(err, t));
     } finally {
@@ -72,8 +80,9 @@ export function UsersPage() {
     setCreating(true);
     try {
       const password = await createUser(form.email.trim(), form.name.trim(), form.role);
-      setSecret({ email: form.email.trim(), password });
-      setForm((f) => ({ ...f, email: '', name: '' }));
+      // Keep the typed email and name; show the welcome panel (the password lives only there).
+      setSecret(null);
+      setWelcome({ name: form.name.trim(), email: form.email.trim(), password, plan: 'Free' });
       await load();
     } catch (err) {
       toast.error(friendlyError(err, t));
@@ -159,6 +168,8 @@ export function UsersPage() {
         </form>
       ) : null}
 
+      {superAdmin ? <LicensePanel /> : null}
+      {welcome ? <WelcomePanel user={welcome} onClose={() => setWelcome(null)} /> : null}
       {secret ? (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
           <div className="min-w-0 flex-1">
@@ -191,6 +202,8 @@ export function UsersPage() {
               <th className="px-3 py-2.5 text-start">{t('users.role')}</th>
               <th className="px-3 py-2.5 text-start">{t('users.status')}</th>
               <th className="px-3 py-2.5 text-start">{t('users.lastLogin')}</th>
+              <th className="px-3 py-2.5 text-start normal-case">חבילה</th>
+              <th className="px-3 py-2.5 text-start normal-case">מכשיר אחרון</th>
               <th className="px-3 py-2.5" />
             </tr>
             <tr className="normal-case tracking-normal">
@@ -215,6 +228,8 @@ export function UsersPage() {
                   {uniq(users.map(loginDay)).reverse().map((v) => <option key={v} value={v}>{v === 'never' ? t('common.never') : v.split('-').reverse().join('/')}</option>)}
                 </select>
               </th>
+              <th />
+              <th />
               <th className="px-3 pb-2.5" />
             </tr>
           </thead>
@@ -272,6 +287,8 @@ export function UsersPage() {
                     )}
                   </td>
                   <td className="px-3 py-3 text-xs text-slate-500">{u.lastLoginAt ? formatDateTime(u.lastLoginAt, locale) : '—'}</td>
+                  <td className="px-3 py-3 text-xs"><PlanCell u={u} canEdit={superAdmin && u.id !== me?.id} onChanged={load} /></td>
+                  <td className="px-3 py-3 text-xs text-slate-500">{(() => { const ss = sessions.get(u.id); return ss ? `${ss.device_type ?? ''} · ${ss.browser ?? ''}${ss.ended_at ? ' (נותק)' : ''} · ${formatDateTime(ss.last_seen, locale)}` : '—'; })()}</td>
                   <td className="px-3 py-3">
                     {can_ ? (
                       <div className="flex justify-end gap-0.5">

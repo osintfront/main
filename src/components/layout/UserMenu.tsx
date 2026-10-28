@@ -1,3 +1,4 @@
+import { effectivePlan, PLAN_LABEL } from '@/lib/plans';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, LogOut, UserCog } from 'lucide-react';
@@ -66,6 +67,7 @@ export function UserMenu() {
               </p>
             ) : null}
             {profile ? <p className="mt-1 text-[11px] font-medium text-sky-700 dark:text-sky-400">{t(`role.${profile.role}`)}</p> : null}
+            {profile ? <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400" dir="rtl">החבילה שלך: {PLAN_LABEL[effectivePlan(profile)]}</p> : null}
           </div>
           {staff ? (
             <Link role="menuitem" to="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
@@ -76,6 +78,9 @@ export function UserMenu() {
           <Link role="menuitem" to={staff ? '/admin/account' : '/account'} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
             <UserCog className="size-4" aria-hidden />
             {t('user.account')}
+          </Link>
+          <Link role="menuitem" to="/cancel-subscription" onClick={() => setOpen(false)} className="block px-4 py-2 text-xs text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
+            ביטול מנוי
           </Link>
           <button
             role="menuitem"

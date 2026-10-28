@@ -29,7 +29,10 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 function tempPassword(): string {
   const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
   const b = crypto.getRandomValues(new Uint8Array(16));
-  return [...b].map((x) => abc[x % abc.length]).join("");
+  // Meets the site's rules: upper + lower + digit + special, 18 characters.
+  const core = [...b].map((x) => abc[x % abc.length]).join("");
+  const n = crypto.getRandomValues(new Uint8Array(2));
+  return `${core}${"#$%&*@!?"[n[0] % 8]}${n[1] % 10}A`;
 }
 
 Deno.serve(async (req) => {
@@ -61,6 +64,8 @@ Deno.serve(async (req) => {
         await admin.from("administrator_invitations").update({ status: "revoked" }).eq("id", inv.id);
         return json({ error: error?.message ?? "Could not create the user." }, 400);
       }
+      // First sign-in must set a new password. (The password itself is never stored or logged.)
+      await admin.from("profiles").update({ must_change_password: true }).eq("id", created.user.id);
       return json({ ok: true, user_id: created.user.id, password });
     }
 

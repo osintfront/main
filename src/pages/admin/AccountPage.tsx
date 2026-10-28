@@ -1,3 +1,4 @@
+import { PlanCard } from '@/components/account/PlanCard';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/i18n';
@@ -81,6 +82,8 @@ export function AccountPage() {
           </Button>
         </form>
       </Card>
+
+      <PlanCard />
 
       <Card title={t('account.password')}>
         {passwordSaved ? <Alert tone="success" className="mb-4">{t('auth.passwordUpdated')}</Alert> : null}

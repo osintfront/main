@@ -14,4 +14,12 @@ export interface Profile {
   canPublish: boolean;
   createdAt: string;
   lastLoginAt: string | null;
+  /** Subscription plan (not enforced while app_settings.enforce_plans = false). */
+  plan: PlanId;
+  planSource: 'default' | 'eval' | 'paid';
+  planExpiresAt: string | null;
+  billingPeriod: 'monthly' | 'yearly' | null;
+  mustChangePassword: boolean;
 }
+
+export type PlanId = 'free' | 'pro' | 'max';

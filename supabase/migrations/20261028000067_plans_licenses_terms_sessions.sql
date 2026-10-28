@@ -308,3 +308,12 @@ begin
 end $$;
 revoke all on function public.register_session(text, text), public.session_active() from public, anon;
 grant execute on function public.register_session(text, text), public.session_active() to authenticated;
+
+-- First sign-in with a temporary password: the user clears the flag after choosing a new one.
+create or replace function public.password_changed() returns void language sql security definer set search_path = '' as $$
+  update public.profiles set must_change_password = false where id = auth.uid();
+$$;
+revoke all on function public.password_changed() from public, anon;
+grant execute on function public.password_changed() to authenticated;
+-- Hourly: plans whose time is up go back to Free.
+-- select cron.schedule('osintfront-expire-plans', '11 * * * *', 'select public.expire_plans()');

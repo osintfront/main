@@ -1,3 +1,5 @@
+import { setPlanUser } from '@/lib/plans';
+import { registerSession, watchSession } from '@/lib/session';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { clearSessionClock, startSessionClock } from '@/lib/sessionClock';
 import type { Session, User } from '@supabase/supabase-js';
@@ -91,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const next = await fetchOwnProfile(uid);
       setProfile(next);
+      setPlanUser(next);
       setProfileError(null);
     } catch (err) {
       setProfile(null);
@@ -124,9 +127,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSessionExpired(false);
       startSessionClock();
       void recordLogin();
+      void registerSession(); // one active session per user (the server ends the others)
     }
     return failure;
   }, []);
+
+  // Still the active session? Signed in on another device → sign out here with a message.
+  useEffect(() => {
+    if (!userId) return;
+    return watchSession(() => {
+      explicitSignOut.current = true;
+      void supabase?.auth.signOut({ scope: 'local' });
+    });
+  }, [userId]);
 
   const signOut = useCallback(async () => {
     explicitSignOut.current = true;

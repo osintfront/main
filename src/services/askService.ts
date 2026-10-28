@@ -1,3 +1,4 @@
+import { requireFeature } from '@/lib/plans';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchPublicEventsByIds } from './eventService';
 import type { PublicEvent } from '@/types/event';
@@ -18,6 +19,7 @@ export class AskError extends Error {
 }
 
 export async function askMap(question: string): Promise<AskAnswer> {
+  requireFeature('ai_expand_ask');
   if (!supabase) throw new AskError('failed', 'Not configured');
   const { data, error } = await supabase.functions.invoke('event-agent', { body: { action: 'ask', question } });
   if (error) {

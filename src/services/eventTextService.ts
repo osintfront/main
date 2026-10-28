@@ -1,3 +1,4 @@
+import { requireFeature } from '@/lib/plans';
 import { supabase } from '@/integrations/supabase/client';
 import type { PublicEvent } from '@/types/event';
 
@@ -30,6 +31,7 @@ export function cachedExpansion(e: PublicEvent): ExpandedByLang | null {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function expandEvent(id: string): Promise<ExpandedByLang> {
+  requireFeature('ai_expand_ask');
   const hit = expandCache.get(id);
   if (hit) return hit;
   if (!supabase) throw new Error('offline');

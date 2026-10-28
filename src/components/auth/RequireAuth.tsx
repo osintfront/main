@@ -1,3 +1,4 @@
+import { AccountGates } from '@/components/auth/AccountGates';
 import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -50,5 +51,5 @@ export function RequireAuth({ anyOf, embedded = false, children }: RequireAuthPr
     return <AccessDenied reason="missing_permission" permission={anyOf[0]} embedded={embedded} />;
   }
 
-  return children ? <>{children}</> : <Outlet />;
+  return <AccountGates>{children ? <>{children}</> : <Outlet />}</AccountGates>;
 }

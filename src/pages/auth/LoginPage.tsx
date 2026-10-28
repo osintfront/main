@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { wasKickedOut } from '@/lib/session';
 import { useI18n } from '@/i18n';
 import { loginLockRemaining, type SignInFailure } from '@/services/authService';
 import { isValidEmail, safeRedirectPath } from '@/utils/url';
@@ -48,7 +49,8 @@ export function LoginPage() {
   if (status === 'loading' && !submitting) return <FullScreenLoader label={t('auth.verifying')} />;
   if (status === 'signed_in') return <Navigate to={redirectTo} replace />;
 
-  const expired = sessionExpired || state.reason === 'expired';
+  const [kicked] = useState(wasKickedOut);
+  const expired = !kicked && (sessionExpired || state.reason === 'expired');
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -138,6 +140,7 @@ export function LoginPage() {
             <h2 className="text-lg font-bold tracking-tight">{t('login.title')}</h2>
             <p className="mb-5 mt-1 text-sm text-slate-600 dark:text-slate-400">{t('login.subtitle')}</p>
       <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+        {kicked && !failure ? <Alert tone="warning">התחברת ממכשיר אחר, ולכן נותקת כאן.</Alert> : null}
         {expired && !failure ? <Alert tone="warning">{t('auth.sessionExpired')}</Alert> : null}
         {failureMessage ? <Alert tone="error">{failureMessage}</Alert> : null}
 
@@ -205,6 +208,8 @@ export function LoginPage() {
             <Link to="/about" className="hover:text-white">{t('login.about')}</Link>
             <Link to="/privacy" className="hover:text-white">{t('login.privacy')}</Link>
             <Link to="/contact" className="hover:text-white">{t('login.contact')}</Link>
+            <Link to="/terms" className="hover:text-white">תנאי שימוש</Link>
+            <Link to="/refund-policy" className="hover:text-white">ביטולים והחזרים</Link>
           </nav>
         </div>
       </main>
