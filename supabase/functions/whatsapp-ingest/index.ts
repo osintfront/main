@@ -313,7 +313,12 @@ let lessons = { text: "", at: 0 };
 async function categoryLessons(): Promise<string> {
   if (Date.now() - lessons.at < 300_000) return lessons.text;
   const { data } = await db.from("category_corrections").select("text,from_slug,to_slug").order("created_at", { ascending: false }).limit(25);
-  lessons = { text: formatCategoryLessons(data ?? []), at: Date.now() };
+  // Severity set by editors by hand: the same judgement for similar reports.
+  const { data: sev } = await db.from("severity_corrections").select("text,from_severity,to_severity").order("created_at", { ascending: false }).limit(20);
+  const sevText = (sev ?? []).length
+    ? `\nEditors corrected the severity of these reports before. Follow the same judgement for similar reports:\n${(sev ?? []).map((r: any) => `- "${String(r.text).replace(/\s+/g, " ").slice(0, 160)}" → ${r.to_severity} (not ${r.from_severity})`).join("\n")}`
+    : "";
+  lessons = { text: formatCategoryLessons(data ?? []) + sevText, at: Date.now() };
   return lessons.text;
 }
 

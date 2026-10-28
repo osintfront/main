@@ -28,9 +28,44 @@ export function countryLabel(country: string, lang: string): string {
   return HEBREW.test(c) ? COUNTRY_EN[c] ?? c : c;
 }
 
+const ARABIC = /[\u0600-\u06FF]/;
+/** Common Arabic place words → Hebrew (whole words). */
+const AR_WORDS: Record<string, string> = {
+  'جنوب': 'דרום', 'شمال': 'צפון', 'شرق': 'מזרח', 'غرب': 'מערב', 'وسط': 'מרכז', 'شرقي': 'מזרחי', 'غربي': 'מערבי',
+  'لبنان': 'לבנון', 'سوريا': 'סוריה', 'سورية': 'סוריה', 'العراق': 'עיראק', 'اليمن': 'תימן', 'إيران': 'איראן', 'ايران': 'איראן',
+  'الأردن': 'ירדן', 'مصر': 'מצרים', 'السعودية': 'סעודיה', 'فلسطين': 'השטחים', 'غزة': 'עזה', 'قطاع': 'רצועת', 'الضفة': 'הגדה',
+  'الغربية': 'המערבית', 'دمشق': 'דמשק', 'بيروت': 'ביירות', 'صنعاء': 'צנעא', 'بغداد': 'בגדאד', 'طهران': 'טהרן', 'محافظة': 'מחוז',
+  'قضاء': 'נפת', 'ريف': 'אזור הכפר של', 'مدينة': 'העיר', 'بلدة': 'העיירה', 'قرية': 'הכפר', 'مخيم': 'מחנה', 'وادي': 'ואדי', 'جبل': "ג'בל",
+  'البحر': 'הים', 'الأحمر': 'האדום', 'المتوسط': 'התיכון', 'الجنوبي': 'הדרומי', 'الشمالي': 'הצפוני', 'مطار': 'נמל התעופה', 'ميناء': 'נמל',
+};
+/** Arabic letters → Hebrew sounds (for names without a Hebrew form). */
+const AR_LETTERS: Record<string, string> = {
+  'ا': 'א', 'أ': 'א', 'إ': 'א', 'آ': 'א', 'ء': '', 'ب': 'ב', 'ت': 'ת', 'ث': 'ת', 'ج': "ג'", 'ح': 'ח', 'خ': "ח'", 'د': 'ד', 'ذ': "ד'",
+  'ر': 'ר', 'ز': 'ז', 'س': 'ס', 'ش': 'ש', 'ص': 'צ', 'ض': "ד'", 'ط': 'ט', 'ظ': "ט'", 'ع': 'ע', 'غ': "ע'", 'ف': 'פ', 'ق': 'ק', 'ك': 'כ',
+  'ل': 'ל', 'م': 'מ', 'ن': 'נ', 'ه': 'ה', 'ة': 'ה', 'و': 'ו', 'ي': 'י', 'ى': 'א', 'ئ': 'א', 'ؤ': 'ו',
+};
+const FINAL: Record<string, string> = { 'כ': 'ך', 'מ': 'ם', 'נ': 'ן', 'פ': 'ף', 'צ': 'ץ' };
+/** Arabic place name → Hebrew: known words translated, the rest written in Hebrew letters. */
+export function arabicToHebrew(name: string): string {
+  return name.split(/(\s+|[،,\-])/).map((w) => {
+    if (AR_WORDS[w]) return AR_WORDS[w];
+    if (!ARABIC.test(w)) return w;
+    let core = w.replace(/[\u064B-\u065F\u0670]/g, '');
+    let pre = '';
+    if (core.startsWith('ال') && core.length > 3) { pre = 'א-'; core = core.slice(2); }
+    let he = [...core].map((c) => AR_LETTERS[c] ?? c).join('');
+    he = he.replace(/([כמנפצ])$/, (c) => FINAL[c]);
+    return pre + he;
+  }).join('');
+}
+
 /** The event's place in the site language: the place database / editor name, else the stored name. */
 export function placeLabel(event: Pick<PublicEvent, 'locationName' | 'locationNameHe' | 'locationNameEn'>, lang: string): string {
-  if (lang === 'he') return event.locationNameHe || event.locationName || event.locationNameEn || '';
+  if (lang === 'he') {
+    if (event.locationNameHe) return event.locationNameHe;
+    if (event.locationName && ARABIC.test(event.locationName)) return arabicToHebrew(event.locationName);
+    return event.locationName || event.locationNameEn || '';
+  }
   return event.locationNameEn || (HEBREW.test(event.locationName) ? '' : event.locationName) || event.locationNameHe || event.locationName || '';
 }
 
@@ -39,4 +74,10 @@ export function whereLabel(event: Pick<PublicEvent, 'locationName' | 'locationNa
   const place = placeLabel(event, lang);
   const country = countryLabel(event.country, lang);
   return [place, country && country !== place ? country : ''].filter(Boolean).join(', ');
+}
+
+/** One extra place's name in the site language (Arabic → Hebrew letters on the Hebrew site). */
+export function placeNameIn(p: { name: string; nameEn: string }, lang: string): string {
+  if (lang === 'he') return p.name && /[\u0600-\u06FF]/.test(p.name) ? arabicToHebrew(p.name) : p.name || p.nameEn;
+  return p.nameEn || p.name;
 }

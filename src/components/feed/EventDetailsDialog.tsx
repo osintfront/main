@@ -1,3 +1,4 @@
+import { placeNameIn } from '@/utils/places';
 import { useEffect, useRef } from 'react';
 import { Crosshair, ExternalLink, MapPin, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
@@ -109,7 +110,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
                   className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 >
                   <MapPin className="size-3 shrink-0 text-slate-400" aria-hidden />
-                  <bdi>{(lang === 'he' ? p.name : p.nameEn) || p.name || p.nameEn}</bdi>
+                  <bdi>{placeNameIn(p, lang)}</bdi>
                 </li>
               ))}
             </ul>

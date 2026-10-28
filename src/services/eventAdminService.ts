@@ -455,6 +455,12 @@ export async function setEventCategory(id: string, slug: string): Promise<void> 
   if (error) throw toServiceError(error);
 }
 
+/** Severity set by hand (analysts / admins); the classifier learns from it. */
+export async function setEventSeverity(id: string, severity: string): Promise<void> {
+  const { error } = await client().rpc('set_event_severity', { p_id: id, p_severity: severity });
+  if (error) throw toServiceError(error);
+}
+
 /** Move one of an event's extra places (index in events.locations); the place is learned. */
 export async function moveEventPlace(id: string, index: number, latitude: number, longitude: number): Promise<void> {
   const { error } = await client().rpc('move_event_place', { p_id: id, p_index: index, p_lat: latitude, p_lng: longitude });

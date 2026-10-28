@@ -1,3 +1,4 @@
+import { placeNameIn } from '@/utils/places';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import 'leaflet.markercluster';
@@ -458,11 +459,11 @@ export function MapView({
           place: p.index as number | null,
           lat: p.latitude,
           lng: p.longitude,
-          label: `${event.title} — ${(lang === 'he' ? p.name : p.nameEn) || p.name || p.nameEn}`,
+          label: `${event.title} — ${placeNameIn(p, lang)}`,
         })),
       ];
       const markers: L.Marker[] = [];
-      places.forEach((place, index) => {
+      places.forEach((place) => {
         // A place of a detailed report may have its own kind (airstrike / shelling / …).
         const own = place.categorySlug && place.categorySlug !== event.category.slug ? DEFAULT_CATEGORIES.find((c) => c.slug === place.categorySlug) : undefined;
         const marker = L.marker([place.lat, place.lng], {
@@ -472,7 +473,7 @@ export function MapView({
             severity: event.severity,
             selected,
             breaking: event.isBreaking,
-            compact: index > 0,
+            compact: false, // all places of an event are equal
           }),
           title: hoverTips ? '' : place.label,
           alt: place.label,
@@ -496,7 +497,7 @@ export function MapView({
                   locale,
                   dir,
                   moveLocation: canMove ? t('move.button') : undefined,
-                  locatePlace: canMove ? t('list.quickLocation') : undefined,
+                  locatePlace: undefined, // only "change location" (move the pin)
                   // Each icon shows its own kind; staff can switch it here.
                   categoryLabel: categoryLabel(own?.slug ?? event.category.slug, own?.name ?? event.category.name),
                   categorySlug: own?.slug ?? event.category.slug,
@@ -551,7 +552,7 @@ export function MapView({
       );
       stacks.forEach((list) => {
         list.sort((a, b) => (a.event.id < b.event.id ? -1 : 1));
-        list.forEach(({ marker, event, index }, i) => {
+        list.forEach(({ marker, event }, i) => {
           const [shift, shiftY] = spread(i, list.length);
           const o = marker.options as { ofmShift?: number; ofmShiftY?: number; ofmIcon?: string; ofmColor?: string };
           if ((o.ofmShift ?? 0) === shift && (o.ofmShiftY ?? 0) === shiftY) return;
@@ -564,7 +565,7 @@ export function MapView({
               severity: event.severity,
               selected: event.id === selectedRef.current,
               breaking: event.isBreaking,
-              compact: index > 0,
+              compact: false, // all places of an event are equal
               shift,
               shiftY,
             }),
@@ -786,7 +787,7 @@ export function MapView({
       if (!entry) return;
       const { markers, event } = entry;
       const selected = id === selectedId;
-      markers.forEach((marker, index) => {
+      markers.forEach((marker) => {
         marker.setIcon(
           createMarkerIcon({
             iconName: (marker.options as { ofmIcon?: string }).ofmIcon ?? event.category.icon,
@@ -794,7 +795,7 @@ export function MapView({
             severity: event.severity,
             selected,
             breaking: event.isBreaking,
-            compact: index > 0,
+            compact: false, // all places of an event are equal
             shift: (marker.options as { ofmShift?: number }).ofmShift,
             shiftY: (marker.options as { ofmShiftY?: number }).ofmShiftY,
           }),

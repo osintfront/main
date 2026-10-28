@@ -3,7 +3,7 @@ import { MapPin, Move, Pencil, Search, Tag } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { usePermissions } from '@/hooks/usePermissions';
 import { fetchCategories } from '@/services/categoryService';
-import { moveEventPin, setEventCategory } from '@/services/eventAdminService';
+import { moveEventPin, setEventCategory, setEventSeverity } from '@/services/eventAdminService';
 import { friendlyError } from '@/services/serviceError';
 import type { EventCategory } from '@/types/category';
 import type { PublicEvent } from '@/types/event';
@@ -45,6 +45,23 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
   const done = () => {
     toast.success(can('event.publish') ? t('move.saved') : t('list.sentForReview'));
     onChanged?.();
+  };
+
+  const [severity, setSeverity] = useState<string>(event.severity);
+  const changeSeverity = async (v: string) => {
+    if (v === severity) return;
+    const prev = severity;
+    setSeverity(v);
+    setBusy(true);
+    try {
+      await setEventSeverity(event.id, v);
+      done();
+    } catch (err) {
+      setSeverity(prev);
+      toast.error(friendlyError(err, t));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const changeCategory = async (id: string) => {
@@ -101,6 +118,20 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-200">
+          <span className="sr-only">{t('form.severity')}</span>
+          <select
+            value={severity}
+            disabled={busy}
+            onChange={(e) => void changeSeverity(e.target.value)}
+            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            title={t('form.severity')}
+          >
+            {(['low', 'medium', 'high', 'critical'] as const).map((s) => (
+              <option key={s} value={s}>{t(`severity.${s}`)}</option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           disabled={busy}
@@ -110,6 +141,7 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
           <Pencil className="size-4" aria-hidden />
           {t('textEdit.button')}
         </button>
+        {!onMovePin ? (
         <button
           type="button"
           disabled={busy}
@@ -119,6 +151,7 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
           <Search className="size-4" aria-hidden />
           {t('list.quickLocation')}
         </button>
+        ) : null}
         {onMovePin ? (
           <button
             type="button"

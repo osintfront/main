@@ -76,12 +76,16 @@ export function EventTextDialog({ event, onClose, onSaved }: { event: PublicEven
         const key = `${lang}|${d.from.toLowerCase()}|${d.to.toLowerCase()}`;
         if (!found.has(key)) found.set(key, { key, lang, from: d.from, to: d.to, term: d.from, on: true });
       }
-      if (found.size) setLessons([...found.values()]);
-      else {
-        toast.success(t('textEdit.saved'));
-        onSaved();
-        onClose();
+      // Learned automatically: the changed words become learned terms (no extra step).
+      const learned = [...found.values()].filter((l) => l.to.trim() && l.from.trim().length >= 3);
+      for (const l of learned) {
+        try {
+          await learnTerm({ term: l.term, he: l.lang === 'he' ? l.to : '', en: l.lang === 'en' ? l.to : '', avoid: [l.from] }, event.id);
+        } catch { /* the text is saved even if a term is not */ }
       }
+      toast.success(learned.length ? t('textEdit.learned', { count: String(learned.length) }) : t('textEdit.saved'));
+      onSaved();
+      onClose();
     } catch (err) {
       toast.error(friendlyError(err, t));
     } finally {
