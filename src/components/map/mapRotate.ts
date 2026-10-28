@@ -6,6 +6,17 @@ import 'leaflet-rotate'; // pinned 0.2.8 (2023, stable): rotation, two-finger ro
  * A right-click without dragging still opens our investigation menu.
  */
 export function enableDragRotate(map: L.Map) {
+  // Manual rotation only: never follow the phone's compass. The compass button = back to north.
+  const m = map as L.Map & { compassBearing?: L.Handler; touchRotate?: L.Handler; rotateControl?: { _cycleState: () => void; _restyle: () => void } };
+  m.compassBearing?.disable();
+  if (m.rotateControl) {
+    m.rotateControl._cycleState = function (this: { _restyle: () => void }) {
+      m.compassBearing?.disable();
+      (map as L.Map & { setBearing: (b: number) => void }).setBearing(0);
+      m.touchRotate?.enable();
+      this._restyle();
+    };
+  }
   const el = map.getContainer();
   let start: { x: number; y: number; bearing: number; angle: number } | null = null;
   let moved = false;
@@ -54,6 +65,7 @@ export const ROTATE_OPTIONS = {
   rotate: true,
   bearing: 0,
   touchRotate: true, // two fingers on phones
+  compassBearing: false, // never follow the device's compass
   shiftKeyRotate: true, // Shift + mouse wheel
   rotateControl: { closeOnZeroBearing: false, position: 'topleft' }, // compass: shows bearing, click = north up
 } as unknown as L.MapOptions;
