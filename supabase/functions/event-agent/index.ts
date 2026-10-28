@@ -157,10 +157,13 @@ async function edit(id: string) {
   const r = await editReport({ text, mode: "whatsapp", categories: cats, detailedPlaces: true, maxPlaces: 30, origin: { name: ev.source_name ?? "", url: ev.source_url, sentAt: ev.occurred_at } });
   const update: Record<string, unknown> = {
     ai_suggestions: { ...ai, editor_model: r.model, countries: r.countries },
-    translations: { ...asTr(ev.translations), ...translationsFor(r) },
   };
-  if (r.title) update.title = r.title.slice(0, 200);
-  if (r.summary) update.description = formatDescription(r);
+  // Text a person corrected by hand (edit_event_text) stays exactly as they wrote it.
+  if (!ai?.manual_text) {
+    update.translations = { ...asTr(ev.translations), ...translationsFor(r) };
+    if (r.title) update.title = r.title.slice(0, 200);
+    if (r.summary) update.description = formatDescription(r);
+  }
   if (!ev.country && mainCountry(r)) update.country = mainCountry(r);
   // A place a person corrected by hand stays; otherwise the editor's places replace the old ones.
   if (!ev.coordinates_manually_corrected) {
@@ -183,7 +186,7 @@ async function edit(id: string) {
 
 async function translate(limit: number, drafts = false) {
   const { data: rows } = await db.from("events")
-    .select("id,title,description,original_report_text,translations")
+    .select("id,title,description,original_report_text,translations,ai_suggestions")
     .is("deleted_at", null).in("status", drafts ? ["draft", "pending_review"] : ["published", "archived"])
     .order("occurred_at", { ascending: false }).limit(400);
   // Drafts: only those still in a foreign language (their headline is rewritten in Hebrew).
@@ -193,6 +196,7 @@ async function translate(limit: number, drafts = false) {
   for (const e of todo) {
     try {
       // Free providers first (site translation chain); Claude only as the last fallback.
+      if (e.ai_suggestions?.manual_text) continue; // corrected by hand: keep it
       const r = await translateBriefChain(e.title, e.description || e.original_report_text || "");
       if (!r) continue; // nothing could translate it now
       const tr = asTr(e.translations);

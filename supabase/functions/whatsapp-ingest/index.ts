@@ -865,7 +865,10 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   // Text first (fast: no place lookups), then the places — a slow place lookup must never
   // leave the event in its original language.
   const PLACE_KEYS = ["locations", "country", "latitude", "longitude", "location_precision", "geocoding_confidence", "location_name"];
-  const textPart = Object.fromEntries(Object.entries(update).filter(([k]) => !PLACE_KEYS.includes(k)));
+  // Corrected by hand meanwhile: keep the person's text.
+  const { data: man } = await db.from("events").select("ai_suggestions").eq("id", eventId).maybeSingle();
+  const TEXT_KEYS = ["title", "description", "translations"];
+  const textPart = Object.fromEntries(Object.entries(update).filter(([k]) => !PLACE_KEYS.includes(k) && !(man?.ai_suggestions?.manual_text && TEXT_KEYS.includes(k))));
   const placePart = Object.fromEntries(Object.entries(update).filter(([k]) => PLACE_KEYS.includes(k)));
   const { error: textErr } = await db.from("events").update(textPart).eq("id", eventId);
   if (textErr) console.error("editor text update failed", textErr.message);
