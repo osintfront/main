@@ -1176,7 +1176,7 @@ export function MapView({
           </div>
         </div>
       ) : area && area.length >= 3 ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-8 z-[600] flex justify-center px-3">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[4.25rem] z-[650] lg:bottom-8 flex justify-center px-3">
           <div className="pointer-events-auto inline-flex items-center gap-1 rounded-full bg-sky-600 py-1 ps-3 pe-1 text-xs font-semibold text-white shadow-lg">
             <Octagon className="size-3.5" aria-hidden />
             {t('filters.areaActive')}
