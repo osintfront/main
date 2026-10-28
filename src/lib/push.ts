@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { EventFilters } from '@/lib/eventFilters';
+import { playChime } from '@/lib/notifySound';
 
 /**
  * Push notifications (sound + alert) for new events by the site's filters — also when the site
@@ -26,11 +27,39 @@ async function registration() {
   return (await navigator.serviceWorker.getRegistration('/')) ?? navigator.serviceWorker.register('/sw.js', { scope: '/' });
 }
 
+/** Phone notifications only: lowest severity this device gets (does not change the website). */
+export type MinSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export async function getMinSeverity(): Promise<MinSeverity> {
+  const sub = await (await registration()).pushManager.getSubscription();
+  if (!sub || !supabase) return 'high';
+  const { data } = await supabase.from('push_subscriptions').select('min_severity').eq('endpoint', sub.endpoint).maybeSingle();
+  return (data?.min_severity as MinSeverity) ?? 'high';
+}
+
+export async function setMinSeverity(min: MinSeverity): Promise<boolean> {
+  const sub = await (await registration()).pushManager.getSubscription();
+  if (!sub || !supabase) return false;
+  const { data, error } = await supabase.rpc('push_set_min_severity', { p_endpoint: sub.endpoint, p_min: min });
+  return !error && data === true;
+}
+
+let listening = false;
+/** App open on screen: a push plays the website's own chime (same rules as the site: mute, gap). */
+function listen() {
+  if (listening) return;
+  listening = true;
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'push' && document.visibilityState === 'visible') playChime('event');
+  });
+}
+
 /** On page load: register the worker and find out whether this browser is subscribed. */
 export async function initPush() {
   if (!supported()) return set(isIos() && !standalone() ? 'needs-install' : 'unsupported');
   try {
     const reg = await registration();
+    listen();
     if (Notification.permission === 'denied') return set('denied');
     set((await reg.pushManager.getSubscription()) ? 'on' : 'off');
   } catch {

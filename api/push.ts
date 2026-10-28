@@ -7,6 +7,7 @@
 import webpush from 'web-push';
 import { EMPTY_FILTERS, matchesFilters, type EventFilters } from '../src/lib/eventFilters.js';
 import type { PublicEvent } from '../src/types/event.js';
+import { formatPush, severityOf, SEVERITY_RANK, type FormatIssues } from './_lib/pushFormat.js';
 
 const env = (k: string) => (process.env[k] ?? '').trim();
 const URL_ = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
@@ -81,16 +82,10 @@ function lean(r: any): PublicEvent {
   } as unknown as PublicEvent;
 }
 
-function message(r: any, lang: string) {
-  const en = lang === 'en' ? r.translations?.en : null;
-  const title = String(en?.title || r.title || '').slice(0, 120);
-  const place = (lang === 'en' ? r.location_name_en : r.location_name_he) || r.location_name || r.country || '';
-  return {
-    title: `${r.is_breaking ? '🔴 ' : ''}${title}`,
-    body: [place, lang === 'en' ? r.category_slug : r.category_name].filter(Boolean).join(' · ').slice(0, 160),
-    url: `/?event=${encodeURIComponent(r.id)}`,
-    tag: `ev-${r.id}`,
-  };
+/** Log for the operator: Vercel logs + push_config row "<what>" (last event id). */
+async function note(what: string, eventId: string) {
+  console.warn('push note', what, eventId);
+  try { await setConfig(`note:${what}`.slice(0, 120), String(eventId)); } catch { /* logging only */ }
 }
 
 async function send(): Promise<Record<string, unknown>> {
@@ -103,22 +98,30 @@ async function send(): Promise<Record<string, unknown>> {
   if (!events.length) return { events: 0 };
   await setConfig('cursor', events[events.length - 1].published_at);
 
-  const subs: any[] = await rest('push_subscriptions?select=id,user_id,endpoint,p256dh,auth,filters,muted,lang');
+  const subs: any[] = await rest('push_subscriptions?select=id,user_id,endpoint,p256dh,auth,filters,muted,lang,min_severity');
   const ids = [...new Set(subs.map((s) => s.user_id))];
   const active = new Set<string>(
     ids.length ? (await rest(`profiles?select=id&status=eq.active&id=in.(${ids.join(',')})`)).map((p: any) => p.id) : [],
   );
-  const leanEvents = events.map((r) => ({ r, e: lean(r) }));
+  // Hebrew text once per event; report categories without a Hebrew name and events without severity.
+  const leanEvents = events.map((r) => {
+    const issues: FormatIssues = {};
+    const msg = formatPush(r, issues);
+    const sev = severityOf(r);
+    if (issues.missingCategory) void note(`missing_category:${issues.missingCategory}`, r.id);
+    if (sev.missing) void note('missing_severity', r.id);
+    return { r, e: lean(r), msg, rank: sev.rank };
+  });
   let sent = 0, removed = 0;
   await Promise.allSettled(subs.filter((s) => active.has(s.user_id)).map(async (s) => {
     const muted = new Set<string>(s.muted ?? []);
     const f: EventFilters | null = s.filters ? { ...EMPTY_FILTERS, ...s.filters, preset: 'live' } : null;
-    const hits = leanEvents.filter(({ r, e }) => !muted.has(r.category_slug) && (!f || matchesFilters(e, f)));
+    const min = SEVERITY_RANK[s.min_severity] ?? SEVERITY_RANK.high;
+    const hits = leanEvents.filter(({ r, e, rank }) => rank >= min && !muted.has(r.category_slug) && (!f || matchesFilters(e, f)));
     if (!hits.length) return;
-    const he = s.lang !== 'en';
-    const payload = hits.length <= 3
-      ? hits.map(({ r }) => message(r, s.lang))
-      : [{ title: he ? `${hits.length} ידיעות חדשות` : `${hits.length} new reports`, body: hits.slice(0, 3).map(({ r }) => message(r, s.lang).title).join(' · ').slice(0, 180), url: '/', tag: 'ev-batch' }];
+    // One notification per event (tag = event: an update replaces it); a flood → the first 5 + one summary.
+    const payload = hits.slice(0, 5).map((h) => h.msg);
+    if (hits.length > 5) payload.push({ title: `\u200F📰 עוד ${hits.length - 5} ידיעות חדשות`, body: '\u200Fפתחו את המפה לכל הידיעות', url: '/', tag: 'ev-more' });
     for (const p of payload) {
       try {
         await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(p), { TTL: 3600, urgency: 'high' });

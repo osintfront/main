@@ -12,7 +12,7 @@ import {
 import { useI18n } from '@/i18n';
 import { playChime, unlockAudio } from '@/lib/notifySound';
 import { cn } from '@/utils/cn';
-import { disablePush, enablePush, usePushState } from '@/lib/push';
+import { disablePush, enablePush, getMinSeverity, setMinSeverity, usePushState, type MinSeverity } from '@/lib/push';
 
 const SLUGS = DEFAULT_CATEGORIES.map((c) => c.slug);
 
@@ -27,6 +27,12 @@ export function SoundMenu({ onOpen }: { onOpen?: () => void } = {}) {
   const needsClick = !sound.muted && !audioReady;
   const [open, setOpen] = useState(false);
   const push = usePushState();
+  // Notification settings (this device only): lowest severity that reaches the phone.
+  const [minSev, setMinSev] = useState<MinSeverity | null>(null);
+  const [sevSaved, setSevSaved] = useState(false);
+  useEffect(() => {
+    if (open && push === 'on') void getMinSeverity().then(setMinSev);
+  }, [open, push]);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click / Escape.
@@ -134,6 +140,34 @@ export function SoundMenu({ onOpen }: { onOpen?: () => void } = {}) {
                 <span className={cn('inline-block size-5 rounded-full bg-white shadow transition-transform', push === 'on' ? 'translate-x-[1.375rem] rtl:-translate-x-[1.375rem]' : 'translate-x-0.5 rtl:-translate-x-0.5')} />
               </button>
             </div>
+            {push === 'on' && minSev ? (
+              <fieldset className="mt-3 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+                <legend className="sr-only">הגדרות התראות</legend>
+                <p className="pb-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">הגדרות התראות · המכשיר הזה בלבד</p>
+                {([
+                  ['low', 'כל האירועים'],
+                  ['medium', 'בינונית ומעלה'],
+                  ['high', 'גבוהה ומעלה (ברירת מחדל)'],
+                  ['critical', 'קריטית בלבד'],
+                ] as [MinSeverity, string][]).map(([id, label]) => (
+                  <label key={id} className="flex cursor-pointer items-center gap-2 py-0.5 text-sm text-slate-700 dark:text-slate-200">
+                    <input
+                      type="radio"
+                      name="push-min-severity"
+                      checked={minSev === id}
+                      onChange={() => {
+                        setMinSev(id);
+                        setSevSaved(false);
+                        void setMinSeverity(id).then(setSevSaved);
+                      }}
+                      className="size-4 accent-sky-600"
+                    />
+                    {label}
+                  </label>
+                ))}
+                {sevSaved ? <p className="pt-1 text-[11px] text-emerald-700 dark:text-emerald-400">נשמר</p> : null}
+              </fieldset>
+            ) : null}
             {push === 'needs-install' || push === 'unsupported' || push === 'denied' ? (
               <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">{t(`push.${push}` as 'push.denied')}</p>
             ) : null}
