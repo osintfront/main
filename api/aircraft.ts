@@ -51,12 +51,13 @@ export async function GET(req: Request): Promise<Response> {
   const timer = setTimeout(() => ctrl.abort(), 9000);
   try {
     const res = await fetch(url, { headers: { accept: 'application/json', 'user-agent': 'osintfront.com map' }, signal: ctrl.signal });
-    if (!res.ok) return json({ error: `adsb.lol HTTP ${res.status}` }, 502);
+    if (!res.ok) return json({ error: 'aircraft data unavailable' }, 502);
     const out: any = await res.json();
     const planes = (Array.isArray(out?.ac) ? out.ac : []).map(slim).filter(Boolean);
     return json({ now: Number(out?.now) || Date.now(), planes }, 200, 'public, max-age=5, s-maxage=8, stale-while-revalidate=10');
   } catch (e) {
-    return json({ error: String((e as Error)?.name === 'AbortError' ? 'adsb.lol timeout' : (e as Error)?.message ?? e).slice(0, 160) }, 502);
+    console.error('aircraft failed', String((e as Error)?.message ?? e).slice(0, 200));
+    return json({ error: 'aircraft data unavailable' }, 502);
   } finally {
     clearTimeout(timer);
   }

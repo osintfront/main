@@ -14,7 +14,15 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
+/** Never send raw server/database errors to the browser: log them here, answer generically. */
+const RAW_ERR = /relation|column|violates|constraint|syntax|function |permission denied|duplicate key|PGRST|postgres|SQL|stack|at .+\.ts:\d+|Anthropic \d|api key|token/i;
+function safeBody(b: unknown, s: number): unknown {
+  const e = (b as { error?: unknown } | null)?.error;
+  if (typeof e !== "string" || (s < 500 && !RAW_ERR.test(e))) return b;
+  console.error("error hidden from client:", e);
+  return { ...(b as object), error: s >= 500 ? "internal error" : "request failed" };
+}
+const json = (b: unknown, s = 200) => new Response(JSON.stringify(safeBody(b, s)), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 const ROLES = ["super_admin", "admin", "analyst", "viewer"];
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 

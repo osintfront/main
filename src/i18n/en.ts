@@ -334,7 +334,7 @@ export const en = {
   'auth.errorUnconfirmed': 'Confirm your email address before signing in.',
   'auth.errorRateLimited': 'Too many attempts. Try again in {seconds} seconds.',
   'auth.errorNetwork': 'Can’t reach the authentication server. Check your connection and try again.',
-  'auth.errorGeneric': 'Sign-in failed: {message}',
+  'auth.errorGeneric': 'Sign-in failed. Please try again shortly.',
   'auth.errorEmailRequired': 'Enter your email address.',
   'auth.errorEmailInvalid': 'Enter a valid email address.',
   'auth.errorPasswordRequired': 'Enter your password.',
@@ -367,7 +367,7 @@ export const en = {
   'unauth.noProfile': 'You’re signed in, but this account has no staff profile. Staff accounts are created by invitation only.',
   'unauth.suspended': 'This account is suspended. Contact a super admin to restore access.',
   'unauth.pending': 'This account is awaiting activation. Confirm your email, then sign in again.',
-  'unauth.profileError': 'We couldn’t load your staff profile: {message}',
+  'unauth.profileError': 'We couldn’t load your profile. Please refresh.',
   'unauth.backToDashboard': 'Back to dashboard',
   'unauth.mfaRequired': 'Your role requires multi-factor authentication. Complete the second sign-in step to continue.',
 
@@ -564,7 +564,7 @@ export const en = {
   'common.notFoundTitle': 'Page not found',
   'common.notFoundBody': 'The page you’re looking for doesn’t exist or has moved.',
   'common.skipToContent': 'Skip to content',
-  'common.saveError': 'Couldn’t save: {message}',
+  'common.saveError': 'Couldn’t save. Please try again.',
 
   'common.cancel': 'Cancel',
 

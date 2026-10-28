@@ -68,6 +68,7 @@ export function friendlyError(err: unknown, t: Translate): string {
     case 'network':
       return t('auth.errorNetwork');
     default:
-      return msg;
+      // Never show raw database/server text (table names, SQL errors) to users.
+      return t('common.saveError', { message: '' });
   }
 }

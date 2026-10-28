@@ -118,7 +118,8 @@ export async function GET(req: Request): Promise<Response> {
       const list = await dates(src, [cx - half, cy - half, cx + half, cy + half].map((v) => Math.round(v * 1000) / 1000), days);
       return json({ src, dates: list }, 200, 'private, max-age=900');
     } catch (e) {
-      return json({ error: String((e as Error)?.message ?? e).slice(0, 200) }, 502);
+      console.error('sat failed', String((e as Error)?.message ?? e).slice(0, 300));
+      return json({ error: 'imagery unavailable' }, 502);
     }
   }
   return json({ error: 'nothing asked' }, 400);

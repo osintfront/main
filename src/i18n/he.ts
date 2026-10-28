@@ -336,7 +336,7 @@ export const he: Record<TranslationKey, string> = {
   'auth.errorUnconfirmed': 'יש לאשר את כתובת הדוא״ל לפני הכניסה.',
   'auth.errorRateLimited': 'יותר מדי ניסיונות. אפשר לנסות שוב בעוד {seconds} שניות.',
   'auth.errorNetwork': 'אין חיבור לשרת האימות. בדקו את החיבור ונסו שוב.',
-  'auth.errorGeneric': 'הכניסה נכשלה: {message}',
+  'auth.errorGeneric': 'הכניסה נכשלה. נסו שוב בעוד רגע.',
   'auth.errorEmailRequired': 'יש להזין כתובת דוא״ל.',
   'auth.errorEmailInvalid': 'יש להזין כתובת דוא״ל תקינה.',
   'auth.errorPasswordRequired': 'יש להזין סיסמה.',
@@ -369,7 +369,7 @@ export const he: Record<TranslationKey, string> = {
   'unauth.noProfile': 'התחברת בהצלחה, אך לחשבון זה אין פרופיל צוות. חשבונות צוות נוצרים בהזמנה בלבד.',
   'unauth.suspended': 'החשבון הושעה. יש לפנות למנהל־על כדי לשחזר את הגישה.',
   'unauth.pending': 'החשבון ממתין להפעלה. אשרו את כתובת הדוא״ל והתחברו שוב.',
-  'unauth.profileError': 'לא הצלחנו לטעון את פרופיל הצוות: {message}',
+  'unauth.profileError': 'לא הצלחנו לטעון את פרופיל המשתמש. נסו לרענן.',
   'unauth.backToDashboard': 'חזרה ללוח הבקרה',
   'unauth.mfaRequired': 'התפקיד שלך מחייב אימות רב־שלבי. השלימו את שלב האימות השני כדי להמשיך.',
 
@@ -566,7 +566,7 @@ export const he: Record<TranslationKey, string> = {
   'common.notFoundTitle': 'הדף לא נמצא',
   'common.notFoundBody': 'הדף שחיפשת אינו קיים או שהועבר.',
   'common.skipToContent': 'דילוג לתוכן',
-  'common.saveError': 'השמירה נכשלה: {message}',
+  'common.saveError': 'השמירה נכשלה. נסו שוב.',
 
   'common.cancel': 'ביטול',
 

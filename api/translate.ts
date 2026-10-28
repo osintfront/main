@@ -190,7 +190,9 @@ export async function POST(req: Request): Promise<Response> {
 
 /** GET /api/translate — which providers are configured (names only, never keys). Members only. */
 export async function GET(req: Request): Promise<Response> {
-  if (!(await authorized(req))) return json({ error: 'unauthorized' }, 401);
+  // Diagnostics (provider list, test run): our own server functions only — never members' browsers.
+  const secret = env('TRANSLATE_SECRET');
+  if (!secret || !safeEqual(req.headers.get('x-translate-secret') ?? '', secret)) return json({ error: 'not found' }, 404);
   // ?test=1 — run every free provider separately on a sample (Arabic → Hebrew).
   if (new URL(req.url).searchParams.get('test') === '1') {
     const sample = 'قصف مدفعي إسرائيلي استهدف أطراف بلدة الخيام جنوب لبنان صباح اليوم';
