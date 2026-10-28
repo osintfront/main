@@ -4,7 +4,6 @@
 //   {action:"create", email, full_name, role}  → { ok, user_id, password }  (temporary password, shown once)
 //   {action:"reset_password", user_id}         → { ok, password }
 //   {action:"remove", user_id}                 → { ok }
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const URL_ = Deno.env.get("SUPABASE_URL")!;

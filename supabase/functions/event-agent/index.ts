@@ -18,7 +18,6 @@
 //                                (events created since the last run vs. the last 12 hours).
 //   {action:"attach_media", event_id, media, post_url?}  staff — save a composed link's pictures to the event.
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { EXPAND_VERSION, countryCode, editReport, expandReport, geocode, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor } from "../_shared/editor.ts";
 import { setUsageSink } from "../_shared/usage.ts";
