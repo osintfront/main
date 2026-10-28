@@ -20,7 +20,7 @@ const TXT = {
     h1: 'שעה', h3: '3 שעות', h12: '12 שעות', shown: 'מוצגות', noShips: 'אין נתוני אוניות עדיין (המאסף לא פעיל?)',
     cargo: 'מטען', tanker: 'מכלית', passenger: 'נוסעים', fishing: 'דיג', military: 'צבאי / אכיפה', service: 'גוררת / שירות', pleasure: 'פנאי / מפרשית', fast: 'מהירה', other: 'אחר / לא ידוע',
     planes: 'מטוסים (ADS-B)', milOnly: 'רק צבאיים', milWorld: 'צבאיים בכל העולם', emergency: 'רק מצוקה (7500/7600/7700)', alt: 'גובה', altAll: 'הכול',
-    altGround: 'על הקרקע', altLow: 'עד 10,000 רגל', altMid: '10,000–30,000', altHigh: 'מעל 30,000', planeSearch: 'אות קריאה / סוג / רישום', radius: 'רדיוס 250 מייל ימי סביב מרכז המפה',
+    planeCivil: 'אזרחי', planeMil: 'צבאי', planeEmergency: 'מצוקה', altGround: 'על הקרקע', altLow: 'עד 10,000 רגל', altMid: '10,000–30,000', altHigh: 'מעל 30,000', planeSearch: 'אות קריאה / סוג / רישום', radius: 'רדיוס 250 מייל ימי סביב מרכז המפה',
     speed: 'מהירות', course: 'כיוון', dest: 'יעד', seen: 'נראה', type: 'סוג', length: 'אורך', status: 'מצב', altitude: 'גובה', squawk: 'קוד', reg: 'רישום',
     error: 'שגיאה בטעינה',
   },
@@ -33,7 +33,7 @@ const TXT = {
     h1: '1 hour', h3: '3 hours', h12: '12 hours', shown: 'shown', noShips: 'No ship data yet (collector not running?)',
     cargo: 'Cargo', tanker: 'Tanker', passenger: 'Passenger', fishing: 'Fishing', military: 'Military / law enforcement', service: 'Tug / service', pleasure: 'Pleasure / sailing', fast: 'High-speed', other: 'Other / unknown',
     planes: 'Aircraft (ADS-B)', milOnly: 'Military only', milWorld: 'Military worldwide', emergency: 'Emergencies only (7500/7600/7700)', alt: 'Altitude', altAll: 'All',
-    altGround: 'On the ground', altLow: 'Up to 10,000 ft', altMid: '10,000–30,000', altHigh: 'Above 30,000', planeSearch: 'Callsign / type / registration', radius: '250 NM around the map centre',
+    planeCivil: 'Civil', planeMil: 'Military', planeEmergency: 'Emergency', altGround: 'On the ground', altLow: 'Up to 10,000 ft', altMid: '10,000–30,000', altHigh: 'Above 30,000', planeSearch: 'Callsign / type / registration', radius: '250 NM around the map centre',
     speed: 'Speed', course: 'Course', dest: 'Destination', seen: 'Seen', type: 'Type', length: 'Length', status: 'Status', altitude: 'Altitude', squawk: 'Squawk', reg: 'Registration',
     error: 'Could not load',
   },
@@ -57,6 +57,11 @@ interface IntelLayersProps {
   /** The day the fires layer shows (the satellite picture's day), or null for the last 48 hours. */
   onFiresDate: (date: string | null) => void;
 }
+
+const SHIP_EMOJI: Record<string, string> = {
+  cargo: '📦', tanker: '🛢️', passenger: '🛳️', fishing: '🎣', military: '⚓', service: '🛟', pleasure: '⛵', fast: '🚤', other: '•',
+};
+const hoverTips = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate }: IntelLayersProps) {
   const { lang, dir } = useI18n();
@@ -286,6 +291,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
     canvasRef.current ??= L.canvas({ padding: 0.3 });
     const group = L.layerGroup();
     const z = map.getZoom();
+    const detailed = z >= 9 && shownShips.length <= 400;
     for (const v of shownShips) {
       const kind = shipKind(v.ship_type);
       const color = SHIP_COLORS[kind];
@@ -299,9 +305,22 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
         ${T.seen}: ${ago(v.updated_at, lang)}<br/>
         <a href="https://www.marinetraffic.com/en/ais/details/ships/mmsi:${v.mmsi}" target="_blank" rel="noopener noreferrer nofollow">MarineTraffic ↗</a>
       </div>`;
-      const marker = L.circleMarker([v.lat, v.lng], {
-        renderer: canvasRef.current!, radius: kind === 'military' ? 5 : 3.5, color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.95,
-      }).bindPopup(popup, { maxWidth: 280 });
+      // Zoomed in (few ships): an icon per type; otherwise fast coloured dots.
+      const marker = detailed
+        ? L.marker([v.lat, v.lng], {
+            keyboard: false,
+            icon: L.divIcon({
+              className: '',
+              iconSize: [20, 20],
+              iconAnchor: [10, 10],
+              html: `<span style="display:grid;place-items:center;width:20px;height:20px;border-radius:9999px;background:${color};border:1.5px solid #fff;font-size:11px;line-height:1;box-shadow:0 0 2px rgba(0,0,0,.4)">${SHIP_EMOJI[kind]}</span>`,
+            }),
+          })
+        : L.circleMarker([v.lat, v.lng], {
+            renderer: canvasRef.current!, radius: kind === 'military' ? 5 : 3.5, color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.95,
+          });
+      marker.bindPopup(popup, { maxWidth: 280 });
+      if (hoverTips) marker.bindTooltip(`${esc(v.name || `MMSI ${v.mmsi}`)} · ${esc(T[kind])}`, { direction: 'top' });
       marker.addTo(group);
       // Moving: a short line along the course.
       if ((v.sog ?? 0) >= 1 && v.cog !== null) {
@@ -411,7 +430,9 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
         <a href="https://globe.adsbexchange.com/?icao=${esc(p.hex)}" target="_blank" rel="noopener noreferrer nofollow">ADS-B Exchange ↗</a> ·
         <a href="https://adsb.lol/?icao=${esc(p.hex)}" target="_blank" rel="noopener noreferrer nofollow">adsb.lol ↗</a>
       </div>`;
-      L.marker([p.lat, p.lon], { icon, zIndexOffset: p.mil || urgent ? 600 : 300, keyboard: false }).bindPopup(popup, { maxWidth: 280 }).addTo(group);
+      const m = L.marker([p.lat, p.lon], { icon, zIndexOffset: p.mil || urgent ? 600 : 300, keyboard: false }).bindPopup(popup, { maxWidth: 280 });
+      if (hoverTips) m.bindTooltip(`${esc(p.flight || p.reg || p.hex.toUpperCase())}${p.mil ? ' · MIL' : ''} · ${altText}`, { direction: 'top' });
+      m.addTo(group);
     }
     group.addTo(map);
     planeLayerRef.current = group;
@@ -434,8 +455,31 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
   const container = map?.getContainer() ?? null;
 
+  // Map legend for the open data layers (ships by type, aircraft by state).
+  const mapLegend = !open && (shipsOn || planesOn) ? (
+    <div dir={dir} className="pointer-events-auto absolute bottom-8 start-2 z-[600] max-w-[220px] rounded-lg bg-white/95 px-2.5 py-2 text-[11px] text-slate-700 shadow-lg ring-1 ring-slate-900/10 dark:bg-slate-900/95 dark:text-slate-200 dark:ring-white/10">
+      {shipsOn ? (
+        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+          {SHIP_KINDS.map((k) => (
+            <span key={k} className="flex items-center gap-1">
+              <span className="grid size-3.5 place-items-center rounded-full text-[8px]" style={{ background: SHIP_COLORS[k] }} aria-hidden>{SHIP_EMOJI[k]}</span>{T[k]}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {planesOn ? (
+        <div className={shipsOn ? 'mt-1.5 border-t border-slate-200 pt-1.5 dark:border-slate-700' : ''}>
+          {([['#0284c7', T.planeCivil], ['#dc2626', T.planeMil], ['#ea580c', T.planeEmergency], ['#64748b', T.altGround]] as const).map(([c, l]) => (
+            <span key={c} className="me-2 inline-flex items-center gap-1"><span className="size-2.5 rounded-full" style={{ background: c }} />{l}</span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
     <>
+      {mapLegend}
       {container && satOn && mode === 'compare'
         ? createPortal(
             <div
@@ -551,7 +595,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
                           })
                         }
                       />
-                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: SHIP_COLORS[k] }} aria-hidden />
+                      <span className="grid size-4 shrink-0 place-items-center rounded-full text-[9px]" style={{ background: SHIP_COLORS[k] }} aria-hidden>{SHIP_EMOJI[k]}</span>
                       <span className="truncate">{T[k]}</span>
                     </label>
                   ))}

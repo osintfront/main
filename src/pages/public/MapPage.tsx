@@ -526,6 +526,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               drawMode={drawMode}
               onDrawModeChange={setDrawMode}
               onAreaDrawn={handleAreaDrawn}
+              onFilterCategory={(slug) => setFilters((f) => ({ ...f, categories: [slug] }))}
               onClearArea={clearArea}
               moving={moving}
               onMoveRequest={canMove ? startMove : undefined}

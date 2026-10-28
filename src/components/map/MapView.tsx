@@ -16,6 +16,7 @@ import { formatEventTime } from '@/utils/time';
 import { buildHfcPopup } from './hfcPopup';
 import { BASE_STYLES, createBaseLayer, createFiresLayer, loadBaseStyle, loadFiresOn, saveBaseStyle, saveFiresOn, type BaseStyle } from './baseLayer';
 import { createMarkerIcon } from './markerIcon';
+import { MapContextMenu, type ContextTarget } from './MapContextMenu';
 import { DEFAULT_CATEGORIES } from '@/data/categoryRegistry';
 import { buildPopupContent } from './popupContent';
 import { IconButton } from '@/components/common/IconButton';
@@ -60,6 +61,8 @@ interface MapViewProps {
   onPlaceLocate?: (target: MoveTarget) => void;
   /** Editors/admins: the move bar also offers "remove from map". */
   canRemovePin?: boolean;
+  /** Right-click menu: "filter by this type". */
+  onFilterCategory?: (slug: string) => void;
   /** Shown at the top centre, under the alerts banner (e.g. "ask the map"). */
   topSlot?: ReactNode;
   /** Zoom the map to these points whenever key changes (e.g. search results). */
@@ -122,6 +125,7 @@ function prefersReducedMotion(): boolean {
 }
 
 export function MapView({
+  onFilterCategory,
   events,
   selectedId,
   focusRequest,
@@ -152,6 +156,10 @@ export function MapView({
   const { t, dir, locale, lang, categoryLabel } = useI18n();
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const [ctxMenu, setCtxMenu] = useState<ContextTarget | null>(null);
+  const closeCtx = useCallback(() => setCtxMenu(null), []);
+  const ctxRef = useRef(setCtxMenu);
+  const hoverTips = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.MarkerClusterGroup | null>(null);
   const drawLayerRef = useRef<L.LayerGroup | null>(null);
@@ -269,6 +277,10 @@ export function MapView({
     focusLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     setLeafletMap(map);
+    // Right-click on the map: our investigation menu instead of the browser's (Leaflet then blocks the default menu).
+    map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+      ctxRef.current({ x: e.containerPoint.x, y: e.containerPoint.y, lat: e.latlng.lat, lng: e.latlng.lng });
+    });
     map.on('click', (e: L.LeafletMouseEvent) => {
       if (drawClickRef.current) drawClickRef.current([e.latlng.lat, e.latlng.lng]);
       else {
@@ -439,7 +451,7 @@ export function MapView({
             breaking: event.isBreaking,
             compact: index > 0,
           }),
-          title: place.label,
+          title: hoverTips ? '' : place.label,
           alt: place.label,
           keyboard: true,
           riseOnHover: true,
@@ -483,6 +495,20 @@ export function MapView({
           );
         }
         marker.on('click', () => onMarkerSelectRef.current(event.id));
+        marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stop(e);
+          const pt = mapRef.current?.latLngToContainerPoint(e.latlng);
+          ctxRef.current({ x: pt?.x ?? 0, y: pt?.y ?? 0, lat: place.lat, lng: place.lng, event, categorySlug: own?.slug ?? event.category.slug });
+        });
+        // Desktop hover: a short tooltip (type · headline).
+        if (hoverTips && !compact) {
+          const tip = document.createElement('div');
+          tip.dir = dir;
+          const b = document.createElement('b');
+          b.textContent = categoryLabel(own?.slug ?? event.category.slug, own?.name ?? event.category.name);
+          tip.append(b, document.createTextNode(` · ${place.label.length > 70 ? `${place.label.slice(0, 68)}…` : place.label}`));
+          marker.bindTooltip(tip, { direction: 'top', offset: [0, -20], opacity: 0.95 });
+        }
         all.push(marker);
         markers.push(marker);
       });
@@ -1005,6 +1031,7 @@ export function MapView({
     // so they can't cover the top bar, menus or the phone pane switcher.
     <div className="relative isolate h-full w-full">
       <div ref={containerRef} className="ofm-map h-full w-full" role="region" aria-label={t('map.label')} />
+      <MapContextMenu map={leafletMap} target={ctxMenu} onClose={closeCtx} onArea={onAreaDrawn} onFilterCategory={onFilterCategory} />
       {alerts.length > 0 || topSlot ? (
         <div ref={topOverlayRef} className="pointer-events-none absolute inset-x-0 top-3 z-[500] flex flex-col items-center gap-2 px-16">
           {alerts.length > 0 ? (

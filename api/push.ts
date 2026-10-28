@@ -103,10 +103,19 @@ async function send(): Promise<Record<string, unknown>> {
   const active = new Set<string>(
     ids.length ? (await rest(`profiles?select=id&status=eq.active&id=in.(${ids.join(',')})`)).map((p: any) => p.id) : [],
   );
+  // A picture for the notification (Android / desktop show it; iOS does not): only our own public storage.
+  const imgPrefix = `${URL_()}/storage/v1/object/public/event-media/`;
+  const images = new Map<string, string>();
+  try {
+    const media: any[] = await rest(`event_media?select=event_id,public_url&ready=is.true&kind=in.(image,video_thumb)&event_id=in.(${events.map((e) => e.id).join(',')})&order=created_at.asc`);
+    for (const m of media) if (!images.has(m.event_id) && typeof m.public_url === 'string' && m.public_url.startsWith(imgPrefix)) images.set(m.event_id, m.public_url);
+  } catch (e) {
+    console.warn('push images skipped', (e as Error).message); // never block the notification
+  }
   // Hebrew text once per event; report categories without a Hebrew name and events without severity.
   const leanEvents = events.map((r) => {
     const issues: FormatIssues = {};
-    const msg = formatPush(r, issues);
+    const msg = { ...formatPush(r, issues), ...(images.has(r.id) ? { image: images.get(r.id) } : {}) };
     const sev = severityOf(r);
     if (issues.missingCategory) void note(`missing_category:${issues.missingCategory}`, r.id);
     if (sev.missing) void note('missing_severity', r.id);

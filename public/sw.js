@@ -18,6 +18,8 @@ self.addEventListener('push', (event) => {
       renotify: true,
       silent: false, // the device's notification sound
       vibrate: [200, 100, 200],
+      // Picture: shown by Android / desktop browsers; iOS ignores it. Only https; a failed image never stops the alert.
+      ...(typeof d.image === 'string' && d.image.startsWith('https://') ? { image: d.image } : {}),
       data: { url: d.url || '/' },
     });
   })());
