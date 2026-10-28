@@ -317,3 +317,6 @@ revoke all on function public.password_changed() from public, anon;
 grant execute on function public.password_changed() to authenticated;
 -- Hourly: plans whose time is up go back to Free.
 -- select cron.schedule('osintfront-expire-plans', '11 * * * *', 'select public.expire_plans()');
+-- Members read the plan / terms switches (they decide what the site asks of them).
+create policy "settings: members read plan and terms switches" on public.app_settings for select to authenticated
+  using (key in ('enforce_plans', 'require_terms', 'terms_version', 'privacy_version') and (select public.is_member()));
