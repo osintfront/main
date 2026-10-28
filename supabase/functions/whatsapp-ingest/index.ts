@@ -298,6 +298,10 @@ const CLASSIFY_TOOL = {
       region: { type: "string" },
       country: { type: "string", description: "Main country the report is about, in English, e.g. Lebanon, Syria, Israel, Iran, Yemen, United States. Fill it whenever the country is clear, even if no specific place is named." },
       original_source: { type: "string", description: "Outlet/source named in the message (e.g. Reuters, Al Jazeera, IDF Spokesperson, 'ד.ע'); empty if none" },
+      is_summary: {
+        type: "boolean",
+        description: "true when the message sums up incidents that happened EARLIER, not now: a daily/weekly roundup, a tally or list of yesterday's strikes, 'summary of the day', 'over the past 24 hours…'. A report of one incident happening now = false.",
+      },
       reason: { type: "string", description: "Max 8 words, telegraphic" },
     },
     required: ["decision", "reason"],
@@ -659,9 +663,17 @@ async function processOne(m: InMsg) {
       c.duplicate_of = undefined;
     }
   }
+  // A summary of earlier incidents ("yesterday's strikes"): its own event with the full text,
+  // never merged into a current incident and never pinned on the map (ai_suggestions.no_map).
+  const summary = c.is_summary === true && !same;
+  if (summary && c.decision === "duplicate") {
+    c.decision = c.category_slug ? "event" : "uncertain";
+    c.duplicate_of = undefined;
+    c.reason = `summary of earlier incidents — ${c.reason ?? ""}`;
+  }
   // Outside Israel / the Middle East (Ukraine, Europe, world markets…): not for this map.
   // Same place within the hour (other channels, other wording): one event, more sources.
-  if (c.decision === "event" || c.decision === "uncertain") {
+  if (!summary && (c.decision === "event" || c.decision === "uncertain")) {
     const near = samePlaceEvent(pool ?? [], placeKeys(c.location_name, c.location_name_en), sentAt);
     if (near) {
       if (!candidates.some((x) => x.id === near.id)) candidates.push(near);
@@ -731,7 +743,7 @@ async function processOne(m: InMsg) {
     occurred_at: sentIso,
     created_by: BOT_USER_ID,
     classification_confidence: confident ? 0.8 : 0.4,
-    ai_suggestions: { source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}), ...(m.light ? { light: true } : {}), ...(c.location_name_en ? { place_en: clip(c.location_name_en, 120) } : {}) },
+    ai_suggestions: { ...(summary ? { no_map: true, summary: true } : {}), source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}), ...(m.light ? { light: true } : {}), ...(c.location_name_en ? { place_en: clip(c.location_name_en, 120) } : {}) },
   };
   if (row.latitude == null || row.longitude == null) {
     row.latitude = null;
@@ -757,7 +769,7 @@ async function processOne(m: InMsg) {
       .select("id,occurred_at,created_at,location_name,ai_suggestions,sources")
       .is("deleted_at", null).gte("occurred_at", since).lt("created_at", ins!.created_at).neq("id", ins!.id)
       .order("created_at").limit(60);
-    const twin = samePlaceEvent(twins ?? [], placeKeys(c.location_name, c.location_name_en), sentAt, ins!.id);
+    const twin = summary ? null : samePlaceEvent(twins ?? [], placeKeys(c.location_name, c.location_name_en), sentAt, ins!.id);
     if (twin) {
       const entry = { name: clip(srcLabel, 200), url: sourceUrl(m, text), at: sentIso };
       const current: any[] = Array.isArray(twin.sources) ? twin.sources : [];
@@ -773,7 +785,7 @@ async function processOne(m: InMsg) {
   // first, then publishes. Light mode (no editor) publishes at once.
   let waitingForPlace = false;
   if (status === "published") {
-    if (ins!.latitude == null || !m.light) waitingForPlace = true;
+    if ((ins!.latitude == null && !summary) || !m.light) waitingForPlace = true;
     else {
       const { data: done, error: pubErr } = await db.from("events").update({ status: "published", ...pub }).eq("id", ins!.id).select("id,status,latitude").single();
       if (pubErr) console.error("publish failed", pubErr.message);
@@ -871,8 +883,9 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
 }
 
 async function publishIfPlaced(eventId: string) {
-  const { data: now } = await db.from("events").select("status,latitude,deleted_at").eq("id", eventId).maybeSingle();
-  if (now?.status === "draft" && now.latitude != null && !now.deleted_at) {
+  const { data: now } = await db.from("events").select("status,latitude,deleted_at,ai_suggestions").eq("id", eventId).maybeSingle();
+  // A summary has no pin by design: it is published to the feed only.
+  if (now?.status === "draft" && (now.latitude != null || now.ai_suggestions?.no_map === true) && !now.deleted_at) {
     const { error } = await db.from("events")
       .update({ status: "published", published_at: new Date().toISOString(), approved_by: BOT_USER_ID }).eq("id", eventId);
     if (error) console.error("publish after processing failed", error.message);
