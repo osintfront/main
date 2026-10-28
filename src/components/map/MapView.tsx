@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import 'leaflet.markercluster';
+import { ROTATE_OPTIONS, enableDragRotate } from './mapRotate';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import { BookOpen, Check, Globe2, Layers, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
 import { octagon, pointInPolygon, type LatLng } from '@/lib/eventFilters';
@@ -239,7 +240,9 @@ export function MapView({
       maxZoom: mapConfig.maxZoom,
       zoomControl: false,
       worldCopyJump: true,
+      ...ROTATE_OPTIONS,
     });
+    enableDragRotate(map);
     // A popup opened near the map's edge (or growing as its photo loads) is panned fully
     // into view, and never taller than the map (it scrolls inside instead).
     map.on('popupopen', (e: L.PopupEvent) => {
