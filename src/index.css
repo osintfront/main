@@ -709,3 +709,8 @@
     animation: none;
   }
 }
+
+/* Map compass (north-up button) */
+.ofm-compass a { display: grid; place-items: center; width: 34px; height: 34px; background: #fff; }
+.ofm-compass svg { transition: transform 0.15s; }
+.dark .ofm-compass a { background: #0f172a; }

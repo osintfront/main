@@ -6,17 +6,28 @@ import 'leaflet-rotate'; // pinned 0.2.8 (2023, stable): rotation, two-finger ro
  * A right-click without dragging still opens our investigation menu.
  */
 export function enableDragRotate(map: L.Map) {
-  // Manual rotation only: never follow the phone's compass. The compass button = back to north.
-  const m = map as L.Map & { compassBearing?: L.Handler; touchRotate?: L.Handler; rotateControl?: { _cycleState: () => void; _restyle: () => void } };
+  // Two modes only: north-up, or turned by hand. Never follow the phone's compass.
+  const m = map as L.Map & { compassBearing?: L.Handler; getBearing: () => number; setBearing: (b: number) => void };
   m.compassBearing?.disable();
-  if (m.rotateControl) {
-    m.rotateControl._cycleState = function (this: { _restyle: () => void }) {
-      m.compassBearing?.disable();
-      (map as L.Map & { setBearing: (b: number) => void }).setBearing(0);
-      m.touchRotate?.enable();
-      this._restyle();
-    };
-  }
+  // Our own compass button: the needle shows the map's bearing; a tap = north-up again.
+  const Compass = L.Control.extend({
+    onAdd() {
+      const box = L.DomUtil.create('div', 'leaflet-bar ofm-compass');
+      const a = L.DomUtil.create('a', '', box) as HTMLAnchorElement;
+      a.href = '#';
+      a.title = 'צפון למעלה';
+      a.setAttribute('role', 'button');
+      a.setAttribute('aria-label', 'צפון למעלה');
+      a.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2l4 10h-8z" fill="#dc2626"/><path d="M12 22l-4-10h8z" fill="#94a3b8"/></svg>';
+      const restyle = () => { (a.firstChild as SVGElement).style.transform = `rotate(${-m.getBearing()}deg)`; };
+      L.DomEvent.on(a, 'click', (e) => { L.DomEvent.preventDefault(e); L.DomEvent.stopPropagation(e); m.compassBearing?.disable(); m.setBearing(0); });
+      L.DomEvent.disableClickPropagation(box);
+      map.on('rotate', restyle);
+      restyle();
+      return box;
+    },
+  });
+  new Compass({ position: 'topleft' }).addTo(map);
   const el = map.getContainer();
   let start: { x: number; y: number; bearing: number; angle: number } | null = null;
   let moved = false;
@@ -67,5 +78,5 @@ export const ROTATE_OPTIONS = {
   touchRotate: true, // two fingers on phones
   compassBearing: false, // never follow the device's compass
   shiftKeyRotate: true, // Shift + mouse wheel
-  rotateControl: { closeOnZeroBearing: false, position: 'topleft' }, // compass: shows bearing, click = north up
+  rotateControl: false, // replaced by our own compass button (north-up only)
 } as unknown as L.MapOptions;
