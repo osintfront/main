@@ -91,7 +91,8 @@ export function useAreaLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rtl
   // Areas sit under the event pins (their own pane), lines on top of the areas.
   useEffect(() => {
     if (!map) return;
-    if (!map.getPane('ofmAreas')) map.createPane('ofmAreas').style.zIndex = '330';
+    // Inside the rotating pane (leaflet-rotate), so the areas turn with the map and stay above the tiles.
+    if (!map.getPane('ofmAreas')) map.createPane('ofmAreas', map.getPane('rotatePane')).style.zIndex = '330';
   }, [map]);
 
   useEffect(() => {

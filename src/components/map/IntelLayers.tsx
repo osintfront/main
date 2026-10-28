@@ -128,8 +128,8 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
   useEffect(() => {
     if (!map) return;
     if (!panesRef.current) {
-      const a = map.getPane('ofmSatA') ?? map.createPane('ofmSatA');
-      const b = map.getPane('ofmSatB') ?? map.createPane('ofmSatB');
+      const a = map.getPane('ofmSatA') ?? map.createPane('ofmSatA', map.getPane('rotatePane'));
+      const b = map.getPane('ofmSatB') ?? map.createPane('ofmSatB', map.getPane('rotatePane'));
       a.style.zIndex = '250';
       b.style.zIndex = '251';
       panesRef.current = { a, b };
