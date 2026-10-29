@@ -3,6 +3,8 @@
 -- X: official API (secret X_BEARER_TOKEN). Others: a data provider (Apify, secret APIFY_TOKEN);
 -- which provider actor runs for which network lives in app_settings.social_providers.
 
+alter table public.plans drop constraint if exists plans_id_check;
+alter table public.plans add constraint plans_id_check check (id in ('free', 'pro', 'max', 'intel'));
 insert into public.plans (id, name, sort) values ('intel', 'Intel', 4) on conflict (id) do nothing;
 alter table public.profiles drop constraint if exists profiles_plan_check;
 alter table public.profiles add constraint profiles_plan_check check (plan in ('free', 'pro', 'max', 'intel'));
