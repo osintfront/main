@@ -29,7 +29,17 @@ const WORDS = {
 type Result = { platform: string; post_id: string; url: string | null; author: string | null; text: string | null; posted_at: string | null; media: unknown[]; matched: string | null };
 type Run = { status: "running" | "done" | "error" | "off"; run_id?: string; dataset_id?: string; error?: string };
 
-async function caller(req: Request) {
+let cronSecret: string | null = null;
+async function caller(req: Request): Promise<{ uid: string | null; staff: boolean } | null> {
+  // Internal checks (pg_net with the cron secret) run as staff without a user.
+  const given = req.headers.get("x-cron-secret") ?? "";
+  if (given) {
+    if (cronSecret === null) {
+      const { data } = await db.from("intel_config").select("value").eq("key", "cron_secret").maybeSingle();
+      cronSecret = data?.value ?? "";
+    }
+    if (cronSecret && given === cronSecret) return { uid: null, staff: true };
+  }
   const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
     auth: { persistSession: false },
     global: { headers: { Authorization: req.headers.get("authorization") ?? "" } },
