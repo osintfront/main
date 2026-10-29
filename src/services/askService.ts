@@ -13,16 +13,16 @@ export interface AskAnswer {
 }
 
 export class AskError extends Error {
-  constructor(public code: 'rate_limited' | 'quota' | 'budget' | 'sign_in' | 'failed', message: string = code) {
+  constructor(public code: 'rate_limited' | 'quota' | 'budget' | 'upgrade' | 'sign_in' | 'failed', message: string = code) {
     super(message);
   }
 }
 
 /** 429 from the AI agent: daily quota, site-wide budget, or the hourly rate limit. */
-export async function aiLimitCode(error: unknown): Promise<'quota' | 'budget' | 'rate_limited'> {
+export async function aiLimitCode(error: unknown): Promise<'quota' | 'budget' | 'upgrade' | 'rate_limited'> {
   try {
     const body = await (error as { context?: Response }).context?.clone().json();
-    if (body?.error === 'quota' || body?.error === 'budget') return body.error;
+    if (body?.error === 'quota' || body?.error === 'budget' || body?.error === 'upgrade') return body.error;
   } catch {
     /* not JSON */
   }

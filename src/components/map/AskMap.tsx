@@ -58,7 +58,7 @@ export function AskMap({ result, onResult, onCite }: AskMapProps) {
       onResult(r);
     } catch (err) {
       const code = err instanceof AskError ? err.code : 'failed';
-      setError(t(code === 'quota' ? 'ai.quota' : code === 'budget' ? 'ai.budget' : code === 'rate_limited' ? 'ask.rateLimited' : code === 'sign_in' ? 'ask.signIn' : 'ask.failed'));
+      setError(t(code === 'upgrade' ? 'ai.upgrade' : code === 'quota' ? 'ai.quota' : code === 'budget' ? 'ai.budget' : code === 'rate_limited' ? 'ask.rateLimited' : code === 'sign_in' ? 'ask.signIn' : 'ask.failed'));
     } finally {
       setBusy(false);
     }

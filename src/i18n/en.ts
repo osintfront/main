@@ -616,6 +616,7 @@ export const en = {
   'ask.disclaimer': 'Written automatically from the reports on the map — press a number to see the report.',
   'ask.failed': 'Search failed, please try again.',
   'ai.quota': "You've used today's AI allowance for your plan. It renews tomorrow, or upgrade for more.",
+  'ai.upgrade': '"Ask the map" is part of the Pro plan.',
   'ai.budget': 'AI features are paused for today due to high demand. Try again tomorrow.',
   'settings.ai': 'AI limits',
   'settings.aiToggle': 'Enforce AI limits',

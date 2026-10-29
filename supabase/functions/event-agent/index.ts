@@ -89,10 +89,11 @@ function articleLinks(text: string, own?: string | null): string[] {
 }
 
 /** Reader AI limits (migration 0071): null = go ahead, else the 429 answer. Staff are never limited. */
-async function quotaGate(uid: string | null): Promise<Response | null> {
+async function quotaGate(uid: string | null, kind: "ask" | "expand" = "expand"): Promise<Response | null> {
   if (!uid) return null;
   const { data: q } = await db.rpc("ai_quota", { p_uid: uid });
   if (!q?.enabled || q.staff) return null;
+  if (kind === "ask" && q.plan === "free") return json({ error: "upgrade" }, 429);
   if (q.budget_usd != null && Number(q.spent_today_usd) >= Number(q.budget_usd)) return json({ error: "budget" }, 429);
   if (q.limit != null && Number(q.used) >= Number(q.limit)) return json({ error: "quota", limit: q.limit, used: q.used }, 429);
   return null;
@@ -511,7 +512,7 @@ async function handle(req: Request): Promise<Response> {
       const { count } = await db.from("ai_search_log").select("id", { count: "exact", head: true })
         .eq("user_id", uid).gte("at", new Date(Date.now() - 3600_000).toISOString());
       if ((count ?? 0) >= 40) return json({ error: "rate_limited" }, 429);
-      const blocked = await quotaGate(uid);
+      const blocked = await quotaGate(uid, "ask");
       if (blocked) return blocked;
     }
     try {
