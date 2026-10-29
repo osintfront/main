@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ExternalLink, Loader2, Radar, X } from 'lucide-react';
+import { Check, ExternalLink, Loader2, Lock, Radar, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/i18n';
 import { effectivePlan } from '@/lib/plans';
@@ -14,8 +15,9 @@ export function SocialSearchButton({ polygon }: { polygon: LatLng[] | null }) {
   const { profile } = useAuth();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const allowed = !!profile && profile.status === 'active' && (profile.role !== 'viewer' || effectivePlan(profile) === 'intel');
-  if (!allowed || !polygon) return null;
+  if (!profile || profile.status !== 'active' || !polygon) return null;
+  // Everyone signed in sees the button; without the Intel plan it opens a locked preview (no data, no cost).
+  const allowed = profile.role !== 'viewer' || effectivePlan(profile) === 'intel';
   return (
     <>
       <button
@@ -26,7 +28,7 @@ export function SocialSearchButton({ polygon }: { polygon: LatLng[] | null }) {
         <Radar className="size-4" aria-hidden />
         {t('social.button')}
       </button>
-      {open ? <SocialPanel polygon={polygon} onClose={() => setOpen(false)} /> : null}
+      {open ? (allowed ? <SocialPanel polygon={polygon} onClose={() => setOpen(false)} /> : <SocialPreview onClose={() => setOpen(false)} />) : null}
     </>
   );
 }
@@ -132,6 +134,65 @@ function SocialPanel({ polygon, onClose }: { polygon: LatLng[]; onClose: () => v
           ))}
         </ul>
         <p className="border-t border-slate-200 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">{t('social.note')}</p>
+      </section>
+    </div>
+  );
+}
+
+/** Locked preview for users without the Intel plan: sample layout only (no search, no data), then the purchase page. */
+function SocialPreview({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
+  const titleId = useId();
+  const [buy, setBuy] = useState(false);
+  const fake = [
+    { net: 'X', w: ['w-11/12', 'w-4/5', 'w-2/3'], media: true },
+    { net: 'TikTok', w: ['w-full', 'w-3/4'], media: true },
+    { net: 'Instagram', w: ['w-5/6', 'w-1/2'], media: false },
+    { net: 'Facebook', w: ['w-11/12', 'w-4/5', 'w-1/3'], media: true },
+  ];
+  return (
+    <div className="fixed inset-0 z-[3000] flex justify-end" role="presentation">
+      <div className="absolute inset-0 bg-slate-950/40" onClick={onClose} aria-hidden />
+      <section role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl dark:bg-slate-900">
+        <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <h2 id={titleId} className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-white"><Radar className="size-4 text-violet-600" aria-hidden />{buy ? t('social.buyTitle') : t('social.title')}</h2>
+          <button type="button" onClick={onClose} aria-label={t('common.close')} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="size-4" aria-hidden /></button>
+        </header>
+        {buy ? (
+          <div className="ofm-scroll flex-1 space-y-4 overflow-y-auto overscroll-contain p-5 text-sm">
+            <p className="text-slate-700 dark:text-slate-200">{t('social.buyBody')}</p>
+            <ul className="space-y-2">
+              {(['social.f1', 'social.f2', 'social.f3', 'social.f4', 'social.f5'] as const).map((k) => (
+                <li key={k} className="flex items-start gap-2 text-slate-800 dark:text-slate-100"><Check className="mt-0.5 size-4 shrink-0 text-violet-600" aria-hidden />{t(k)}</li>
+              ))}
+            </ul>
+            <p className="rounded-lg bg-violet-50 p-3 text-violet-900 dark:bg-violet-500/10 dark:text-violet-200">{t('social.buyNote')}</p>
+            <Link to="/contact?plan=intel" className="flex h-11 items-center justify-center rounded-xl bg-violet-600 font-bold text-white hover:bg-violet-500">{t('social.buyCta')}</Link>
+            <button type="button" onClick={() => setBuy(false)} className="w-full text-center text-xs font-semibold text-slate-500 hover:underline">{t('social.back')}</button>
+          </div>
+        ) : (
+          <>
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              <ul className="pointer-events-none select-none divide-y divide-slate-100 blur-[3px] dark:divide-slate-800" aria-hidden>
+                {fake.map((f, i) => (
+                  <li key={i} className="space-y-2 p-4">
+                    <div className="flex justify-between text-xs"><span className="font-semibold text-violet-700 dark:text-violet-300">{f.net}</span><span className="h-3 w-16 rounded bg-slate-200 dark:bg-slate-700" /></div>
+                    {f.w.map((w, j) => <div key={j} className={`h-3 rounded bg-slate-200 dark:bg-slate-700 ${w}`} />)}
+                    {f.media ? <div className="h-32 w-full rounded-lg bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800" /> : null}
+                  </li>
+                ))}
+              </ul>
+              <div className="absolute inset-0 flex items-center justify-center p-6">
+                <div className="w-full max-w-xs space-y-3 rounded-2xl bg-white/95 p-5 text-center shadow-xl ring-1 ring-slate-900/10 dark:bg-slate-900/95 dark:ring-white/10">
+                  <span className="mx-auto grid size-11 place-items-center rounded-full bg-violet-100 dark:bg-violet-500/15"><Lock className="size-5 text-violet-600" aria-hidden /></span>
+                  <p className="font-bold text-slate-900 dark:text-white">{t('social.lockedTitle')}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{t('social.lockedBody')}</p>
+                  <button type="button" onClick={() => setBuy(true)} className="h-10 w-full rounded-xl bg-violet-600 font-bold text-white hover:bg-violet-500">{t('social.lockedCta')}</button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
