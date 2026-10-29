@@ -270,7 +270,7 @@ async function runSearch(cfg: Cfg, uid: string | null, poly: [number, number][],
   const allRuns: Record<string, Run> = { x: x.error ? { status: x.error === "not_configured" || x.error === "disabled" ? "off" : "error", error: x.error } : { status: "done" }, ...runs };
   const { data: row, error } = await db.from("social_searches").insert({
     user_id: uid, polygon: geo, places: [...new Set([...places.he, ...places.en])], terms: terms ?? [], hours, runs: allRuns,
-    cost_usd: x.cost, results_count: x.rows.length, cache_key: cacheKey, scheduled_area: area,
+    cost_usd: x.cost, results_count: x.rows.length, cache_key: overBudget ? null : cacheKey, scheduled_area: area,
   }).select("id").single();
   if (error || !row) return { error: "save_failed", status: 500 };
   await save(row.id, x.rows);
