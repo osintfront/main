@@ -23,8 +23,8 @@ on conflict do nothing;
 insert into public.app_settings (key, value) values
   ('social_search_enabled', 'true'::jsonb),
   ('social_providers', '{
-    "tiktok": {"actor": "clockworks~tiktok-scraper", "input": {"searchQueries": ["{q}"], "resultsPerPage": 20, "searchSection": "/video", "shouldDownloadVideos": false, "shouldDownloadCovers": false}},
-    "instagram": {"actor": "apify~instagram-hashtag-scraper", "input": {"hashtags": ["{tag}"], "resultsLimit": 20}},
+    "tiktok": {"actor": "clockworks~tiktok-scraper", "input": {"searchQueries": ["{q}"], "resultsPerPage": 10, "searchSection": "/video", "shouldDownloadVideos": false, "shouldDownloadCovers": false}},
+    "instagram": {"actor": null, "hashtag_actor": "apify~instagram-hashtag-scraper", "input": {"hashtags": ["{tag}"], "resultsLimit": 20}},
     "facebook": {"actor": null, "input": {"query": "{q}", "maxPosts": 20}}
   }'::jsonb)
 on conflict (key) do nothing;

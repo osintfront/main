@@ -21,9 +21,16 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
 
 const WORDS = {
-  he: ["פיצוץ", "ירי", "תקיפה", "אזעקה", "שריפה"],
-  ar: ["انفجار", "قصف", "غارة", "اشتباكات", "استهداف"],
-  en: ["explosion", "strike", "attack", "shelling", "drone"],
+  he: ["פיצוץ", "ירי", "תקיפה", "אזעקה", "שיגור", "יירוט", "כטב\"ם"],
+  ar: ["انفجار", "قصف", "غارة", "غارات", "استهداف", "اشتباكات", "مسيرة", "صاروخ", "حربي"],
+  en: ["explosion", "strike", "airstrike", "attack", "shelling", "drone", "missile"],
+};
+// Provider results come back loosely matched (a hashtag search for "Tyre" brings tyre shops):
+// keep only posts that mention an event word or one of the user's words.
+const relevantWord = (text: string | null, terms: string[] | null): string | null => {
+  const t = (text ?? "").toLowerCase();
+  for (const w of [...(terms ?? []), ...WORDS.ar, ...WORDS.he, ...WORDS.en]) if (w && t.includes(w.toLowerCase())) return w;
+  return null;
 };
 
 type Result = { platform: string; post_id: string; url: string | null; author: string | null; text: string | null; posted_at: string | null; media: unknown[]; matched: string | null };
@@ -123,7 +130,11 @@ async function startRuns(places: { he: string[]; ar: string[]; en: string[] }, t
   const { data: s } = await db.from("app_settings").select("value").eq("key", "social_providers").maybeSingle();
   const cfg = (s?.value ?? {}) as Record<string, { actor: string | null; input: unknown }>;
   const top = [...places.ar.slice(0, 2), ...places.en.slice(0, 2), ...places.he.slice(0, 1)].map(clean).filter(Boolean);
-  const q = terms?.length ? top.flatMap((p) => terms.slice(0, 2).map((t) => `${p} ${t}`)).slice(0, 6) : top;
+  // Place + event word, so the network's own search does the first filtering.
+  const q = (terms?.length
+    ? top.flatMap((p) => terms.slice(0, 2).map((t) => `${p} ${t}`))
+    : [...places.ar.slice(0, 3).flatMap((p) => [`${clean(p)} غارة`, `${clean(p)} قصف`]), ...places.he.slice(0, 1).map((p) => `${clean(p)} פיצוץ`), ...places.en.slice(0, 1).map((p) => `${clean(p)} strike`)]
+  ).slice(0, 6);
   const tags = [...new Set(top.map((p) => p.replace(/\s+/g, "")))];
   const runs: Record<string, Run> = {};
   for (const net of ["facebook", "instagram", "tiktok"]) {
@@ -165,7 +176,7 @@ function normalize(net: string, it: any): Result | null {
   };
 }
 
-async function collect(searchId: string, runs: Record<string, Run>, hours: number): Promise<{ runs: Record<string, Run>; rows: Result[]; cost: number }> {
+async function collect(searchId: string, runs: Record<string, Run>, hours: number, terms: string[] | null): Promise<{ runs: Record<string, Run>; rows: Result[]; cost: number }> {
   const since = Date.now() - hours * 3600_000;
   const rows: Result[] = [];
   let cost = 0;
@@ -177,7 +188,9 @@ async function collect(searchId: string, runs: Record<string, Run>, hours: numbe
       const items = await fetch(`https://api.apify.com/v2/datasets/${r.dataset_id}/items?clean=true&limit=80&token=${APIFY}`).then((x) => x.json()).catch(() => []);
       for (const it of Array.isArray(items) ? items : []) {
         const n = normalize(net, it);
-        if (n && (!n.posted_at || Date.parse(n.posted_at) >= since)) rows.push(n);
+        if (!n || (n.posted_at && Date.parse(n.posted_at) < since)) continue;
+        const hit = relevantWord(n.text, terms);
+        if (hit) rows.push({ ...n, matched: hit });
       }
       cost += Number(st.data.usageTotalUsd ?? 0);
       runs[net] = { ...r, status: "done" };
@@ -247,9 +260,9 @@ Deno.serve(async (req) => {
 
   if (body?.action === "poll") {
     const id = String(body.id ?? "");
-    const { data: s } = await db.from("social_searches").select("id,user_id,runs,hours,cost_usd").eq("id", id).maybeSingle();
+    const { data: s } = await db.from("social_searches").select("id,user_id,runs,hours,cost_usd,terms").eq("id", id).maybeSingle();
     if (!s || (s.user_id !== who.uid && !who.staff)) return json({ error: "not found" }, 404);
-    const r = await collect(s.id, { ...(s.runs as Record<string, Run>) }, s.hours);
+    const r = await collect(s.id, { ...(s.runs as Record<string, Run>) }, s.hours, (s.terms as string[] | null)?.length ? (s.terms as string[]) : null);
     await save(s.id, r.rows);
     if (r.rows.length || r.cost) {
       const { count } = await db.from("social_results").select("id", { count: "exact", head: true }).eq("search_id", s.id);
