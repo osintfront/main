@@ -21,7 +21,7 @@ export function PlanCell({ u, canEdit, onChanged }: { u: Profile; canEdit: boole
         <div className="flex flex-wrap gap-1">
           <select disabled={busy} value={u.plan} onChange={(e) => void run(() => setPlan(u.id, e.target.value as PlanId, e.target.value === 'free' ? 'default' : 'paid', null))}
             className="h-7 rounded border border-slate-200 bg-white px-1 dark:border-slate-700 dark:bg-slate-900">
-            <option value="free">Free</option><option value="pro">Pro</option><option value="max">Max</option>
+            <option value="free">Free</option><option value="pro">Pro</option><option value="max">Max</option><option value="intel">Intel (מודיעין)</option>
           </select>
           {u.plan !== 'free' ? (
             <>

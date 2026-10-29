@@ -82,3 +82,11 @@ as $$
   limit least(greatest(p_limit, 1), 20)
 $$;
 revoke all on function public.places_in_polygon(jsonb, int) from public, anon, authenticated;
+
+-- Admins may assign it (applied live by patching the function body: 'free','pro','max' → + 'intel').
+do $$ declare d text; begin
+  d := pg_get_functiondef('public.admin_set_plan(uuid,text,text,timestamptz)'::regprocedure);
+  if position('''max'', ''intel''' in d) = 0 then
+    execute replace(d, '''free'', ''pro'', ''max'')', '''free'', ''pro'', ''max'', ''intel'')');
+  end if;
+end $$;
