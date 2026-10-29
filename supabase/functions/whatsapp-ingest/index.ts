@@ -465,7 +465,9 @@ function pickCandidates(text: string, sentAt: Date, pool: any[]): any[] {
     const recent = near(new Date(e.occurred_at).getTime() - sentAt.getTime()) <= DUP_WINDOW_MIN * 60000;
     return { e, shared, recent };
   });
-  const recent = scored.filter((x) => x.recent).slice(0, 8);
+  // Busy feeds have dozens of events in ±30 min: keep the recent ones that share the most words,
+  // not just the 8 newest (the real duplicate was being cut off).
+  const recent = scored.filter((x) => x.recent).sort((a, b) => b.shared - a.shared).slice(0, 8);
   const similar = scored
     .filter((x) => !x.recent && x.shared >= 3)
     .sort((a, b) => b.shared - a.shared)
@@ -491,7 +493,13 @@ function obviousDuplicate(text: string, sentAt: Date, pool: any[]): any | null {
   let bestScore = 0;
   for (const e of pool) {
     if (Math.abs(new Date(e.occurred_at).getTime() - sentAt.getTime()) > 60 * 60000) continue;
-    const score = overlap(mine, words(e.original_report_text || e.description || e.title));
+    const theirs = words(e.original_report_text || e.description || e.title);
+    // Jaccard, or containment when one copy adds channel ads/links around the same sentence.
+    let shared = 0;
+    for (const w of mine) if (theirs.has(w)) shared++;
+    const small = Math.min(mine.size, theirs.size);
+    const contain = small >= 6 ? shared / small : 0;
+    const score = Math.max(overlap(mine, theirs), contain >= 0.8 ? SAME_TEXT : 0);
     if (score > bestScore) [best, bestScore] = [e, score];
   }
   return bestScore >= SAME_TEXT ? best : null;
