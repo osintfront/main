@@ -76,3 +76,35 @@ export async function getHfcIngestStatus(): Promise<HfcIngestStatus> {
   const row = data as { last_ok_at: string | null; last_error: string | null; last_error_at: string | null } | null;
   return { lastOkAt: row?.last_ok_at ?? null, lastError: row?.last_error ?? null, lastErrorAt: row?.last_error_at ?? null };
 }
+
+/** Reader AI limits (migration 0071). */
+export interface AiLimits {
+  enabled: boolean;
+  budgetUsd: number | null;
+}
+
+export async function getAiLimits(): Promise<AiLimits> {
+  const { data, error } = await client().from('app_settings').select('key,value').in('key', ['ai_limits_enabled', 'ai_daily_budget_usd']);
+  if (error) throw toServiceError(error);
+  const rows = (data ?? []) as { key: string; value: unknown }[];
+  const v = (k: string) => rows.find((r) => r.key === k)?.value;
+  const b = v('ai_daily_budget_usd');
+  return { enabled: v('ai_limits_enabled') === true, budgetUsd: typeof b === 'number' ? b : null };
+}
+
+export async function setAiSetting(key: 'ai_limits_enabled' | 'ai_daily_budget_usd', value: boolean | number | null): Promise<void> {
+  const { data, error } = await client().from('app_settings').update({ value }).eq('key', key).select('key');
+  if (error) throw toServiceError(error);
+  if (!Array.isArray(data) || data.length === 0) throw new ServiceError('permission_denied', 'Not allowed to change settings.');
+}
+
+/** What signed-in readers' AI cost today (Israel day), in USD. */
+export async function getReaderAiSpendToday(): Promise<number> {
+  const now = new Date();
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(now);
+  const offset = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' })).getTime() - new Date(now.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
+  const since = new Date(Date.parse(`${day}T00:00:00Z`) - offset).toISOString();
+  const { data, error } = await client().from('ai_usage').select('cost_usd').not('user_id', 'is', null).gte('at', since).limit(10000);
+  if (error) throw toServiceError(error);
+  return ((data ?? []) as { cost_usd: number }[]).reduce((s, r) => s + Number(r.cost_usd || 0), 0);
+}

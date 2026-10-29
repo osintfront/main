@@ -47,7 +47,7 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
   const [expanded, setExpanded] = useState<ExpandedByLang | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<'expand' | 'source' | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<false | 'failed' | 'quota' | 'budget'>(false);
 
   const showSource = async () => {
     if (view === 'source') return setView('summary');
@@ -76,8 +76,9 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
     try {
       setExpanded(await expandEvent(event.id));
       setOpen(true);
-    } catch {
-      setFailed(true);
+    } catch (err) {
+      const m = (err as Error)?.message;
+      setFailed(m === 'quota' || m === 'budget' ? m : 'failed');
     } finally {
       setBusy(null);
     }
@@ -148,7 +149,7 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
           <WhatsAppIcon />
           {t('text.share')}
         </a>
-        {failed ? <span className="text-xs text-red-600 dark:text-red-400">{t('text.expandFailed')}</span> : null}
+        {failed ? <span className="text-xs text-red-600 dark:text-red-400">{t(failed === 'quota' ? 'ai.quota' : failed === 'budget' ? 'ai.budget' : 'text.expandFailed')}</span> : null}
       </div>
     </div>
   );

@@ -20,7 +20,7 @@
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { EXPAND_VERSION, countryCode, editReport, expandReport, geocode, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor } from "../_shared/editor.ts";
-import { setUsageSink } from "../_shared/usage.ts";
+import { runAsReader, setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
@@ -88,7 +88,17 @@ function articleLinks(text: string, own?: string | null): string[] {
   return out;
 }
 
-async function expand(id: string) {
+/** Reader AI limits (migration 0071): null = go ahead, else the 429 answer. Staff are never limited. */
+async function quotaGate(uid: string | null): Promise<Response | null> {
+  if (!uid) return null;
+  const { data: q } = await db.rpc("ai_quota", { p_uid: uid });
+  if (!q?.enabled || q.staff) return null;
+  if (q.budget_usd != null && Number(q.spent_today_usd) >= Number(q.budget_usd)) return json({ error: "budget" }, 429);
+  if (q.limit != null && Number(q.used) >= Number(q.limit)) return json({ error: "quota", limit: q.limit, used: q.used }, 429);
+  return null;
+}
+
+async function expand(id: string, gate: () => Promise<Response | null> = async () => null) {
   const { data: ev } = await db.from("events")
     .select("id,title,description,original_report_text,source_name,source_url,translations,ai_suggestions,status,deleted_at")
     .eq("id", id).maybeSingle();
@@ -107,6 +117,8 @@ async function expand(id: string) {
   if (cached.he && linksDone && Number(ev.ai_suggestions?.expanded_sources ?? 0) >= others.length && Number(ev.ai_suggestions?.expand_version ?? 1) >= EXPAND_VERSION) {
     return json({ ok: true, cached: true, ...cached });
   }
+  const blocked = await gate();
+  if (blocked) return blocked;
   // One writer at a time: a second reader within a minute waits for the first.
   const started = Date.parse(String(ev.ai_suggestions?.expanding_at ?? ""));
   if (Number.isFinite(started) && Date.now() - started < 90_000) return json({ ok: true, pending: true }, 202);
@@ -427,6 +439,7 @@ async function handle(req: Request): Promise<Response> {
   const action = String(body?.action ?? "");
   const id = String(body?.id ?? "");
   // Members-only site: the reader actions need a signed-in, active account (or the cron secret).
+  let readerId: string | null = null;
   if (action === "expand" || action === "video") {
     if (!(await cronOk(req))) {
       const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
@@ -438,11 +451,12 @@ async function handle(req: Request): Promise<Response> {
       if (!uid) return json({ error: "sign in required" }, 401);
       const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
       if (prof?.status !== "active") return json({ error: "unauthorized" }, 401);
+      readerId = uid;
     }
   }
   if (action === "expand") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
-    return await expand(id);
+    return await runAsReader(readerId, () => expand(id, () => quotaGate(readerId)));
   }
   if (action === "claude_usage") {
     // Staff only: check the caller's own session.
@@ -497,9 +511,11 @@ async function handle(req: Request): Promise<Response> {
       const { count } = await db.from("ai_search_log").select("id", { count: "exact", head: true })
         .eq("user_id", uid).gte("at", new Date(Date.now() - 3600_000).toISOString());
       if ((count ?? 0) >= 40) return json({ error: "rate_limited" }, 429);
+      const blocked = await quotaGate(uid);
+      if (blocked) return blocked;
     }
     try {
-      const r = await askMap(db, question);
+      const r = await runAsReader(uid, () => askMap(db, question));
       await db.from("ai_search_log").insert({ user_id: uid, question, results: r.ids.length });
       return json({ ok: true, ...r });
     } catch (e) {

@@ -1,6 +1,13 @@
 // AI usage log: tokens and cost of every Anthropic call → public.ai_usage (daily view ai_usage_daily).
 // Costs only a database insert; never throws.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+/** The signed-in reader an AI call is made for (per request), so their usage counts against their quota. */
+const reader = new AsyncLocalStorage<string>();
+export function runAsReader<T>(uid: string | null, fn: () => Promise<T>): Promise<T> {
+  return uid ? reader.run(uid, fn) : fn();
+}
 
 /** USD per million tokens [input, output]. Cache reads cost 10% of input, cache writes 125%. */
 const PRICES: Record<string, [number, number]> = {
@@ -54,6 +61,7 @@ export function logUsage(purpose: string, model: string, usage: Usage | undefine
     web_searches: usage.server_tool_use?.web_search_requests ?? 0,
     cost_usd: Math.round(costUsd(model, usage) * 1e6) / 1e6,
     event_id: eventId ?? null,
+    user_id: reader.getStore() ?? null,
   };
   // Fire and forget: logging must never slow down or break the pipeline.
   void sink.db.from("ai_usage").insert(row).then(({ error }) => {

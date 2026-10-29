@@ -13,9 +13,20 @@ export interface AskAnswer {
 }
 
 export class AskError extends Error {
-  constructor(public code: 'rate_limited' | 'sign_in' | 'failed', message: string = code) {
+  constructor(public code: 'rate_limited' | 'quota' | 'budget' | 'sign_in' | 'failed', message: string = code) {
     super(message);
   }
+}
+
+/** 429 from the AI agent: daily quota, site-wide budget, or the hourly rate limit. */
+export async function aiLimitCode(error: unknown): Promise<'quota' | 'budget' | 'rate_limited'> {
+  try {
+    const body = await (error as { context?: Response }).context?.clone().json();
+    if (body?.error === 'quota' || body?.error === 'budget') return body.error;
+  } catch {
+    /* not JSON */
+  }
+  return 'rate_limited';
 }
 
 export async function askMap(question: string): Promise<AskAnswer> {
@@ -24,7 +35,7 @@ export async function askMap(question: string): Promise<AskAnswer> {
   const { data, error } = await supabase.functions.invoke('event-agent', { body: { action: 'ask', question } });
   if (error) {
     const status = (error as { context?: { status?: number } }).context?.status;
-    if (status === 429) throw new AskError('rate_limited');
+    if (status === 429) throw new AskError(await aiLimitCode(error));
     if (status === 401) throw new AskError('sign_in');
     throw new AskError('failed', String(error.message ?? error));
   }

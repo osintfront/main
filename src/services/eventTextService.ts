@@ -1,4 +1,5 @@
 import { requireFeature } from '@/lib/plans';
+import { aiLimitCode } from './askService';
 import { supabase } from '@/integrations/supabase/client';
 import type { PublicEvent } from '@/types/event';
 
@@ -38,7 +39,10 @@ export async function expandEvent(id: string): Promise<ExpandedByLang> {
   // Another reader may be writing it right now (202): wait and ask again.
   for (let attempt = 0; attempt < 12; attempt++) {
     const { data, error } = await supabase.functions.invoke('event-agent', { body: { action: 'expand', id } });
-    if (error) throw error;
+    if (error) {
+      if ((error as { context?: { status?: number } }).context?.status === 429) throw new Error(await aiLimitCode(error));
+      throw error;
+    }
     if (data?.he) {
       const out: ExpandedByLang = { he: data.he ?? null, en: data.en ?? null };
       expandCache.set(id, out);

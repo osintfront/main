@@ -1,11 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Database, KeyRound, Map as MapIcon, Send, ShieldCheck, Siren } from 'lucide-react';
+import { Bot, Database, KeyRound, Map as MapIcon, Send, ShieldCheck, Siren } from 'lucide-react';
 import { ToggleField } from '@/components/common/Form';
 import { useToast } from '@/components/common/Toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { friendlyError } from '@/services/serviceError';
 import {
+  getAiLimits,
   getAutoPublish,
+  getReaderAiSpendToday,
+  setAiSetting,
+  type AiLimits,
   getHfcIngestStatus,
   getHfcSettings,
   setAutoPublish,
@@ -157,6 +161,89 @@ function HfcRow() {
   );
 }
 
+function AiLimitsRow() {
+  const { t } = useI18n();
+  const toast = useToast();
+  const { can } = usePermissions();
+  const [limits, setLimits] = useState<AiLimits | null>(null);
+  const [budget, setBudget] = useState('');
+  const [spent, setSpent] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getAiLimits()
+      .then((l) => {
+        if (!alive) return;
+        setLimits(l);
+        setBudget(l.budgetUsd == null ? '' : String(l.budgetUsd));
+      })
+      .catch((err) => alive && setLoadError(friendlyError(err, t)));
+    getReaderAiSpendToday()
+      .then((s) => alive && setSpent(s))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [t]);
+
+  const save = async (key: 'ai_limits_enabled' | 'ai_daily_budget_usd', value: boolean | number | null) => {
+    setSaving(true);
+    try {
+      await setAiSetting(key, value);
+      setLimits((l) => (l ? (key === 'ai_limits_enabled' ? { ...l, enabled: value === true } : { ...l, budgetUsd: value as number | null }) : l));
+      toast.success(t('settings.saved'));
+    } catch (err) {
+      toast.error(friendlyError(err, t));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const disabled = saving || !can('settings.manage');
+  return (
+    <Row icon={<Bot className="size-[18px]" aria-hidden />} title={t('settings.ai')}>
+      <p>{t('settings.aiBody')}</p>
+      {loadError ? <p className="mt-2 text-red-600 dark:text-red-400">{loadError}</p> : null}
+      {limits ? (
+        <div className="mt-3 space-y-3">
+          <ToggleField label={t('settings.aiToggle')} checked={limits.enabled} onChange={(v) => void save('ai_limits_enabled', v)} disabled={disabled} />
+          <form
+            className="flex flex-wrap items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const n = budget.trim() === '' ? null : Number(budget);
+              if (n !== null && (!Number.isFinite(n) || n < 0)) return;
+              void save('ai_daily_budget_usd', n);
+            }}
+          >
+            <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-300">
+              {t('settings.aiBudget')}
+              <input
+                type="number"
+                name="ai-budget"
+                inputMode="decimal"
+                min={0}
+                step={1}
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                disabled={disabled}
+                autoComplete="off"
+                className="h-9 w-32 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-900 tabular-nums focus-visible:ring-2 focus-visible:ring-sky-500/40 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              />
+            </label>
+            <button type="submit" disabled={disabled} className="h-9 rounded-lg bg-sky-600 px-3 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50">
+              {t('settings.aiSave')}
+            </button>
+          </form>
+          {spent != null ? <p className="text-xs text-slate-500 tabular-nums dark:text-slate-400">{t('settings.aiSpent', { spent: spent.toFixed(2) })}</p> : null}
+        </div>
+      ) : null}
+    </Row>
+  );
+}
+
 export function SettingsPage() {
   const { t } = useI18n();
   const roles = authConfig.requireMfaForRoles.map((r) => t(`role.${r}`)).join(', ') || t('settings.none');
@@ -169,6 +256,7 @@ export function SettingsPage() {
         </Row>
         <HfcRow />
         <AutoPublishRow />
+        <AiLimitsRow />
         <Row icon={<MapIcon className="size-[18px]" aria-hidden />} title={t('settings.mapProvider')}>
           {t('settings.mapProviderBody', { provider: mapConfig.provider })}
         </Row>
