@@ -195,6 +195,17 @@ async function articleText(item: Item): Promise<{ text: string; date: string | n
     if (r.status >= 400) throw new Error(String(r.status));
     const html = r.text;
     const date = pageDate(html, item.url);
+    // Live blog entry (…?blockId=block_123 or #block_123): the page's description and body are
+    // about the whole day's blog, not this entry — use only this entry's own block.
+    const blockId = (item.url.match(/[?&#](?:blockId=)?(block[_-]?[\w-]+)/i) ?? [])[1];
+    if (blockId) {
+      const at = html.search(new RegExp(`id=["']${blockId}["']`, "i"));
+      let chunk = at >= 0 ? html.slice(at, at + 15000) : "";
+      const next = chunk.slice(20).search(/id=["']block[_-]/i);
+      if (next >= 0) chunk = chunk.slice(0, next + 20);
+      const own = [...chunk.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => stripTags(m[1])).filter((p) => p.length > 30).join("\n\n").slice(0, 4000);
+      return { text: [item.title, own].filter(Boolean).join("\n\n"), date: pageDate(html, item.url) };
+    }
     const metaDesc = decode((html.match(/<meta[^>]+(?:property|name)=["'](?:og:description|description)["'][^>]+content=["']([^"']+)["']/i) ?? [])[1] ?? "");
     const article = (html.match(/<article\b[\s\S]*?<\/article>/i) ?? [html])[0];
     const paras = [...article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => stripTags(m[1])).filter((p) => p.length > 40);
