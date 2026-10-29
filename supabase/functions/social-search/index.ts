@@ -218,8 +218,9 @@ Deno.serve(async (req) => {
     const { data: pl, error: plErr } = await db.rpc("places_in_polygon", { p_polygon: geo, p_limit: 6 });
     if (plErr) return json({ error: "places_failed" }, 502);
     const places = {
-      he: (pl ?? []).map((p: any) => p.name_he).filter(Boolean),
-      ar: (pl ?? []).map((p: any) => p.name_ar).filter(Boolean),
+      // GeoNames sometimes holds a Latin transliteration in the Arabic/Hebrew slot: keep real script only.
+      he: (pl ?? []).map((p: any) => String(p.name_he ?? "").replace(/[\u200e\u200f]/g, "").trim()).filter((n: string) => /[\u0590-\u05FF]/.test(n)),
+      ar: (pl ?? []).map((p: any) => String(p.name_ar ?? "").replace(/[\u200e\u200f]/g, "").trim()).filter((n: string) => /[\u0600-\u06FF]/.test(n)),
       en: (pl ?? []).map((p: any) => p.name_en).filter(Boolean),
     };
     if (!places.he.length && !places.ar.length && !places.en.length) return json({ error: "no_places" }, 422);
