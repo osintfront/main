@@ -215,6 +215,82 @@ async function answer(searchId: string) {
   return json({ ok: true, search: s, results: rows ?? [] });
 }
 
+// ── One config place: app_settings.social_config ──
+type Area = { name: string; polygon: [number, number][]; hours?: number; terms?: string[] };
+type Cfg = { x_enabled: boolean; apify_daily_budget_usd: number; cache_minutes: number; schedule: { enabled: boolean; per_day: number; areas: Area[] } };
+async function config(): Promise<Cfg> {
+  const { data } = await db.from("app_settings").select("value").eq("key", "social_config").maybeSingle();
+  const v = (data?.value ?? {}) as Partial<Cfg>;
+  return {
+    x_enabled: v.x_enabled === true, // X stays OFF unless this is exactly true.
+    apify_daily_budget_usd: Number.isFinite(Number(v.apify_daily_budget_usd)) ? Number(v.apify_daily_budget_usd) : 1,
+    cache_minutes: Number.isFinite(Number(v.cache_minutes)) ? Number(v.cache_minutes) : 60,
+    schedule: { enabled: v.schedule?.enabled === true, per_day: Number(v.schedule?.per_day) || 3, areas: Array.isArray(v.schedule?.areas) ? v.schedule!.areas : [] },
+  };
+}
+
+const RUN_ESTIMATE_USD = 0.25; // a provider run still in progress, before Apify reports its real cost
+async function apifySpentToday(): Promise<number> {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
+  const { data } = await db.from("social_searches").select("cost_usd,runs").gte("created_at", new Date(Date.parse(`${day}T00:00:00+02:00`) - 3600_000).toISOString());
+  let sum = 0;
+  for (const r of data ?? []) {
+    sum += Number(r.cost_usd ?? 0);
+    for (const run of Object.values((r.runs ?? {}) as Record<string, Run>)) if (run.status === "running") sum += RUN_ESTIMATE_USD;
+  }
+  return sum;
+}
+
+async function runSearch(cfg: Cfg, uid: string | null, poly: [number, number][], hours: number, terms: string[] | null, area: string | null): Promise<{ id: string } | { error: string; status: number }> {
+  const ring = poly.map(([lat, lng]) => [lng, lat]);
+  if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) ring.push(ring[0]);
+  const geo = { type: "Polygon", coordinates: [ring] };
+  const { data: pl, error: plErr } = await db.rpc("places_in_polygon", { p_polygon: geo, p_limit: 6 });
+  if (plErr) return { error: "places_failed", status: 502 };
+  const places = {
+    // GeoNames sometimes holds a Latin transliteration in the Arabic/Hebrew slot: keep real script only.
+    he: (pl ?? []).map((p: any) => String(p.name_he ?? "").replace(/[\u200e\u200f]/g, "").trim()).filter((n: string) => /[\u0590-\u05FF]/.test(n)),
+    ar: (pl ?? []).map((p: any) => String(p.name_ar ?? "").replace(/[\u200e\u200f]/g, "").trim()).filter((n: string) => /[\u0600-\u06FF]/.test(n)),
+    en: (pl ?? []).map((p: any) => p.name_en).filter(Boolean),
+  };
+  if (!places.he.length && !places.ar.length && !places.en.length) return { error: "no_places", status: 422 };
+  // Cache: the same places + words within cache_minutes → the earlier search, no new cost.
+  const cacheKey = [[...places.ar, ...places.en].map((x) => x.toLowerCase()).sort().join("|"), (terms ?? []).map((x) => x.toLowerCase()).sort().join("|"), hours].join("#");
+  const { data: hit } = await db.from("social_searches").select("id").eq("cache_key", cacheKey)
+    .gte("created_at", new Date(Date.now() - cfg.cache_minutes * 60_000).toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (hit) return { id: hit.id };
+  // Daily Apify budget.
+  const spent = await apifySpentToday();
+  const overBudget = spent >= cfg.apify_daily_budget_usd;
+  if (overBudget) console.warn(`social-search: Apify daily budget reached ($${spent.toFixed(2)} of $${cfg.apify_daily_budget_usd}); providers skipped`);
+  const x = cfg.x_enabled ? await searchX(places, terms, hours) : { rows: [] as Result[], cost: 0, error: "disabled" };
+  const runs = overBudget
+    ? { facebook: { status: "off", error: "daily_budget" }, instagram: { status: "off", error: "daily_budget" }, tiktok: { status: "off", error: "daily_budget" } } as Record<string, Run>
+    : await startRuns(places, terms);
+  const allRuns: Record<string, Run> = { x: x.error ? { status: x.error === "not_configured" || x.error === "disabled" ? "off" : "error", error: x.error } : { status: "done" }, ...runs };
+  const { data: row, error } = await db.from("social_searches").insert({
+    user_id: uid, polygon: geo, places: [...new Set([...places.he, ...places.en])], terms: terms ?? [], hours, runs: allRuns,
+    cost_usd: x.cost, results_count: x.rows.length, cache_key: cacheKey, scheduled_area: area,
+  }).select("id").single();
+  if (error || !row) return { error: "save_failed", status: 500 };
+  await save(row.id, x.rows);
+  return { id: row.id };
+}
+
+async function pollOne(id: string): Promise<boolean> {
+  const { data: s } = await db.from("social_searches").select("id,runs,hours,cost_usd,terms").eq("id", id).maybeSingle();
+  if (!s) return false;
+  const r = await collect(s.id, { ...(s.runs as Record<string, Run>) }, s.hours, (s.terms as string[] | null)?.length ? (s.terms as string[]) : null);
+  await save(s.id, r.rows);
+  if (r.rows.length || r.cost) {
+    const { count } = await db.from("social_results").select("id", { count: "exact", head: true }).eq("search_id", s.id);
+    await db.from("social_searches").update({ runs: r.runs, cost_usd: Number(s.cost_usd) + r.cost, results_count: count ?? 0 }).eq("id", s.id);
+  } else {
+    await db.from("social_searches").update({ runs: r.runs }).eq("id", s.id);
+  }
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -235,42 +311,34 @@ Deno.serve(async (req) => {
       const { count } = await db.from("social_searches").select("id", { count: "exact", head: true }).eq("user_id", who.uid).gte("created_at", since);
       if (f?.limit_value != null && (count ?? 0) >= f.limit_value) return json({ error: "daily_limit" }, 429);
     }
-    const ring = poly.map(([lat, lng]) => [lng, lat]);
-    if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) ring.push(ring[0]);
-    const geo = { type: "Polygon", coordinates: [ring] };
-    const { data: pl, error: plErr } = await db.rpc("places_in_polygon", { p_polygon: geo, p_limit: 6 });
-    if (plErr) return json({ error: "places_failed" }, 502);
-    const places = {
-      // GeoNames sometimes holds a Latin transliteration in the Arabic/Hebrew slot: keep real script only.
-      he: (pl ?? []).map((p: any) => String(p.name_he ?? "").replace(/[\u200e\u200f]/g, "").trim()).filter((n: string) => /[\u0590-\u05FF]/.test(n)),
-      ar: (pl ?? []).map((p: any) => String(p.name_ar ?? "").replace(/[\u200e\u200f]/g, "").trim()).filter((n: string) => /[\u0600-\u06FF]/.test(n)),
-      en: (pl ?? []).map((p: any) => p.name_en).filter(Boolean),
-    };
-    if (!places.he.length && !places.ar.length && !places.en.length) return json({ error: "no_places" }, 422);
-    const [x, runs] = await Promise.all([searchX(places, terms, hours), startRuns(places, terms)]);
-    const allRuns: Record<string, Run> = { x: x.error ? { status: x.error === "not_configured" ? "off" : "error", error: x.error } : { status: "done" }, ...runs };
-    const { data: s, error } = await db.from("social_searches").insert({
-      user_id: who.uid, polygon: geo, places: [...new Set([...places.he, ...places.en])], terms: terms ?? [], hours, runs: allRuns,
-      cost_usd: x.cost, results_count: x.rows.length,
-    }).select("id").single();
-    if (error || !s) return json({ error: "save_failed" }, 500);
-    await save(s.id, x.rows);
-    return await answer(s.id);
+    const r = await runSearch(await config(), who.uid, poly, hours, terms, null);
+    return "error" in r ? json({ error: r.error }, r.status) : await answer(r.id);
+  }
+
+  // Cron (hourly): searches the configured hot areas, at most schedule.per_day times a day each.
+  if (body?.action === "scheduled") {
+    if (who.uid !== null) return json({ error: "not_allowed" }, 403);
+    const cfg = await config();
+    if (!cfg.schedule.enabled || !cfg.schedule.areas.length) return json({ ok: true, skipped: "schedule off" });
+    const every = 24 / Math.max(1, Math.min(cfg.schedule.per_day, 6));
+    const out: Record<string, string> = {};
+    for (const a of cfg.schedule.areas.slice(0, 10)) {
+      const { data: last } = await db.from("social_searches").select("created_at").eq("scheduled_area", a.name).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (last && Date.now() - Date.parse(last.created_at) < every * 3600_000) { out[a.name] = "not due"; continue; }
+      const r = await runSearch(cfg, null, a.polygon, a.hours ?? 24, a.terms?.length ? a.terms : null, a.name);
+      out[a.name] = "error" in r ? r.error : `search ${r.id}`;
+    }
+    // Collect provider runs still open from earlier scheduled searches.
+    const { data: open } = await db.from("social_searches").select("id").not("scheduled_area", "is", null).gte("created_at", new Date(Date.now() - 6 * 3600_000).toISOString());
+    for (const o of open ?? []) await pollOne(o.id);
+    return json({ ok: true, areas: out });
   }
 
   if (body?.action === "poll") {
     const id = String(body.id ?? "");
-    const { data: s } = await db.from("social_searches").select("id,user_id,runs,hours,cost_usd,terms").eq("id", id).maybeSingle();
-    if (!s || (s.user_id !== who.uid && !who.staff)) return json({ error: "not found" }, 404);
-    const r = await collect(s.id, { ...(s.runs as Record<string, Run>) }, s.hours, (s.terms as string[] | null)?.length ? (s.terms as string[]) : null);
-    await save(s.id, r.rows);
-    if (r.rows.length || r.cost) {
-      const { count } = await db.from("social_results").select("id", { count: "exact", head: true }).eq("search_id", s.id);
-      await db.from("social_searches").update({ runs: r.runs, cost_usd: Number(s.cost_usd) + r.cost, results_count: count ?? 0 }).eq("id", s.id);
-    } else {
-      await db.from("social_searches").update({ runs: r.runs }).eq("id", s.id);
-    }
-    return await answer(s.id);
+    // Any Intel user may read a search: cached searches are shared between them.
+    if (!(await pollOne(id))) return json({ error: "not found" }, 404);
+    return await answer(id);
   }
   return json({ error: "unknown action" }, 400);
 });

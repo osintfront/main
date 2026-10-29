@@ -635,6 +635,7 @@ export const he: Record<TranslationKey, string> = {
   'social.search': 'חפש',
   'social.searching': 'מחפש…',
   'social.places': 'מקומות: {places}',
+  'social.budget': 'התקציב היומי נוצל',
   'social.running': 'מחפש…',
   'social.done': 'הסתיים',
   'social.off': 'לא מחובר',

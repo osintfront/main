@@ -72,6 +72,7 @@ function SocialPanel({ polygon, onClose }: { polygon: LatLng[]; onClose: () => v
   const runLabel = (n: SocialPlatform) => {
     const r = search?.runs[n];
     if (!r) return '';
+    if (r.error === 'daily_budget') return t('social.budget');
     return t(r.status === 'running' ? 'social.running' : r.status === 'done' ? 'social.done' : r.status === 'off' ? 'social.off' : 'social.error');
   };
 

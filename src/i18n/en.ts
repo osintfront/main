@@ -633,6 +633,7 @@ export const en = {
   'social.search': 'Search',
   'social.searching': 'Searching…',
   'social.places': 'Places: {places}',
+  'social.budget': 'daily budget reached',
   'social.running': 'searching…',
   'social.done': 'done',
   'social.off': 'not connected',
