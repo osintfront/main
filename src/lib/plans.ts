@@ -69,4 +69,4 @@ export function usePlanVersion(): number {
   return useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => (enforce ? 1 : 0) + features.length * 2, () => 0);
 }
 
-export const PLAN_LABEL: Record<PlanId, string> = { free: 'Free', pro: 'Pro', max: 'Max' };
+export const PLAN_LABEL: Record<PlanId, string> = { free: 'Free', pro: 'Pro', max: 'Max', intel: 'Intel' };

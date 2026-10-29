@@ -22,4 +22,4 @@ export interface Profile {
   mustChangePassword: boolean;
 }
 
-export type PlanId = 'free' | 'pro' | 'max';
+export type PlanId = 'free' | 'pro' | 'max' | 'intel';
