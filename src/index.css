@@ -521,6 +521,10 @@
     transition: none;
   }
 }
+/* No double-tap-zoom delay on controls (the map keeps its own gestures) */
+a, button, input, label, select, textarea, [role='button'] {
+  touch-action: manipulation;
+}
 /* Phones: no grey flash on tap */
 @media (pointer: coarse) {
   html {

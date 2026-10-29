@@ -90,7 +90,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
           </button>
         </header>
 
-        <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
           {where ? (
             <p className="mb-3 flex flex-wrap items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
               <MapPin className="size-4 shrink-0 text-slate-400" aria-hidden />

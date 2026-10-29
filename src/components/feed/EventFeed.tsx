@@ -223,7 +223,7 @@ export function EventFeed({
                 remount it (an ad must not reload without a user action). */}
             {events.flatMap((event, index) => {
               const items = [
-                <li key={event.id}>
+                <li key={event.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_180px]">
                   <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} onOpenDetails={onOpenDetails} />
                 </li>,
               ];

@@ -170,7 +170,7 @@ function QuickReportDialog({ onClose }: { onClose: () => void }) {
                 <div className="mt-3 flex flex-wrap gap-2">
                   {media.map((m, i) => (
                     <div key={m.url} className="relative">
-                      <img src={m.url} alt="" referrerPolicy="no-referrer" className="h-16 w-24 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700" />
+                      <img src={m.url} alt="" width={96} height={64} referrerPolicy="no-referrer" className="h-16 w-24 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700" />
                       {m.kind === 'video_thumb' ? <span className="absolute inset-0 grid place-items-center text-lg text-white drop-shadow">▶</span> : null}
                       <button
                         type="button"

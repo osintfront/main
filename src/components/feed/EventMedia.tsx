@@ -66,7 +66,7 @@ function VideoStill({ still }: { still: Still }) {
         aria-label={t('media.play')}
         className="relative block w-full overflow-hidden rounded-lg bg-slate-900 disabled:cursor-default"
       >
-        <img src={still.url} alt="" loading="lazy" className="block h-auto max-h-60 w-full object-cover opacity-90" />
+        <img src={still.url} alt="" loading="lazy" width={still.width ?? undefined} height={still.height ?? undefined} className="block h-auto max-h-60 w-full object-cover opacity-90" />
         <span className="absolute inset-0 grid place-items-center">
           <span className="grid size-12 place-items-center rounded-full bg-black/60 text-xl text-white ring-2 ring-white/80">
             {state === 'loading' ? <Loader2 className="size-6 animate-spin" aria-hidden /> : '▶'}

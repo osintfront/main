@@ -95,7 +95,7 @@ export function AskMap({ result, onResult, onCite }: AskMapProps) {
           dir="auto"
           placeholder={t('ask.placeholder')}
           aria-label={t('ask.open')}
-          className="h-9 min-w-0 flex-1 rounded-lg bg-transparent px-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-white"
+          className="h-9 min-w-0 flex-1 rounded-lg bg-transparent px-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40 dark:text-white"
         />
         <button
           type="submit"

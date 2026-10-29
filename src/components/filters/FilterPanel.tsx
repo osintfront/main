@@ -299,7 +299,7 @@ export function FilterPanel({
           </button>
         </header>
 
-        <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {/* צי"ח (EEI) is switched off for now; the section is kept for later. */}
           {SHOW_EEI && onAddEei && onRemoveEei ? (
             <EeiSection filters={filters} set={set} events={events} eeis={eeis} onAdd={onAddEei} onRemove={onRemoveEei} />

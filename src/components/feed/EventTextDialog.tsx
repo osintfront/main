@@ -130,7 +130,7 @@ export function EventTextDialog({ event, onClose, onSaved }: { event: PublicEven
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
           {lessons ? (
             <>
               <p className="text-sm text-slate-600 dark:text-slate-300">{t('textEdit.learnHint')}</p>

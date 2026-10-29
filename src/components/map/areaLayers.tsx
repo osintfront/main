@@ -161,13 +161,13 @@ export function useAreaLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rtl
     return () => void layer.remove();
   }, [map, wadisOn, wadis, lang, dir, T]);
 
-  return { T, wadisOn, setWadisOn, wadiCount: wadis?.features.length ?? 0, controlOn, setControlOn, regions, setRegions, areas, synced, sectsOn, setSectsOn, sects, setSects, shownPlaces };
+  return { T, lang, wadisOn, setWadisOn, wadiCount: wadis?.features.length ?? 0, controlOn, setControlOn, regions, setRegions, areas, synced, sectsOn, setSectsOn, sects, setSects, shownPlaces };
 }
 
 type AreaState = ReturnType<typeof useAreaLayers>;
 
 export function AreaLayersPanel({ s }: { s: AreaState }) {
-  const { T } = s;
+  const { T, lang } = s;
   const toggle = <V,>(set: (f: (cur: Set<V>) => Set<V>) => void, v: V, on: boolean) =>
     set((cur) => {
       const next = new Set(cur);
@@ -175,7 +175,7 @@ export function AreaLayersPanel({ s }: { s: AreaState }) {
       else next.delete(v);
       return next;
     });
-  const day = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '—');
+  const day = (iso?: string) => (iso ? new Date(iso).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—');
   return (
     <>
       <section className="space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
