@@ -29,6 +29,26 @@ export function enableDragRotate(map: L.Map) {
   });
   new Compass({ position: 'topleft' }).addTo(map);
   const el = map.getContainer();
+  // Two-finger twist on phones: less sensitive. A small twist (a normal pinch-zoom) does nothing;
+  // beyond the dead zone the map follows at a reduced rate. Compass / mouse rotation are untouched.
+  const DEAD = 15, GAIN = 0.6;
+  const rawSet = m.setBearing.bind(m);
+  let pinch: { b0: number; open: boolean } | null = null;
+  m.setBearing = (b: number) => {
+    if (!pinch) return rawSet(b);
+    const d = ((b - pinch.b0 + 540) % 360) - 180;
+    const ad = Math.abs(d);
+    if (!pinch.open && ad < DEAD) return;
+    pinch.open = true;
+    rawSet(pinch.b0 + Math.sign(d) * Math.max(0, ad - DEAD) * GAIN);
+  };
+  const onTouch = (e: TouchEvent) => {
+    if (e.touches.length === 2) { if (!pinch) pinch = { b0: m.getBearing(), open: false }; }
+    else pinch = null;
+  };
+  el.addEventListener('touchstart', onTouch, true);
+  el.addEventListener('touchend', onTouch, true);
+  el.addEventListener('touchcancel', onTouch, true);
   let start: { x: number; y: number; bearing: number; angle: number } | null = null;
   let moved = false;
   const center = () => {
@@ -65,6 +85,10 @@ export function enableDragRotate(map: L.Map) {
   window.addEventListener('mouseup', onUp);
   el.addEventListener('contextmenu', onContext, true);
   return () => {
+    el.removeEventListener('touchstart', onTouch, true);
+    el.removeEventListener('touchend', onTouch, true);
+    el.removeEventListener('touchcancel', onTouch, true);
+    m.setBearing = rawSet;
     el.removeEventListener('mousedown', onDown, true);
     window.removeEventListener('mousemove', onMove);
     window.removeEventListener('mouseup', onUp);

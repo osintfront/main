@@ -486,14 +486,24 @@ function overlap(a: Set<string>, b: Set<string>): number {
 /** The same report again within the last hour (repost / forward / another channel copying it):
  *  merged as a source without asking the AI. */
 const SAME_TEXT = 0.55;
+/** Channel signature only (@handle, WhatsApp/Telegram links, join-us lines): not news text. */
+function stripBoiler(t: string): string {
+  return String(t ?? "")
+    .replace(/\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/@\w+/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 function obviousDuplicate(text: string, sentAt: Date, pool: any[]): any | null {
-  const mine = words(text);
+  const mine = words(stripBoiler(text));
   if (mine.size < 4) return null;
   let best: any = null;
   let bestScore = 0;
   for (const e of pool) {
     if (Math.abs(new Date(e.occurred_at).getTime() - sentAt.getTime()) > 60 * 60000) continue;
-    const theirs = words(e.original_report_text || e.description || e.title);
+    const theirs = words(stripBoiler(e.original_report_text || e.description || e.title));
     // Jaccard, or containment when one copy adds channel ads/links around the same sentence.
     let shared = 0;
     for (const w of mine) if (theirs.has(w)) shared++;
@@ -613,6 +623,8 @@ async function processOne(m: InMsg) {
     }
     if (!text) return { key, status: "skipped_no_text" }; // a picture whose post is not on the map
   }
+  // A signature-only caption (e.g. "@channel + join link") is not a report: never merge it into an event.
+  if (m.platform === "telegram" && stripBoiler(text).length < 4) return { key, status: "skipped_no_text" };
 
   // Duplicate candidates: other channels often repost the same incident hours later, so look
   // back DUP_LOOKBACK_H hours, but send the classifier only the closest matches (cheap word overlap
