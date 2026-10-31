@@ -618,9 +618,12 @@ export function translationsFor(r: EditResult): Record<string, { title?: string;
 }
 
 /** Places for events.locations (the database looks up the ones without coordinates). */
-export function locationsForDb(r: EditResult, max = 10): { name: string; name_en: string; name_ar?: string; lat: number | null; lng: number | null; precision?: string; category_slug?: string }[] {
+export function locationsForDb(r: EditResult, max = 10): { name: string; name_en: string; name_ar?: string; country?: string; lat: number | null; lng: number | null; precision?: string; category_slug?: string }[] {
   return r.locations.slice(0, max).map((l) => ({
     name: l.name, name_en: l.name_en, lat: l.lat, lng: l.lng,
+    // Each place's own country: a split sibling (one event per category) takes its country from here,
+    // never from the original event (a roundup can mention Kyiv, Miami and Hormuz at once).
+    ...(l.country ? { country: l.country } : {}),
     // The Arabic spelling finds small villages in GeoNames that the Hebrew/English one misses.
     ...(l.name_ar ? { name_ar: l.name_ar } : {}),
     ...(l.precision ? { precision: l.precision } : {}),

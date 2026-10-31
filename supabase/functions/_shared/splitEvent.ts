@@ -22,14 +22,39 @@ const EN: Record<string, string> = {
   "terror-security-incident": "Security incident", "infrastructure-incident": "Infrastructure incident",
 };
 
+// country/region/city are NOT cloned: they describe the original event's own place, and a sibling
+// lives somewhere else (see placeCountry below).
 const CLONE = [
-  "description", "original_report_text", "status", "severity", "country", "region", "city",
+  "description", "original_report_text", "status", "severity",
   "source_name", "source_url", "source_type", "occurred_at", "published_at", "created_by", "approved_by",
   "is_breaking", "is_verified", "classification_confidence", "sources", "whatsapp_text", "translations",
 ];
 
 // deno-lint-ignore no-explicit-any
 type Place = { name?: string; name_en?: string; lat?: number | null; lng?: number | null; precision?: string; category_slug?: string; [k: string]: any };
+
+const NEAR_KM = 300;
+
+function distKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const r = Math.PI / 180;
+  const h = Math.sin(((b.lat - a.lat) * r) / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(((b.lng - a.lng) * r) / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Country for a sibling event. The place's own country wins. Without one (older events whose places were
+ * saved without it) the original's country is reused only when the place is near the original's pin;
+ * a far-away place gets '' (unknown) rather than a wrong country.
+ */
+function placeCountry(place: Place | undefined, ev: { country?: string | null; latitude?: unknown; longitude?: unknown }): string {
+  const own = String(place?.country ?? "").trim();
+  if (own) return own.slice(0, 100);
+  const evCountry = String(ev.country ?? "").trim();
+  if (!evCountry || place?.lat == null || place?.lng == null) return evCountry;
+  const evLat = Number(ev.latitude), evLng = Number(ev.longitude);
+  if (!Number.isFinite(evLat) || !Number.isFinite(evLng)) return "";
+  return distKm({ lat: Number(place.lat), lng: Number(place.lng) }, { lat: evLat, lng: evLng }) <= NEAR_KM ? evCountry : "";
+}
 
 function names(list: Place[], key: "name" | "name_en") {
   const n = list.map((p) => p[key] || p.name).filter(Boolean) as string[];
@@ -78,6 +103,9 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
       title: he,
       category_id: cat.id,
       locations: list,
+      country: placeCountry(first ?? list[0], ev),
+      region: "",
+      city: "",
       location_name: (first?.name ?? list[0]?.name ?? "").slice(0, 200),
       latitude: first ? first.lat : null,
       longitude: first ? first.lng : null,
@@ -112,7 +140,13 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
   };
   const onPin = keep.some((p) => p.lat != null && Math.abs(Number(p.lat) - Number(ev.latitude)) < 1e-4 && Math.abs(Number(p.lng) - Number(ev.longitude)) < 1e-4);
   const first = keep.find((p) => p.lat != null && p.lng != null);
-  if (!onPin && first) Object.assign(update, { latitude: first.lat, longitude: first.lng, location_name: String(first.name ?? "").slice(0, 200), location_precision: first.precision ?? "exact" });
+  if (!onPin && first) {
+    // The pin moves, so the original's country/region/city must follow it, not stay on the old place.
+    Object.assign(update, {
+      latitude: first.lat, longitude: first.lng, location_name: String(first.name ?? "").slice(0, 200), location_precision: first.precision ?? "exact",
+      country: placeCountry(first, ev), region: "", city: "",
+    });
+  }
   const { error } = await db.from("events").update(update).eq("id", ev.id);
   if (error) console.error("split update failed", error.message);
   return ids;
