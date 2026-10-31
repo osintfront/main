@@ -3,7 +3,7 @@
  * Hebrew is the main language; English mirrors it. Inline links: [text](url).
  * When the text changes, update UPDATED (shown on each page).
  */
-export const SITE_EMAIL = 'osintfront@gmail.com';
+export const SITE_EMAIL = 'OSINTFront_Service@osintfront.com';
 export const SITE_NAME = 'Osintfront';
 export const SITE_DOMAIN = 'osintfront.com';
 export const UPDATED = '2026-10-22';
