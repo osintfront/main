@@ -91,7 +91,7 @@ async function note(what: string, eventId: string) {
 async function send(): Promise<Record<string, unknown>> {
   const cfg = await config();
   const keys = await vapid(cfg);
-  webpush.setVapidDetails('mailto:OSINTFront_Service@osintfront.com', keys.publicKey, keys.privateKey);
+  webpush.setVapidDetails('mailto:service@osintfront.com', keys.publicKey, keys.privateKey);
   const since = cfg.cursor || new Date(Date.now() - 5 * 60_000).toISOString();
   const cols = 'id,title,severity,latitude,longitude,location_name,location_name_he,location_name_en,location_precision,locations,country,source_name,source_url,source_type,occurred_at,published_at,is_breaking,is_verified,translations,category_slug,category_name,media_kinds';
   const events: any[] = await rest(`published_events?select=${cols}&published_at=gt.${encodeURIComponent(since)}&order=published_at.asc&limit=60`);
