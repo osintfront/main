@@ -69,7 +69,7 @@ export function App() {
               <Route path="/privacy" element={<SitePage page="privacy" />} />
               <Route path="/contact" element={<SitePage page="contact" />} />
               <Route path="/terms" element={<SitePage page="terms" />} />
-              <Route path="/refund-policy" element={<LegalPlaceholder page="refund" />} />
+              <Route path="/refund-policy" element={<SitePage page="refund" />} />
               <Route path="/cancel-subscription" element={<LegalPlaceholder page="cancel" />} />
               <Route path="/" element={<RequireAuth><MapPage /></RequireAuth>} />
               <Route path="/account" element={<RequireAuth><MemberAccountPage /></RequireAuth>} />

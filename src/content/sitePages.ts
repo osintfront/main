@@ -6,9 +6,9 @@
 export const SITE_EMAIL = 'service@osintfront.com';
 export const SITE_NAME = 'Osintfront';
 export const SITE_DOMAIN = 'osintfront.com';
-export const UPDATED = '2026-11-02';
+export const UPDATED = '2026-11-03';
 
-export type PageId = 'about' | 'privacy' | 'terms' | 'contact';
+export type PageId = 'about' | 'privacy' | 'terms' | 'refund' | 'contact';
 
 export interface PageSection {
   h?: string;
@@ -163,8 +163,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         {
           h: 'מנויים ותשלום',
           p: [
-            'באתר מוצגים מסלולי מנוי (Free / Pro / Max) שטרם הופעלו לגבייה בפועל. תנאים אלה יעודכנו לפני הפעלת גבייה בפועל, לרבות פרטי מחיר, אמצעי תשלום וזכות ביטול עסקה בתוך 14 יום בהתאם לחוק הגנת הצרכן, התשמ"א-1981.',
-            'ראו גם [מדיניות ביטולים והחזרים](/refund-policy) — **הטקסט בעמוד זה טרם הושלם ודורש בדיקה משפטית לפני הפעלת גבייה.**',
+            'באתר מוצגים מסלולי מנוי (Free / Pro / Max) שטרם הופעלו לגבייה בפועל. כאשר תופעל גבייה, יעודכנו תנאים אלה בפרטי מחיר ואמצעי תשלום, וזכות הביטול תפעל לפי [מדיניות הביטולים וההחזרים](/refund-policy).',
           ],
         },
         {
@@ -182,6 +181,31 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         {
           h: 'יצירת קשר',
           p: [`שאלות על תנאים אלה: ${mail}. ראו גם [מדיניות הפרטיות](/privacy).`],
+        },
+      ],
+    },
+    refund: {
+      title: 'מדיניות ביטולים והחזרים',
+      intro: `מסלולי המנוי (Free / Pro / Max) טרם הופעלו לגבייה בפועל. הטקסט הבא מתאר את המדיניות שתחול כאשר תופעל גבייה, לפי חוק הגנת הצרכן, התשמ"א-1981 ותקנות ביטול עסקה.`,
+      sections: [
+        {
+          h: 'ביטול בתוך 14 יום',
+          p: [`ניתן לבטל עסקת מנוי בתוך 14 יום ממועד ביצועה, ובלבד שהביטול נעשה לפחות יומיים שלפני מועד תחילת השירות (אם רלוונטי). הודעת ביטול תימסר בכתב ב-${mail}.`],
+        },
+        {
+          h: 'אם השירות כבר החל',
+          p: [
+            'אם בעת הודעת הביטול המנוי כבר היה פעיל ונעשה בו שימוש, אנחנו רשאים לגבות תשלום יחסי בעד התקופה שבה השירות ניתן בפועל עד מועד הביטול (לדוגמה: שימוש של יומיים מתוך חודש מנוי — חיוב יחסי לשני הימים).',
+            'בנוסף, אנחנו רשאים לגבות דמי ביטול בגובה **5% ממחיר העסקה, או 100 ש״ח — לפי הנמוך מביניהם**.',
+          ],
+        },
+        {
+          h: 'איך לבטל',
+          p: [`לביטול מנוי כתבו לנו ב-${mail} עם פרטי החשבון. ההחזר (בניכוי הסכומים שלעיל, אם רלוונטי) יבוצע באותו אמצעי תשלום ששימש לרכישה, בתוך פרק הזמן הקבוע בחוק.`],
+        },
+        {
+          h: 'ביטול עסקה בשל פגם או אי-התאמה',
+          p: ['בוטלה העסקה עקב פגם בשירות או אי-התאמה בין השירות לבין הפרטים שנמסרו אודותיו, לא ייגבו דמי ביטול וההחזר יהיה מלא.'],
         },
       ],
     },
@@ -335,8 +359,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         {
           h: 'Subscriptions and payment',
           p: [
-            'The site lists subscription tiers (Free / Pro / Max) not yet charged in practice. These terms will be updated before billing is enabled, including price, payment method and a 14-day cancellation right under the Israeli Consumer Protection Law, 1981.',
-            'See also [Refund and cancellation policy](/refund-policy) — **that page\'s text is not yet complete and needs legal review before billing is enabled.**',
+            'The site lists subscription tiers (Free / Pro / Max) not yet charged in practice. When billing is enabled, these terms will be updated with price and payment details, and the cancellation right will follow the [cancellation and refund policy](/refund-policy).',
           ],
         },
         {
@@ -352,6 +375,31 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           p: ['These terms are governed by the laws of the State of Israel, and the courts of Israel have exclusive jurisdiction. **This point, and enforcement against users outside Israel, needs legal review.**'],
         },
         { h: 'Contact', p: [`Questions about these terms: ${mail}. See also the [privacy policy](/privacy).`] },
+      ],
+    },
+    refund: {
+      title: 'Cancellation and refund policy',
+      intro: `The subscription tiers (Free / Pro / Max) are not yet charged in practice. The following describes the policy that will apply once billing is enabled, under the Israeli Consumer Protection Law, 1981 and its transaction-cancellation regulations.`,
+      sections: [
+        {
+          h: 'Cancelling within 14 days',
+          p: [`A subscription may be cancelled within 14 days of the purchase, provided cancellation is given at least two days before the service is due to start (where relevant). Send cancellation notice in writing to ${mail}.`],
+        },
+        {
+          h: 'If the service has already started',
+          p: [
+            'If the subscription was already active and in use when you cancel, we may charge a proportional amount for the period actually provided up to the cancellation date (for example: two days of use out of a monthly subscription — a proportional charge for those two days).',
+            'In addition, we may charge a cancellation fee of **5% of the transaction price, or ₪100 — whichever is lower**.',
+          ],
+        },
+        {
+          h: 'How to cancel',
+          p: [`To cancel a subscription, write to ${mail} with your account details. The refund (less the amounts above, where applicable) will be made to the same payment method used for the purchase, within the period set by law.`],
+        },
+        {
+          h: 'Cancellation due to a defect or mismatch',
+          p: ['If the transaction is cancelled because of a defect in the service, or a mismatch between the service and what was described, no cancellation fee applies and the refund will be in full.'],
+        },
       ],
     },
     contact: {
