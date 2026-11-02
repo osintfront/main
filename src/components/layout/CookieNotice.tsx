@@ -31,12 +31,22 @@ function write(v: string) {
   }
 }
 
+const REOPEN = 'ofm:cookie-notice';
+
+/** Show the notice again (the "Cookie settings" link), so a choice can be changed later. */
+export function reopenCookieNotice() {
+  window.dispatchEvent(new Event(REOPEN));
+}
+
 export function CookieNotice() {
   const { t } = useI18n();
   const [show, setShow] = useState(false);
 
   useEffect(() => {
     setShow(read() !== COOKIE_NOTICE_VERSION);
+    const open = () => setShow(true);
+    window.addEventListener(REOPEN, open);
+    return () => window.removeEventListener(REOPEN, open);
   }, []);
 
   if (!show) return null;

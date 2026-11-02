@@ -74,12 +74,12 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           p: ['בשל אופי התוכן (אירועי ביטחון וצבא, לרבות תיאורים ותמונות קשים) האתר מיועד למשתמשים בני 18 ומעלה בלבד. איננו אוספים ביודעין מידע על מי שמתחת לגיל זה, ואם נודע לנו על כך נמחק את המידע.'],
         },
         {
-          h: 'גלישה באתר',
-          p: ['אין צורך להירשם כדי לצפות במפה הציבורית. אנחנו לא מבקשים מגולשים שם, טלפון או פרטים מזהים אחרים.'],
+          h: 'חשבון משתמש',
+          p: ['המפה, הפיד והארכיון זמינים למשתמשים רשומים בלבד. עמודי המידע (אודות, תנאי שימוש, פרטיות, יצירת קשר) פתוחים לכולם.'],
         },
         {
           h: 'מידע שנשמר בדפדפן שלכם',
-          p: ['האתר שומר בדפדפן (localStorage) העדפות בלבד: שפה, מצב כהה/בהיר, הגדרות צליל וסינון. המידע הזה לא נשלח אלינו ואפשר למחוק אותו בכל עת מהגדרות הדפדפן.'],
+          p: ['האתר שומר בדפדפן (localStorage) רק מידע הכרחי לפעולתו: אסימון ההתחברות (כדי שתישארו מחוברים) והעדפות — שפה, מצב כהה/בהיר, הגדרות צליל וסינון. ההעדפות לא נשלחות אלינו ואפשר למחוק את הכול בכל עת מהגדרות הדפדפן (מחיקה תנתק אתכם מהחשבון).'],
         },
         {
           h: 'סטטיסטיקה ותפעול',
@@ -107,8 +107,15 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           p: [`אם תכתבו לנו במייל, נשתמש בכתובת ובתוכן הפנייה רק כדי להשיב לכם ולטפל בבקשה.`],
         },
         {
-          h: 'צוות האתר',
-          p: ['חשבונות משתמש קיימים רק לצוות האנליסטים, בהזמנה בלבד. פרטי הצוות (שם ומייל) נשמרים לצורך ניהול הגישה ותיעוד פעולות עריכה.'],
+          h: 'מידע שנשמר על בעלי חשבון',
+          ul: [
+            'פרטי החשבון: שם, כתובת מייל, תפקיד, סטטוס, מסלול מנוי ומועד הכניסה האחרונה.',
+            'חיבורים פעילים: סוג מכשיר ודפדפן ומועדי פעילות — כדי לאפשר חיבור פעיל אחד לכל חשבון ולזהות שימוש לא מורשה.',
+            'אישור תנאי השימוש: גרסת התנאים שאושרה, מועד האישור וכתובת IP — לתיעוד ההסכמה.',
+            'התראות push (למי שהפעיל): כתובת המנוי של הדפדפן, שפה והעדפות סינון.',
+            'לצוות העריכה: תיעוד פעולות עריכה בבק-אופיס.',
+          ],
+          p: ['המידע נשמר כל עוד החשבון פעיל, ונמחק לבקשתכם או עם מחיקת החשבון, למעט מה שנדרש לשמור על פי דין. **משך שמירה מדויק לכל סוג מידע — דורש בדיקה משפטית.**'],
         },
         {
           h: 'מנויים בתשלום',
@@ -157,8 +164,8 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           ],
         },
         {
-          h: 'חשבונות צוות',
-          p: ['חשבונות התחברות קיימים כיום רק לצוות האתר, בהזמנה. משתמש אחראי לסודיות פרטי ההתחברות שלו ולכל פעולה שתתבצע דרך חשבונו.'],
+          h: 'חשבון משתמש',
+          p: ['השימוש במפה, בפיד ובארכיון מחייב חשבון. החשבון אישי: אסור להעביר או לשתף אותו, וניתן להיות מחובר ממכשיר אחד בכל פעם. אתם אחראים לסודיות פרטי ההתחברות ולכל פעולה שתתבצע דרך החשבון. נוכל להשעות או לסגור חשבון שהופרו בו תנאים אלה.'],
         },
         {
           h: 'מנויים ותשלום',
@@ -281,10 +288,10 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           h: 'Minimum age',
           p: ['Because of the nature of the content (security and military events, including difficult descriptions and images), the site is intended for users aged 18 and over only. We do not knowingly collect information about anyone younger, and will delete it if we learn we have.'],
         },
-        { h: 'Browsing the site', p: ['You do not need an account to view the public map. We do not ask visitors for their name, phone number or other identifying details.'] },
+        { h: 'User account', p: ['The map, feed and archive are available to registered users only. The information pages (About, Terms, Privacy, Contact) are open to everyone.'] },
         {
           h: 'Information stored in your browser',
-          p: ['The site stores preferences only in your browser (localStorage): language, dark/light mode, sound and filter settings. This is never sent to us and you can clear it in your browser settings at any time.'],
+          p: ['The site stores in your browser (localStorage) only what it needs to work: your sign-in token (to keep you signed in) and preferences — language, dark/light mode, sound and filter settings. Preferences are never sent to us, and you can clear everything in your browser settings at any time (clearing signs you out).'],
         },
         {
           h: 'Statistics and operation',
@@ -308,7 +315,17 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           ],
         },
         { h: 'Contacting us', p: ['If you email us, we use your address and message only to reply and handle your request.'] },
-        { h: 'Site staff', p: ['User accounts exist only for our analysts, by invitation. Their name and email are kept to manage access and record editing actions.'] },
+        {
+          h: 'Information kept about account holders',
+          ul: [
+            'Account details: name, email, role, status, subscription tier and last sign-in time.',
+            'Active sessions: device type, browser and activity times — to allow one active session per account and detect unauthorised use.',
+            'Terms acceptance: the version accepted, when, and the IP address — to record your consent.',
+            'Push alerts (if enabled): your browser\'s subscription address, language and filter preferences.',
+            'For editing staff: a log of editing actions in the back office.',
+          ],
+          p: ['This is kept while the account is active and deleted on request or when the account is deleted, except where the law requires us to keep it. **Exact retention periods per data type need legal review.**'],
+        },
         {
           h: 'Paid subscriptions',
           p: ['The site lists subscription tiers (Free / Pro / Max) that are not yet charged in practice. When billing is enabled, this policy and the [Terms of Use](/terms) will be updated accordingly, including consumer-protection rights such as a 14-day cancellation window.'],
@@ -353,8 +370,8 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           ],
         },
         {
-          h: 'Staff accounts',
-          p: ['Login accounts currently exist only for site staff, by invitation. A user is responsible for keeping their login details confidential and for any action taken through their account.'],
+          h: 'User account',
+          p: ['Using the map, feed and archive requires an account. The account is personal: it may not be transferred or shared, and it can be signed in on one device at a time. You are responsible for keeping your login details confidential and for any action taken through the account. We may suspend or close an account used in breach of these terms.'],
         },
         {
           h: 'Subscriptions and payment',
