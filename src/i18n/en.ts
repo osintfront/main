@@ -175,6 +175,7 @@ export const en = {
   'map.openSource': 'Open source',
   'map.legend': "Map legend — symbols on the map",
   'map.legendCluster': "A circle with a number = several events close together; zoom in to split them.",
+  'map.legendControl': "Areas of control",
   'map.legendAlerts': "Red area = an active Home Front Command alert.",
   'map.legendFilterHint': "The legend only explains the symbols. To hide or show events, use \"Filter\" at the top.",
   'map.legendOnMap': "On map",

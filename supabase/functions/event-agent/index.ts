@@ -24,7 +24,7 @@ import { runAsReader, setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
-import { dedupeRecent } from "../_shared/dedupe.ts";
+import { dedupeRecent, dropRepeats } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { TRANSLATE_API_URL, translateBriefChain } from "../_shared/translate.ts";
 import { AGENT_EXCLUDED_CATEGORIES } from "../_shared/categoryRules.ts";
@@ -360,14 +360,14 @@ async function attachMedia(body: Record<string, unknown>) {
   const items = (Array.isArray(body?.media) ? body.media : []).slice(0, 4) as { url?: string; kind?: string }[];
   const d = new Date();
   let n = 0, videoIndex = 0;
-  const { data: had } = await db.from("event_media").select("sha256,phash").eq("event_id", eventId);
-  const known: { sha?: string | null; phash?: string | null }[] = (had ?? []).map((r: any) => ({ sha: r.sha256, phash: r.phash }));
+  const { data: had } = await db.from("event_media").select("sha256,phash,kind").eq("event_id", eventId);
+  const known: { sha?: string | null; phash?: string | null; kind?: string | null }[] = (had ?? []).map((r: any) => ({ sha: r.sha256, phash: r.phash, kind: r.kind }));
   for (const [i, m] of items.entries()) {
     if (typeof m?.url !== "string" || !/^https:\/\//.test(m.url)) continue;
     const img = await imageAsBase64(m.url);
     if (!img) continue;
     const bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
-    const fp = await hashImage(bytes, img.mime);
+    const fp = { ...(await hashImage(bytes, img.mime)), kind: m.kind === "video_thumb" ? "video_thumb" : "image" };
     if (alreadyHas(known, fp)) continue;
     known.push(fp);
     await makeRoom(db, bytes.length);
@@ -415,22 +415,8 @@ async function mediaDedupe(hours: number, eventIds: string[] = []) {
       hashed++;
     } catch { /* try again next run */ }
   }
-  const byEvent = new Map<string, any[]>();
-  for (const r of rows ?? []) if (r.sha256) byEvent.set(r.event_id, [...(byEvent.get(r.event_id) ?? []), r]);
-  const drop: any[] = [];
-  for (const list of byEvent.values()) {
-    list.sort((a, b) => (a.kind === b.kind ? a.created_at.localeCompare(b.created_at) : a.kind === "video_thumb" ? -1 : 1));
-    const kept: { sha?: string | null; phash?: string | null }[] = [];
-    for (const r of list) {
-      if (alreadyHas(kept, { sha: r.sha256, phash: r.phash })) drop.push(r);
-      else kept.push({ sha: r.sha256, phash: r.phash });
-    }
-  }
-  if (drop.length) {
-    await db.storage.from("event-media").remove(drop.map((r) => r.storage_path));
-    await db.from("event_media").delete().in("id", drop.map((r) => r.id));
-  }
-  return json({ ok: true, checked: rows?.length ?? 0, hashed, left: (rows ?? []).filter((r) => !r.sha256).length, removed: drop.length, events: [...new Set(drop.map((r) => r.event_id))].length });
+  const drop = await dropRepeats(db, rows ?? []);
+  return json({ ok: true, checked: rows?.length ?? 0, hashed, left: (rows ?? []).filter((r: any) => !r.sha256).length, removed: drop.length, events: [...new Set(drop.map((r: any) => r.event_id))].length });
 }
 
 async function handle(req: Request): Promise<Response> {

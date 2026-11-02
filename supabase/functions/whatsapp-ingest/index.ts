@@ -135,14 +135,14 @@ async function storeMedia(eventId: string, key: string, media?: InMedia[], postU
   const fetchable = postUrl && /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{3,}\/\d+$/.test(postUrl) ? postUrl : null;
   const d = new Date();
   // Pictures the event already has: another channel's copy of the same photo is skipped.
-  const { data: had } = await db.from("event_media").select("sha256,phash").eq("event_id", eventId);
-  const known: { sha?: string | null; phash?: string | null }[] = (had ?? []).map((r: any) => ({ sha: r.sha256, phash: r.phash }));
+  const { data: had } = await db.from("event_media").select("sha256,phash,kind").eq("event_id", eventId);
+  const known: { sha?: string | null; phash?: string | null; kind?: string | null }[] = (had ?? []).map((r: any) => ({ sha: r.sha256, phash: r.phash, kind: r.kind }));
   for (const [i, m] of media.slice(0, 4).entries()) {
     try {
       const bytes = Uint8Array.from(atob(String(m.data)), (c) => c.charCodeAt(0));
       if (!bytes.length || bytes.length > 2_000_000) continue;
       const mime = ["image/jpeg", "image/png", "image/webp"].includes(String(m.mime)) ? String(m.mime) : "image/jpeg";
-      const fp = await hashImage(bytes, mime);
+      const fp = { ...(await hashImage(bytes, mime)), kind: m.kind === "video_thumb" ? "video_thumb" : "image" };
       if (alreadyHas(known, fp)) continue;
       known.push(fp);
       await makeRoom(bytes.length);

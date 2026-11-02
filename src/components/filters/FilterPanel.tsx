@@ -16,6 +16,7 @@ import {
   sourceKind,
   mediaKinds,
   placeKind,
+  matchesFilters,
   type MediaFilter,
   type PlaceKind,
   type EventFilters,
@@ -27,7 +28,7 @@ interface FilterPanelProps {
   filters: EventFilters;
   onChange: (next: EventFilters) => void;
   onClose: () => void;
-  /** Everything loaded (before filtering) — used for the per-option counts. */
+  /** Everything loaded (before filtering) — the per-option counts apply the other filters to it. */
   events: PublicEvent[];
   /** Events left after filtering. */
   resultCount: number;
@@ -218,8 +219,14 @@ export function FilterPanel({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Counts per option over everything loaded.
+  // Counts per option: the events that would show if that option were picked, given every other
+  // active filter (time window included) — so they add up to what the feed shows.
   const counts = useMemo(() => {
+    const now = Date.now();
+    const without = (patch: Partial<EventFilters>) => {
+      const f = { ...filters, ...patch };
+      return events.filter((e) => matchesFilters(e, f, now));
+    };
     const area = new Map<string, number>();
     const cat = new Map<string, number>();
     const sev = new Map<string, number>();
@@ -227,16 +234,14 @@ export function FilterPanel({
     const place = new Map<string, number>();
     const media = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
-    for (const e of events) {
-      eventAreas(e).forEach((a) => bump(area, a));
-      bump(cat, e.category.slug);
-      bump(sev, e.severity);
-      bump(src, sourceKind(e));
-      bump(place, placeKind(e));
-      mediaKinds(e).forEach((m) => bump(media, m));
-    }
+    for (const e of without({ areas: [] })) eventAreas(e).forEach((a) => bump(area, a));
+    for (const e of without({ categories: [] })) bump(cat, e.category.slug);
+    for (const e of without({ severities: [] })) bump(sev, e.severity);
+    for (const e of without({ sources: [] })) bump(src, sourceKind(e));
+    for (const e of without({ placeKinds: [] })) bump(place, placeKind(e));
+    for (const e of without({ media: [] })) mediaKinds(e).forEach((m) => bump(media, m));
     return { area, cat, sev, src, place, media };
-  }, [events]);
+  }, [events, filters]);
 
   const categories = useMemo(() => {
     const known = DEFAULT_CATEGORIES.filter((c) => c.slug !== 'other' || counts.cat.has('other'));

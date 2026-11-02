@@ -288,8 +288,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const startMove = useCallback((target: MoveTarget) => {
     setDetailsId(null);
     setMobilePane('map');
+    // The event being moved is the selected one: its pin is highlighted and, after saving or
+    // cancelling, the phone card is that event — not the one selected before (a linked event
+    // opened from another event's details used to leave the first one highlighted).
+    select(target.id, 'popup');
     setMoving(target);
-  }, []);
+  }, [select]);
   const startMoveMain = useCallback((id: string) => startMove({ id, place: null }), [startMove]);
   const endMove = useCallback(() => setMoving(null), []);
   const saveMove = useCallback(
@@ -370,7 +374,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   // Phones: the selected event shows as a card along the bottom of the map.
   const sheetEvent =
     isPhone && mobilePane === 'map' && selectedId && !detailsId && !drawMode && !moving ? visibleEvents.find((e) => e.id === selectedId) ?? null : null;
-  const openDetailsFromSheet = useCallback((id: string) => setDetailsId(id), []);
+  // Opening an event (also a linked one, from another event's details) selects it, so the
+  // phone card and the highlighted pin behind the dialog are the event shown.
+  const openDetailsFromSheet = useCallback((id: string) => {
+    select(id, 'popup');
+    setDetailsId(id);
+  }, [select]);
   const locateFromDetails = useCallback(
     (id: string) => {
       setDetailsId(null);

@@ -81,3 +81,25 @@ export function placeNameIn(p: { name: string; nameEn: string }, lang: string): 
   if (lang === 'he') return p.name && /[\u0600-\u06FF]/.test(p.name) ? arabicToHebrew(p.name) : p.name || p.nameEn;
   return p.nameEn || p.name;
 }
+
+/** A place name reduced to its core, so "Al-Mansuri", "Al-Mansouri" and "מנסורי (לבנון)" compare. */
+export function placeKey(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFKD').replace(/[\u0300-\u036f\u0591-\u05c7\u064b-\u065f]/g, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/(^|[\s-])(al|el|a|as|ad|an|ar|at|az)[-\s]/g, ' ')
+    .replace(/(^|\s)ال/g, ' ')
+    .replace(/(^|\s)(אל|א)[-־]/g, ' ')
+    .replace(/ou/g, 'u').replace(/ee|[ae][iy]/g, 'i').replace(/[eo]/g, (c) => (c === 'e' ? 'i' : 'u'))
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .replace(/(.)\1+/g, '$1');
+}
+
+/** Do two sets of place names name the same place? Same core, or one contains the other
+ *  ("Esenboğa Airport" / "Ankara Esenboga Airport"). */
+export function sameNamedPlace(a: string[], b: string[]): boolean {
+  const ka = a.map(placeKey).filter((k) => k.length >= 3);
+  const kb = b.map(placeKey).filter((k) => k.length >= 3);
+  return ka.some((x) => kb.some((y) => x === y || (Math.min(x.length, y.length) >= 6 && (x.includes(y) || y.includes(x)))));
+}

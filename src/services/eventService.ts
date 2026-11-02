@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { FALLBACK_CATEGORY, safeColor } from '@/data/categoryRegistry';
 import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type EventPlace, type EventSource, type LocationPrecision, type MediaKind, type PublicEvent, type Severity, type SourceType } from '@/types/event';
 import { safeExternalUrl } from '@/utils/url';
+import { sameNamedPlace } from '@/utils/places';
 import { cleanReportText } from '@/utils/text';
 import { ServiceError, toServiceError } from './serviceError';
 
@@ -105,8 +106,9 @@ function toSources(v: unknown): EventSource[] {
   });
 }
 
-/** Extra places from the database, minus anything sitting on the main pin (within ~300 m). */
-function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
+/** Extra places from the database, minus anything that is the main pin: within ~300 m, or the
+ *  same place under another spelling or language (Mansuri / Mansouri, איסטנבול / Istanbul). */
+function toPlaces(v: unknown, mainLat: number, mainLng: number, mainNames: string[] = []): EventPlace[] {
   if (!Array.isArray(v)) return [];
   const out: EventPlace[] = [];
   for (const [index, p] of v.entries()) {
@@ -117,6 +119,12 @@ function toPlaces(v: unknown, mainLat: number, mainLng: number): EventPlace[] {
     if (lat === null || lng === null || lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
     if (Math.abs(lat - mainLat) < 0.003 && Math.abs(lng - mainLng) < 0.003) continue;
     if (out.some((q) => Math.abs(q.latitude - lat) < 0.003 && Math.abs(q.longitude - lng) < 0.003)) continue;
+    const names = [o.name, o.name_en].filter((x): x is string => typeof x === 'string');
+    // The same place under another spelling/language, up to ~50 km off (the two came from
+    // different geocoders): not a second place.
+    const near = (a: number, b: number, c: number, d: number) => Math.abs(a - c) < 0.5 && Math.abs(b - d) < 0.5;
+    if (near(lat, lng, mainLat, mainLng) && sameNamedPlace(names, mainNames)) continue;
+    if (out.some((q) => near(q.latitude, q.longitude, lat, lng) && sameNamedPlace([q.name, q.nameEn], names))) continue;
     out.push({
       index,
       name: typeof o.name === 'string' ? o.name.slice(0, 120) : '',
@@ -152,10 +160,26 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
       }
     : FALLBACK_CATEGORY;
 
-  let places = pinned ? toPlaces(row.locations, latitude!, longitude!) : [];
+  const mainNames = [row.location_name ?? '', row.location_name_he ?? '', row.location_name_en ?? ''];
   let precision: LocationPrecision | null = pinned && (LOCATION_PRECISIONS as readonly string[]).includes(row.location_precision ?? '')
     ? (row.location_precision as LocationPrecision)
     : null;
+  // The main pin is only the city ("Ankara") while the report's own place list has the exact
+  // spot under the same name ("Ankara Esenboga Airport"): one pin, on the exact spot.
+  if (pinned && precision !== 'exact' && Array.isArray(row.locations)) {
+    for (const p of row.locations as { name?: unknown; name_en?: unknown; lat?: unknown; lng?: unknown; precision?: unknown }[]) {
+      const lat = toNumber(typeof p?.lat === 'number' || typeof p?.lat === 'string' ? p.lat : null);
+      const lng = toNumber(typeof p?.lng === 'number' || typeof p?.lng === 'string' ? p.lng : null);
+      if (lat === null || lng === null || p?.precision !== 'exact') continue;
+      if (Math.abs(lat - latitude!) >= 0.5 || Math.abs(lng - longitude!) >= 0.5) continue;
+      if (!sameNamedPlace([String(p.name ?? ''), String(p.name_en ?? '')], mainNames)) continue;
+      latitude = lat;
+      longitude = lng;
+      precision = 'exact';
+      break;
+    }
+  }
+  let places = pinned ? toPlaces(row.locations, latitude!, longitude!, mainNames) : [];
   let locationName = row.location_name ?? '';
   let locationNameHe = row.location_name_he ?? '';
   let locationNameEn = row.location_name_en ?? '';

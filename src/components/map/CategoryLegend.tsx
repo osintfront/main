@@ -3,10 +3,12 @@ import { getCategoryIcon } from '@/data/categoryRegistry';
 import { useI18n } from '@/i18n';
 import type { PublicEvent } from '@/types/event';
 import { HFC_CATEGORY } from '@/config/hfcThreats';
+import { useControlLegend } from '@/components/map/areaLayers';
 
 /** Map legend: what the symbols on the map mean (categories on the map, with counts). Explains only — filtering is in the filter panel. */
 export function CategoryLegend({ events, alertCount = 0 }: { events: PublicEvent[]; alertCount?: number }) {
   const { t, categoryLabel } = useI18n();
+  const control = useControlLegend();
   const rows = useMemo(() => {
     const counts = new Map<string, { count: number; event: PublicEvent }>();
     for (const e of events) {
@@ -60,6 +62,24 @@ export function CategoryLegend({ events, alertCount = 0 }: { events: PublicEvent
           <span>{t('map.legendAlerts')}</span>
         </li>
       </ul>
+      {control?.rows.length ? (
+        <div className="mt-3 border-t border-slate-200 pt-2 dark:border-slate-700">
+          <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t('map.legendControl')}</h3>
+          <ul className="space-y-1.5 text-[11px] leading-snug text-slate-700 dark:text-slate-300">
+            {control.rows.map((r) => (
+              <li key={r.key} className="flex items-start gap-2">
+                {r.kind === 'line' ? (
+                  <span className="mt-1.5 inline-block h-0 w-5 shrink-0 border-t-[3px] border-dashed" style={{ borderColor: r.color }} aria-hidden />
+                ) : (
+                  <span className="mt-0.5 inline-block size-4 shrink-0 rounded-sm border" style={{ borderColor: r.color, backgroundColor: `${r.color}55` }} aria-hidden />
+                )}
+                <span className="min-w-0 flex-1">{r.label}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">{control.source} · {control.synced}</p>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -177,6 +177,7 @@ export const he: Record<TranslationKey, string> = {
   'map.openSource': 'פתיחת המקור',
   'map.legend': "מקרא מפה — הסמלים על המפה",
   'map.legendCluster': "עיגול עם מספר = כמה אירועים צפופים באותו אזור; התקרבו כדי לפרק.",
+  'map.legendControl': "אזורי שליטה",
   'map.legendAlerts': "שטח אדום = התרעת פיקוד העורף פעילה.",
   'map.legendFilterHint': "המקרא רק מסביר את הסמלים. כדי להסתיר או להציג אירועים — כפתור \"סינון\" למעלה.",
   'map.legendOnMap': "על המפה",

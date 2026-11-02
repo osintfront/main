@@ -8,6 +8,12 @@ export interface ImageHash { sha: string; phash: string | null }
 
 /** Hamming distance below this = the same picture. */
 export const SAME_PICTURE_BITS = 8;
+/**
+ * Two video stills of one event: the same clip reposted by several channels is cut a few
+ * seconds apart, so its stills are different frames of one scene (measured: 9–17 bits apart;
+ * different clips: 23+). Only ever compared within one event.
+ */
+export const SAME_VIDEO_STILL_BITS = 18;
 
 export async function hashImage(bytes: Uint8Array, mime = "image/jpeg"): Promise<ImageHash> {
   const buf = await crypto.subtle.digest("SHA-256", bytes);
@@ -61,8 +67,31 @@ export function hamming(a: string, b: string): number {
   return d;
 }
 
-/** Is this picture already among the event's pictures (same bytes, or the same photo)? */
-export function alreadyHas(existing: { sha?: string | null; phash?: string | null }[], h: ImageHash): boolean {
-  return existing.some((e) =>
-    (e.sha && e.sha === h.sha) || (e.phash && h.phash && hamming(e.phash, h.phash) <= SAME_PICTURE_BITS));
+type Print = { sha?: string | null; phash?: string | null; kind?: string | null };
+
+/** Is this picture already among the event's pictures (same bytes, the same photo, or a still
+ *  of the same video)? */
+export function alreadyHas(existing: Print[], h: Print): boolean {
+  return existing.some((e) => {
+    if (e.sha && e.sha === h.sha) return true;
+    if (!e.phash || !h.phash) return false;
+    const bits = e.kind === "video_thumb" && h.kind === "video_thumb" ? SAME_VIDEO_STILL_BITS : SAME_PICTURE_BITS;
+    return hamming(e.phash, h.phash) <= bits;
+  });
+}
+
+/**
+ * Of one event's pictures, which are repeats? Keeps one per picture: a video still whose video
+ * is already fetched, then any video still, then a plain picture; oldest first.
+ */
+export function repeatsIn<T extends Print & { created_at: string; ready_video?: boolean }>(rows: T[]): T[] {
+  const rank = (r: T) => (r.kind === "video_thumb" ? (r.ready_video ? 0 : 1) : 2);
+  const list = rows.filter((r) => r.sha).sort((a, b) => rank(a) - rank(b) || a.created_at.localeCompare(b.created_at));
+  const kept: Print[] = [];
+  const drop: T[] = [];
+  for (const r of list) {
+    if (alreadyHas(kept, r)) drop.push(r);
+    else kept.push(r);
+  }
+  return drop;
 }

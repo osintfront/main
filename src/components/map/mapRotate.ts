@@ -2,6 +2,28 @@ import L from 'leaflet';
 import 'leaflet-rotate'; // pinned 0.2.8 (2023, stable): rotation, two-finger rotate, compass control
 
 /**
+ * leaflet-rotate redraws every vector renderer (areas, alert polygons, lines) on each `rotate`
+ * event. During a phone pinch that also turns the map, that re-places the SVG/canvas for the
+ * half-way zoom while its shapes are still drawn for the zoom the gesture started at — the
+ * areas slide away from the pins and jump back when the fingers lift (leaflet-rotate's own
+ * "@FIXME layer drifts"). When the zoom has changed since the shapes were drawn, redraw them
+ * for the current zoom too (a full reset), so container and shapes always agree.
+ */
+{
+  type R = L.Renderer & { _map?: L.Map; _zoom?: number; _update: () => void; _reset: () => void };
+  const proto = L.Renderer.prototype as unknown as { getEvents: (this: R) => Record<string, unknown> };
+  const rotateEvents = proto.getEvents;
+  proto.getEvents = function (this: R) {
+    const events = rotateEvents.call(this);
+    events.rotate = function (this: R) {
+      if (this._map && this._zoom !== this._map.getZoom()) this._reset();
+      else this._update();
+    };
+    return events;
+  };
+}
+
+/**
  * Rotate by dragging with the right mouse button or Ctrl + left button (desktop).
  * A right-click without dragging still opens our investigation menu.
  */

@@ -1,7 +1,7 @@
 // Map layers of areas: who controls what (Israel in Lebanon and Syria, Yemen, Gaza — copied daily
 // from a public war map), Lebanese villages by religious community (Wikipedia) and the
 // courses of Lebanon's wadis and streams (OpenStreetMap).
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import L from 'leaflet';
 import { Church, Flag, Waves } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,6 +50,43 @@ function areaName(name: string, lang: string): string {
   return name;
 }
 
+/** One row of the map legend for the areas-of-control layer: a colour and what it stands for. */
+export interface ControlLegendRow { key: string; color: string; kind: 'polygon' | 'line'; label: string }
+export interface ControlLegend { rows: ControlLegendRow[]; source: string; synced: string }
+
+// The legend lives in another part of the page than the layer: a tiny shared store.
+let legendState: ControlLegend | null = null;
+const legendSubs = new Set<() => void>();
+function setControlLegend(next: ControlLegend | null) {
+  legendState = next;
+  legendSubs.forEach((f) => f());
+}
+export function useControlLegend(): ControlLegend | null {
+  return useSyncExternalStore(
+    (f) => { legendSubs.add(f); return () => void legendSubs.delete(f); },
+    () => legendState,
+  );
+}
+
+// What each colour of the source map means, per region (from the areas' own names).
+// Colours not listed show the names of their areas instead — no guessed affiliation.
+const COLOR_MEANING: Record<string, { he: string; en: string }> = {
+  'gaza:#0288D1': { he: 'התקדמות ומבצעי צה"ל', en: 'IDF advances and operations' },
+  'gaza:#097138': { he: 'חמאס והג\'יהאד האסלאמי', en: 'Hamas and PIJ' },
+  'gaza:#1A237E': { he: 'הפלישה לעזה (צה"ל)', en: 'Invasion of Gaza (IDF)' },
+  'gaza:#3949AB': { he: 'אזור החיץ / שליטה ישראלית', en: 'Buffer zone / Israeli control' },
+  'gaza:#FFD600': { he: 'הקו הצהוב', en: 'Yellow Line' },
+  'gaza:#000000': { he: 'קו המגע (9 באוקטובר)', en: 'Line of contact (October 9)' },
+  'lebanon:#B2EBF2': { he: 'צה"ל בלבנון', en: 'IDF in Lebanon' },
+  'lebanon:#A52714': { he: 'חיזבאללה', en: 'Hezbollah' },
+  'lebanon:#7CB342': { he: 'עיירות נוצריות מאוכלסות', en: 'Populated Christian towns' },
+  'lebanon:#FFD600': { he: 'קו המגע האחרון', en: 'Final line of contact' },
+  'lebanon:#FFFF8D': { he: 'גבולות גזרות (A/B/C)', en: 'Sector boundaries (A/B/C)' },
+  'syria:#1A237E': { he: 'צה"ל בסוריה', en: 'IDF in Syria' },
+  'syria:#9C27B0': { he: 'המועצה הצבאית של סווידא', en: 'Suwayda Military Council' },
+  'yemen:#A52714': { he: "החות'ים (אנסאר אללה)", en: 'Houthis (Ansarallah)' },
+};
+
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 export function useAreaLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rtl') {
@@ -95,28 +132,49 @@ export function useAreaLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rtl
     if (!map.getPane('ofmAreas')) map.createPane('ofmAreas', map.getPane('rotatePane')).style.zIndex = '330';
   }, [map]);
 
+  // Areas are drawn only (not tappable): a tap used to focus the shape (a black box around it on
+  // phones) and open a window over the map. What the colours mean is in the map legend.
   useEffect(() => {
     if (!map || !controlOn) return;
     const group = L.layerGroup();
-    const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-GB') : '—');
     for (const a of areas) {
       if (!regions.has(a.region)) continue;
-      const label = areaName(a.name, lang);
-      const layer = L.geoJSON(a.geometry as GeoJSON.GeoJsonObject, {
+      L.geoJSON(a.geometry as GeoJSON.GeoJsonObject, {
         pane: 'ofmAreas',
+        interactive: false,
         style: a.kind === 'line'
           ? { color: a.color, weight: 3, opacity: 0.9, dashArray: '6 4' }
           : { color: a.color, weight: 1.5, opacity: 0.9, fillColor: a.color, fillOpacity: 0.28 },
-      });
-      layer.bindTooltip(esc(label), { sticky: true, direction: 'top' });
-      layer.bindPopup(
-        `<div dir="${dir}" style="font-size:12px;line-height:1.5;min-width:180px"><b style="font-size:13px">${esc(label)}</b>${label !== a.name ? `<br/><span style="color:#64748b">${esc(a.name)}</span>` : ''}<br/>${esc(T[a.region])} · ${T.since}: ${day(a.first_seen)}<br/><span style="color:#64748b">${T.source} · ${T.updated}: ${day(synced.control)}</span></div>`,
-      );
-      layer.addTo(group);
+      }).addTo(group);
     }
     group.addTo(map);
     return () => void group.remove();
-  }, [map, controlOn, areas, regions, lang, dir, T, synced.control]);
+  }, [map, controlOn, areas, regions]);
+
+  // Legend rows for the regions shown: one per colour (polygons first, then lines).
+  useEffect(() => {
+    if (!controlOn || !areas.length) { setControlLegend(null); return; }
+    const he = lang === 'he';
+    const groups = new Map<string, { color: string; kind: 'polygon' | 'line'; region: ControlRegion; names: string[] }>();
+    for (const a of areas) {
+      if (!regions.has(a.region)) continue;
+      const key = `${a.region}:${a.color.toUpperCase()}:${a.kind}`;
+      const g = groups.get(key) ?? { color: a.color, kind: a.kind, region: a.region, names: [] };
+      const n = areaName(a.name, lang);
+      if (!g.names.includes(n)) g.names.push(n);
+      groups.set(key, g);
+    }
+    const rows: ControlLegendRow[] = [...groups.entries()]
+      .sort(([, x], [, y]) => (x.kind === y.kind ? CONTROL_REGIONS.indexOf(x.region) - CONTROL_REGIONS.indexOf(y.region) : x.kind === 'polygon' ? -1 : 1))
+      .map(([key, g]) => {
+        const known = COLOR_MEANING[`${g.region}:${g.color.toUpperCase()}`];
+        const what = known ? known[he ? 'he' : 'en'] : g.names.slice(0, 3).join(', ') + (g.names.length > 3 ? '…' : '');
+        return { key, color: g.color, kind: g.kind, label: `${T[g.region]} · ${what}` };
+      });
+    const day = synced.control ? new Date(synced.control).toLocaleDateString(he ? 'he-IL' : 'en-GB') : '—';
+    setControlLegend({ rows, source: T.source, synced: `${T.updated}: ${day}` });
+    return () => setControlLegend(null);
+  }, [controlOn, areas, regions, lang, T, synced.control]);
 
   const canvasRef = useRef<L.Canvas | null>(null);
   const shownPlaces = useMemo(() => places.filter((p) => p.sects.some((s) => sects.has(s))), [places, sects]);
