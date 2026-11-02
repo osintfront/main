@@ -11,6 +11,7 @@ import { I18nProvider } from '@/i18n';
 import { RequireAuth } from '@/components/auth/RequireAuth';
 import { SessionTimeout } from '@/components/auth/SessionTimeout';
 import { UpdateBanner } from '@/components/layout/UpdateBanner';
+import { CookieNotice } from '@/components/layout/CookieNotice';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { MapPage } from '@/pages/public/MapPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
@@ -67,7 +68,7 @@ export function App() {
               <Route path="/about" element={<SitePage page="about" />} />
               <Route path="/privacy" element={<SitePage page="privacy" />} />
               <Route path="/contact" element={<SitePage page="contact" />} />
-              <Route path="/terms" element={<LegalPlaceholder page="terms" />} />
+              <Route path="/terms" element={<SitePage page="terms" />} />
               <Route path="/refund-policy" element={<LegalPlaceholder page="refund" />} />
               <Route path="/cancel-subscription" element={<LegalPlaceholder page="cancel" />} />
               <Route path="/" element={<RequireAuth><MapPage /></RequireAuth>} />
@@ -119,6 +120,7 @@ export function App() {
             </Routes>
             <SessionTimeout />
             <UpdateBanner />
+            <CookieNotice />
           </BrowserRouter>
           </ToastProvider>
         </AuthProvider>
