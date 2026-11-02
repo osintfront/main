@@ -5,6 +5,7 @@
 // last run are compared with the last 12 hours by a cheap model; each duplicate is folded
 // into the earliest event (its sources and media move over) and soft-deleted.
 import { callClaude, isTransient, STRONG_MODELS } from "./editor.ts";
+import { alreadyHas, hashImage } from "./imageHash.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -88,6 +89,43 @@ async function ask(lines: string): Promise<{ new: number; same_as: number; incid
 
 const asList = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
+/**
+ * After a merge, the kept event can hold the same picture twice (both events had it).
+ * Keep one copy per picture: a video thumbnail before a plain picture, then the oldest.
+ */
+async function dropSamePictures(db: Db, eventId: string): Promise<void> {
+  const { data: rows } = await db.from("event_media")
+    .select("id,kind,storage_path,public_url,sha256,phash,created_at")
+    .eq("event_id", eventId).in("kind", ["image", "video_thumb"]).order("created_at");
+  const list: any[] = rows ?? [];
+  // One picture or none: nothing to compare, so skip the fetch-and-hash work entirely.
+  if (list.length < 2) return;
+  for (const r of list) {
+    if (r.sha256) continue;
+    try {
+      const res = await fetch(r.public_url);
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const mime = /\.png$/i.test(r.storage_path) ? "image/png" : /\.webp$/i.test(r.storage_path) ? "image/webp" : "image/jpeg";
+      const fp = await hashImage(bytes, mime);
+      r.sha256 = fp.sha;
+      r.phash = fp.phash;
+      await db.from("event_media").update({ sha256: fp.sha, phash: fp.phash }).eq("id", r.id);
+    } catch { /* try again on the next merge */ }
+  }
+  const hashed = list.filter((r) => r.sha256);
+  hashed.sort((a, b) => (a.kind === b.kind ? a.created_at.localeCompare(b.created_at) : a.kind === "video_thumb" ? -1 : 1));
+  const kept: { sha?: string | null; phash?: string | null }[] = [];
+  const drop: any[] = [];
+  for (const r of hashed) {
+    if (alreadyHas(kept, { sha: r.sha256, phash: r.phash })) drop.push(r);
+    else kept.push({ sha: r.sha256, phash: r.phash });
+  }
+  if (!drop.length) return;
+  await db.storage.from("event-media").remove(drop.map((r) => r.storage_path));
+  await db.from("event_media").delete().in("id", drop.map((r) => r.id));
+}
+
 /** Fold dup into keep: sources + media move over, dup is soft-deleted. */
 async function merge(db: Db, keep: Row, dup: Row): Promise<void> {
   const cur = asList(keep.sources);
@@ -100,6 +138,7 @@ async function merge(db: Db, keep: Row, dup: Row): Promise<void> {
   }
   await db.from("events").update({ sources: merged.slice(-MAX_SOURCES) }).eq("id", keep.id);
   await db.from("event_media").update({ event_id: keep.id }).eq("event_id", dup.id);
+  await dropSamePictures(db, keep.id);
   const { data: d } = await db.from("events").select("ai_suggestions").eq("id", dup.id).maybeSingle();
   await db.from("events").update({
     deleted_at: new Date().toISOString(),
