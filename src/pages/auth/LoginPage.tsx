@@ -44,12 +44,14 @@ export function LoginPage() {
   }, [lockSeconds]);
 
   useEffect(() => emailRef.current?.focus(), []);
+  // Before any early return: a hook after them crashed the page (React #310) whenever the
+  // sign-in check went from "loading" to "signed out" — i.e. for everyone not signed in.
+  const [kicked] = useState(wasKickedOut);
 
   if (status === 'unconfigured') return <SetupNotice />;
   if (status === 'loading' && !submitting) return <FullScreenLoader label={t('auth.verifying')} />;
   if (status === 'signed_in') return <Navigate to={redirectTo} replace />;
 
-  const [kicked] = useState(wasKickedOut);
   const expired = !kicked && (sessionExpired || state.reason === 'expired');
 
   const onSubmit = async (e: FormEvent) => {
