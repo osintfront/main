@@ -23,7 +23,7 @@ export function useArchiveRange(range: { from: string; to: string } | null): { e
       return;
     }
     setLoading(true);
-    fetchArchivedEvents(from, to, 2000)
+    fetchArchivedEvents(from, to)
       .then((rows) => {
         if (id === requestId.current) setEvents(rows);
       })

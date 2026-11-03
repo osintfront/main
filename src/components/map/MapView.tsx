@@ -518,7 +518,16 @@ export function MapView({
             { maxWidth: 320, minWidth: 240, autoPanPadding: [28, 28], className: 'ofm-popup-shell' },
           );
         }
-        marker.on('click', () => onMarkerSelectRef.current(event.id));
+        marker.on('click', (e: L.LeafletMouseEvent) => {
+          // Moving a pin or drawing an area: a tap on another pin (often a linked event on the
+          // same spot) puts the point there — it must not open that other event instead.
+          if (drawClickRef.current) {
+            L.DomEvent.stop(e);
+            drawClickRef.current([place.lat, place.lng]);
+            return;
+          }
+          onMarkerSelectRef.current(event.id);
+        });
         marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
           L.DomEvent.stop(e);
           const pt = mapRef.current?.latLngToContainerPoint(e.latlng);

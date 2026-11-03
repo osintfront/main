@@ -230,36 +230,54 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
   };
 }
 
-export async function fetchPublishedEvents(limit = 500): Promise<PublicEvent[]> {
+/**
+ * Every event on the live map (published, not yet archived). Read in pages of 1000 — the API's
+ * page size — so a busy day is never cut off: one fixed limit of 500 used to drop everything
+ * older than the newest 500 (a busy day has 900+), even inside the 12-hour view.
+ */
+export async function fetchPublishedEvents(max = 5000): Promise<PublicEvent[]> {
   if (!supabase) throw new ServiceError('not_configured', 'Supabase is not configured.');
-  const { data, error } = await supabase
-    .from('published_events')
-    .select(PUBLIC_EVENT_COLUMNS)
-    .order('occurred_at', { ascending: false })
-    .limit(limit);
-  if (error) throw toServiceError(error);
-  return ((data ?? []) as unknown as PublishedEventRow[])
-    .map(mapPublishedEventRow)
-    .filter((e): e is PublicEvent => e !== null);
+  const PAGE = 1000;
+  const rows: PublishedEventRow[] = [];
+  for (let from = 0; from < max; from += PAGE) {
+    const { data, error } = await supabase
+      .from('published_events')
+      .select(PUBLIC_EVENT_COLUMNS)
+      .order('occurred_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, Math.min(from + PAGE, max) - 1);
+    if (error) throw toServiceError(error);
+    const page = (data ?? []) as unknown as PublishedEventRow[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows.map(mapPublishedEventRow).filter((e): e is PublicEvent => e !== null);
 }
 
 /**
  * Events that left the live map after their 24-hour lifetime (the public
  * `archived_events` view), for one time window.
  */
-export async function fetchArchivedEvents(fromIso: string, toIso: string, limit = 1000): Promise<PublicEvent[]> {
+export async function fetchArchivedEvents(fromIso: string, toIso: string, max = 10000): Promise<PublicEvent[]> {
   if (!supabase) throw new ServiceError('not_configured', 'Supabase is not configured.');
-  const { data, error } = await supabase
-    .from('archived_events')
-    .select(PUBLIC_EVENT_COLUMNS)
-    .gte('occurred_at', fromIso)
-    .lt('occurred_at', toIso)
-    .order('occurred_at', { ascending: false })
-    .limit(limit);
-  if (error) throw toServiceError(error);
-  return ((data ?? []) as unknown as PublishedEventRow[])
-    .map(mapPublishedEventRow)
-    .filter((e): e is PublicEvent => e !== null);
+  // Pages of 1000 (the API's page size): a busy day has more than 1000 events.
+  const PAGE = 1000;
+  const rows: PublishedEventRow[] = [];
+  for (let from = 0; from < max; from += PAGE) {
+    const { data, error } = await supabase
+      .from('archived_events')
+      .select(PUBLIC_EVENT_COLUMNS)
+      .gte('occurred_at', fromIso)
+      .lt('occurred_at', toIso)
+      .order('occurred_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, Math.min(from + PAGE, max) - 1);
+    if (error) throw toServiceError(error);
+    const page = (data ?? []) as unknown as PublishedEventRow[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows.map(mapPublishedEventRow).filter((e): e is PublicEvent => e !== null);
 }
 
 /** Several public events by id (live and archived), e.g. the results of "ask the map". */
