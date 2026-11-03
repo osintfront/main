@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { FeedAd } from '@/components/ads/FeedAd';
 import { AlertTriangle, ArrowUp, Inbox, RefreshCw, Siren } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import type { FocusRequest } from '@/hooks/useMapSelection';
@@ -39,8 +40,8 @@ interface EventFeedProps {
   emptyText?: string;
   /** Docked under the list on desktop. */
   footer?: ReactNode;
-  /** Shown between cards on phones/tablets instead of the docked footer. */
-  inlineAd?: ReactNode;
+  /** One ad after every N cards (guests and Free only; undefined = no ads). */
+  adEvery?: number;
 }
 
 /** Re-renders relative timestamps once a minute. */
@@ -88,7 +89,7 @@ export function EventFeed({
   newIds,
   onOpenDetails,
   footer,
-  inlineAd,
+  adEvery,
   alerts = [],
   alertsNow,
   onLocateAlert,
@@ -227,10 +228,10 @@ export function EventFeed({
                   <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} onOpenDetails={onOpenDetails} />
                 </li>,
               ];
-              if (inlineAd && index === Math.min(1, events.length - 1)) {
+              if (adEvery && (index + 1) % adEvery === 0 && index < events.length - 1) {
                 items.push(
-                  <li key="inline-ad" className="lg:hidden">
-                    {inlineAd}
+                  <li key={`ad-${index}`}>
+                    <FeedAd />
                   </li>,
                 );
               }
