@@ -9,7 +9,7 @@ import { openGate } from '@/components/plans/GateDialog';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
-import { AdSlot } from '@/components/common/AdSlot';
+import { useAds } from '@/lib/ads';
 import { SiteLinks } from '@/components/layout/SiteLinks';
 import { TopNav } from '@/components/layout/TopNav';
 import { EventFeed } from '@/components/feed/EventFeed';
@@ -103,7 +103,6 @@ function ArchiveDayPicker({ day, onChange }: { day: string; onChange: (day: stri
 }
 
 
-const ADS_ENABLED = false;
 const NO_ALERTS: never[] = [];
 export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const { t, categoryLabel } = useI18n();
@@ -127,10 +126,13 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim());
   const [mobilePane, setMobilePane] = useState<MobilePane>('map');
+  // Ads (Stage C): guests and Free only, when switched on in app_settings.
+  const adAuth = useAuth();
+  const ads = useAds(adAuth.profile, adAuth.status !== 'loading');
   // Ads only on the live map with content: none in the archive or on an empty page
   // (Google: no ads on screens without publisher content).
   // Ad slots are off until the ad account is approved (placeholders hidden).
-  const showAds = ADS_ENABLED && !isArchive && events.length > 0;
+  const showAds = ads.show && !isArchive && events.length > 0;
   const { alerts, now: alertsNow, shapes: alertShapes, ready: alertsReady } = useHfcAlerts(!isArchive);
 
   // Sound: browsers allow audio only after an interaction, so unlock on the first one.
@@ -517,15 +519,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             emptyText={filterCount ? t('filters.none') : isArchive ? t('archive.empty') : undefined}
             footer={
               <>
-                {showAds ? (
-                  <div className="hidden border-t border-slate-200 p-3 lg:block [@media(max-height:720px)]:hidden dark:border-slate-800">
-                    <AdSlot variant="square" slotId="feed-rectangle" />
-                  </div>
-                ) : null}
                 <SiteLinks className="justify-center border-t border-slate-200 px-3 py-2 dark:border-slate-800" />
               </>
             }
-            inlineAd={showAds ? <AdSlot variant="square" slotId="feed-rectangle-inline" className="py-1" /> : undefined}
+            adEvery={showAds ? ads.every : undefined}
           />
         </aside>
 
@@ -534,11 +531,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           id="main-map"
           className={cn('min-h-0 flex-col pb-16 lg:flex lg:pb-0', mobilePane === 'map' ? 'flex' : 'hidden')}
         >
-          {showAds ? (
-            <div className="flex shrink-0 justify-center border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
-              <AdSlot variant="banner" slotId="map-leaderboard" />
-            </div>
-          ) : null}
+          {/* The top/bottom ad on the map is Google's anchor ad (Auto ads), not a slot here. */}
           <div className="relative min-h-0 flex-1">
             <MapView
               events={mapEvents}
