@@ -91,7 +91,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         {
           h: 'פרסומות ועוגיות של צד שלישי',
           p: [
-            'נכון לעכשיו האתר אינו מציג פרסומות של צד שלישי. בעתיד האתר עשוי להציג פרסומות של Google או ספקים נוספים, שישתמשו בעוגיות להצגת מודעות על סמך ביקורים קודמים. אם וכאשר יופעל פרסום כזה, נעדכן סעיף זה ונציג חלון הסכמה לעוגיות לא־הכרחיות לפני הפעלתן.',
+            'האתר מציג פרסומות של Google AdSense לגולשים שאינם רשומים ולמשתמשי החבילה החינמית (מנויי Pro ו-Max אינם רואים פרסומות). Google וספקים צד שלישי משתמשים בעוגיות כדי להציג מודעות על סמך ביקורים קודמים באתר זה ובאתרים אחרים. ניתן לבטל פרסום מותאם אישית בהגדרות המודעות של Google (https://adssettings.google.com) או באתר www.aboutads.info. לגולשים מהאזור הכלכלי האירופי, בריטניה ושווייץ מוצג חלון הסכמה מוסמך של Google לפני השימוש בעוגיות לפרסום. מידע נוסף: https://policies.google.com/technologies/partner-sites.',
             'אפשר כבר היום לבטל מראש פרסום מותאם אישית ב[הגדרות המודעות של Google](https://adssettings.google.com) ובאתר [www.aboutads.info](https://www.aboutads.info/choices).',
           ],
         },
@@ -303,7 +303,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         {
           h: 'Advertising and third-party cookies',
           p: [
-            'The site currently shows no third-party advertising. In the future it may show ads from Google or other vendors, who would use cookies to serve ads based on prior visits. If and when such advertising is enabled, this section will be updated and a consent window for non-essential cookies will be shown first.',
+            'The site shows Google AdSense ads to visitors who are not signed in and to Free plan users (Pro and Max subscribers see no ads). Google and other third-party vendors use cookies to serve ads based on prior visits to this site and other sites. You can opt out of personalised advertising in Google Ad Settings (https://adssettings.google.com) or at www.aboutads.info. Visitors from the EEA, the UK and Switzerland are shown a Google-certified consent window before advertising cookies are used. More: https://policies.google.com/technologies/partner-sites.',
             'You can already opt out of personalised advertising in advance at [Google Ads Settings](https://adssettings.google.com) and at [www.aboutads.info](https://www.aboutads.info/choices).',
           ],
         },
