@@ -1,6 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useI18n } from '@/i18n';
 import { cn } from '@/utils/cn';
+
+/** Fired when the logo is clicked on the page it already links to. */
+export const HOME_EVENT = 'osintfront:home';
 
 export function LogoMark({ className }: { className?: string }) {
   return <img src="/logo-mark.png" alt="" aria-hidden className={cn('size-8 object-contain', className)} />;
@@ -13,9 +16,15 @@ export function LogoFull({ className }: { className?: string }) {
 
 export function Logo({ to = '/', subtitle }: { to?: string; subtitle?: string }) {
   const { t } = useI18n();
+  const { pathname } = useLocation();
   return (
     <Link
       to={to}
+      // Already on the page it points to (the map): the link alone changes nothing, so tell the
+      // page to go back to its home view (map pane, no open panels or selection).
+      onClick={() => {
+        if (pathname === to) window.dispatchEvent(new Event(HOME_EVENT));
+      }}
       className="flex items-center gap-2.5 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-500"
     >
       <LogoMark />

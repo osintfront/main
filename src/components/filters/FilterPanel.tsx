@@ -269,7 +269,8 @@ export function FilterPanel({
 
   return (
     <div className="fixed inset-0 z-[2500] lg:absolute lg:inset-auto lg:end-3 lg:top-14" role="presentation">
-      <div className="absolute inset-0 bg-slate-950/50 lg:hidden" onClick={onClose} aria-hidden />
+      {/* Click anywhere outside the panel to close it: dimmed on phones, invisible on desktop. */}
+      <div className="fixed inset-0 bg-slate-950/50 lg:bg-transparent" onClick={onClose} aria-hidden />
       <div
         ref={panelRef}
         tabIndex={-1}

@@ -4,6 +4,7 @@ import { isValidDay, shiftDay, toDayString, useArchivedEvents } from '@/hooks/us
 import { useI18n } from '@/i18n';
 import { usePublicEvents } from '@/hooks/useEvents';
 import { PAGE_RELOADED, useMapSelection } from '@/hooks/useMapSelection';
+import { HOME_EVENT } from '@/components/common/Logo';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -388,6 +389,18 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     },
     [select],
   );
+
+  // Logo clicked while already on the map: back to the plain map view.
+  useEffect(() => {
+    const home = () => {
+      setMobilePane('map');
+      setFiltersOpen(false);
+      setDetailsId(null);
+      clearSelection();
+    };
+    window.addEventListener(HOME_EVENT, home);
+    return () => window.removeEventListener(HOME_EVENT, home);
+  }, [clearSelection]);
 
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
