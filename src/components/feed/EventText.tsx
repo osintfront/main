@@ -5,6 +5,9 @@ import type { PublicEvent } from '@/types/event';
 import { LinkifiedText } from '@/components/common/LinkifiedText';
 import { cachedExpansion, expandEvent, fetchSourceText, type ExpandedByLang } from '@/services/eventTextService';
 import { cn } from '@/utils/cn';
+import { useAuth } from '@/hooks/useAuth';
+import { refreshFeatureUsage, useFeatureUsage } from '@/lib/featureUse';
+import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { previewText } from '@/utils/text';
 
 const SITE = 'https://osintfront.com';
@@ -41,6 +44,8 @@ export function eventTexts(event: PublicEvent, lang: string) {
  */
 export function EventText({ event, compact = false }: { event: PublicEvent; compact?: boolean }) {
   const { t, lang } = useI18n();
+  const { profile } = useAuth();
+  const usage = useFeatureUsage().expand_daily;
   const { summary } = eventTexts(event, lang);
   const [view, setView] = useState<'summary' | 'source'>('summary');
   const [source, setSource] = useState<string | null>(null);
@@ -67,20 +72,20 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
   const toggleExpand = async () => {
     if (open) return setOpen(false);
     setFailed(false);
-    const cached = expanded ?? cachedExpansion(event);
-    if (cached) {
-      setExpanded(cached);
-      return setOpen(true);
-    }
+    // Re-opening in the same card is free; every new expand is counted by the server.
+    if (expanded) return setOpen(true);
+    if (!profile) return void openGate('signup');
     setBusy('expand');
     try {
       setExpanded(await expandEvent(event.id));
       setOpen(true);
     } catch (err) {
       const m = (err as Error)?.message;
-      setFailed(m === 'quota' || m === 'budget' ? m : 'failed');
+      if (openGateFor(m)) return;
+      setFailed(m === 'budget' ? m : 'failed');
     } finally {
       setBusy(null);
+      void refreshFeatureUsage();
     }
   };
 
@@ -133,6 +138,9 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
             {busy === 'expand' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : open ? <ChevronUp className="size-3.5" aria-hidden /> : <ChevronDown className="size-3.5" aria-hidden />}
             {busy === 'expand' ? t('text.expanding') : open ? t('text.collapse') : t('text.expand')}
           </button>
+        ) : null}
+        {view === 'summary' && profile?.role === 'viewer' && usage?.limit != null ? (
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">{t('gate.left', { n: Math.max(usage.limit - usage.used, 0), limit: usage.limit })}</span>
         ) : null}
         <button type="button" onClick={() => void showSource()} disabled={busy !== null} className={btn}>
           {busy === 'source' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : view === 'source' ? <Languages className="size-3.5" aria-hidden /> : <FileText className="size-3.5" aria-hidden />}

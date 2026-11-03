@@ -9,6 +9,7 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/hooks/useAuth';
 import { I18nProvider } from '@/i18n';
 import { RequireAuth } from '@/components/auth/RequireAuth';
+import { GateHost } from '@/components/plans/GateDialog';
 import { SessionTimeout } from '@/components/auth/SessionTimeout';
 import { UpdateBanner } from '@/components/layout/UpdateBanner';
 import { CookieNotice } from '@/components/layout/CookieNotice';
@@ -71,7 +72,8 @@ export function App() {
               <Route path="/terms" element={<SitePage page="terms" />} />
               <Route path="/refund-policy" element={<SitePage page="refund" />} />
               <Route path="/cancel-subscription" element={<LegalPlaceholder page="cancel" />} />
-              <Route path="/" element={<RequireAuth><MapPage /></RequireAuth>} />
+              {/* Open to everyone: guests get the live 24 hours; locked features ask them to sign up. */}
+              <Route path="/" element={<MapPage />} />
               <Route path="/account" element={<RequireAuth><MemberAccountPage /></RequireAuth>} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -118,6 +120,7 @@ export function App() {
 
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            <GateHost />
             <SessionTimeout />
             <UpdateBanner />
             <CookieNotice />

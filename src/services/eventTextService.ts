@@ -1,4 +1,3 @@
-import { requireFeature } from '@/lib/plans';
 import { aiLimitCode } from './askService';
 import { supabase } from '@/integrations/supabase/client';
 import type { PublicEvent } from '@/types/event';
@@ -31,16 +30,27 @@ export function cachedExpansion(e: PublicEvent): ExpandedByLang | null {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** event-agent's refusal code: plan uses (quota_exceeded, not_in_plan) or the AI credit limits. */
+async function expandRefusal(error: unknown): Promise<string> {
+  try {
+    const body = await (error as { context?: Response }).context?.clone().json();
+    if (body?.error === 'quota_exceeded' || body?.error === 'not_in_plan') return body.error;
+  } catch {
+    /* not JSON */
+  }
+  return aiLimitCode(error);
+}
+
 export async function expandEvent(id: string): Promise<ExpandedByLang> {
-  requireFeature('ai_expand_ask');
-  const hit = expandCache.get(id);
-  if (hit) return hit;
+  // Every expand is counted by event-agent (cached ones too), so the request is always made.
   if (!supabase) throw new Error('offline');
   // Another reader may be writing it right now (202): wait and ask again.
   for (let attempt = 0; attempt < 12; attempt++) {
     const { data, error } = await supabase.functions.invoke('event-agent', { body: { action: 'expand', id } });
     if (error) {
-      if ((error as { context?: { status?: number } }).context?.status === 429) throw new Error(await aiLimitCode(error));
+      const status = (error as { context?: { status?: number } }).context?.status;
+      if (status === 401) throw new Error('signup_required');
+      if (status === 429) throw new Error(await expandRefusal(error));
       throw error;
     }
     if (data?.he) {
