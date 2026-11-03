@@ -8,9 +8,12 @@ import type { PlanId, Profile } from '@/types/user';
  */
 export type FeatureKey =
   | 'live_map' | 'feed' | 'hfc_alerts' | 'translation_he' | 'push' | 'archive_days'
-  | 'ships_aircraft' | 'satellite' | 'ai_expand_ask' | 'insights' | 'data_export';
+  | 'ships_aircraft' | 'satellite' | 'ai_expand_ask' | 'insights' | 'data_export' | 'expand_daily';
 
-interface FeatureRow { feature_key: string; plan_id: PlanId; enabled: boolean; limit_value: number | null }
+/** The plan whose limits apply: 'guest' when nobody is signed in (never stored on a profile). */
+export type EffectivePlan = PlanId | 'guest';
+
+interface FeatureRow { feature_key: string; plan_id: EffectivePlan; enabled: boolean; limit_value: number | null }
 
 let enforce = false;
 let features: FeatureRow[] = [];
@@ -33,13 +36,13 @@ export async function loadPlanConfig() {
 /** Called by the auth hook with the signed-in user's profile. */
 export function setPlanUser(p: Profile | null) {
   me = p;
-  if (p) void loadPlanConfig();
+  void loadPlanConfig(); // guests too: plans are readable without an account
   listeners.forEach((l) => l());
 }
 
-/** The plan in force: an expired plan counts as Free. */
-export function effectivePlan(p: (Pick<Profile, 'plan' | 'planExpiresAt'> & { role?: Profile['role'] }) | null): PlanId {
-  if (!p) return 'free';
+/** The plan in force: signed out = guest; an expired plan counts as Free. */
+export function effectivePlan(p: (Pick<Profile, 'plan' | 'planExpiresAt'> & { role?: Profile['role'] }) | null): EffectivePlan {
+  if (!p) return 'guest';
   if (p.role === 'super_admin' || p.role === 'admin') return 'max'; // staff: everything
   if (p.plan !== 'free' && p.planExpiresAt && new Date(p.planExpiresAt).getTime() < Date.now()) return 'free';
   return p.plan;
@@ -69,4 +72,4 @@ export function usePlanVersion(): number {
   return useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => (enforce ? 1 : 0) + features.length * 2, () => 0);
 }
 
-export const PLAN_LABEL: Record<PlanId, string> = { free: 'Free', pro: 'Pro', max: 'Max', intel: 'Intel' };
+export const PLAN_LABEL: Record<EffectivePlan, string> = { guest: 'Guest', free: 'Free', pro: 'Pro', max: 'Max', intel: 'Intel' };
