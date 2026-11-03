@@ -471,7 +471,7 @@ export const en = {
   'site.backToMap': "Back to the map",
   'site.updated': "Last updated: {date}",
   'cookie.label': "Cookie notice",
-  'cookie.text': "The site stores only essential preferences in your browser (language, appearance, settings). None of this is used for tracking or advertising.",
+  'cookie.text': "The site stores essential preferences in your browser (language, appearance, settings). Visitors who are not signed in and Free users see Google ads, which use cookies to tailor ads.",
   'cookie.learnMore': "Learn more",
   'cookie.reject': "Reject non-essential",
   'cookie.settings': "Cookie settings",
