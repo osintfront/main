@@ -449,7 +449,11 @@ async function handle(req: Request): Promise<Response> {
       if (useErr) return json({ error: "error" }, 503);
       if (!use?.ok) return json({ error: use?.reason ?? "quota_exceeded", used: use?.used, limit: use?.limit }, use?.reason === "signup_required" ? 401 : 429);
     }
-    return await runAsReader(readerId, () => expand(id, () => quotaGate(readerId)));
+    const res = await runAsReader(readerId, () => expand(id, () => quotaGate(readerId)));
+    // Only a delivered text costs a use: a pending poll (202), a missing event, an AI-credit
+    // refusal or a failure gives it back — so one click never spends more than one use.
+    if (readerId && res.status !== 200) await db.rpc("refund_feature", { p_uid: readerId, p_key: "expand_daily" });
+    return res;
   }
   if (action === "claude_usage") {
     // Staff only: check the caller's own session.

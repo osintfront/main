@@ -10,6 +10,7 @@ import { AuthProvider } from '@/hooks/useAuth';
 import { I18nProvider } from '@/i18n';
 import { RequireAuth } from '@/components/auth/RequireAuth';
 import { GateHost } from '@/components/plans/GateDialog';
+import { OpenAccess } from '@/components/auth/OpenAccess';
 import { SessionTimeout } from '@/components/auth/SessionTimeout';
 import { UpdateBanner } from '@/components/layout/UpdateBanner';
 import { CookieNotice } from '@/components/layout/CookieNotice';
@@ -73,7 +74,7 @@ export function App() {
               <Route path="/refund-policy" element={<SitePage page="refund" />} />
               <Route path="/cancel-subscription" element={<LegalPlaceholder page="cancel" />} />
               {/* Open to everyone: guests get the live 24 hours; locked features ask them to sign up. */}
-              <Route path="/" element={<MapPage />} />
+              <Route path="/" element={<OpenAccess><MapPage /></OpenAccess>} />
               <Route path="/account" element={<RequireAuth><MemberAccountPage /></RequireAuth>} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />

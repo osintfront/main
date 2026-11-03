@@ -5,6 +5,7 @@ import { useI18n } from '@/i18n';
 import { usePublicEvents } from '@/hooks/useEvents';
 import { PAGE_RELOADED, useMapSelection } from '@/hooks/useMapSelection';
 import { HOME_EVENT } from '@/components/common/Logo';
+import { openGate } from '@/components/plans/GateDialog';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -190,7 +191,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const archiveRange = useMemo(() => (isArchive ? null : needsArchive(filters)), [filters, isArchive]);
   const older = useArchiveRange(archiveRange);
   // "Ask the map" (signed-in users): a free-text question → answer + only the matching events.
-  const { profile } = useAuth();
+  const { profile, status: authStatus } = useAuth();
+  const isGuest = authStatus === 'signed_out';
+  // A time range reaching past the live 24 hours needs an account (guests have no archive).
+  useEffect(() => {
+    if (archiveRange && isGuest) openGate('signup');
+  }, [archiveRange, isGuest]);
   const canAsk = !isArchive && !isDemo && profile?.status === 'active';
   const [ask, setAsk] = useState<AskAnswer | null>(null);
   const [askFit, setAskFit] = useState<{ key: number; points: [number, number][] } | null>(null);
@@ -365,11 +371,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
       return;
     }
     void fetchPublicEvent(id).then((ev) => {
-      if (!ev) return;
+      // Older than the live 24 hours: guests see it after signing up.
+      if (!ev) return void (isGuest && openGate('signup'));
       setLinkedEvent(ev);
       setDetailsId(ev.id);
     });
-  }, [status, allEvents, select]);
+  }, [status, allEvents, select, isGuest]);
   const detailsEvent = detailsId ? allEvents.find((e) => e.id === detailsId) ?? (linkedEvent?.id === detailsId ? linkedEvent : null) : null;
   const closeDetails = useCallback(() => setDetailsId(null), []);
   // Phones: the selected event shows as a card along the bottom of the map.

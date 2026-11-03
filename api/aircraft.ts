@@ -3,7 +3,7 @@
 // GET /api/aircraft?mil=1                    — military aircraft worldwide
 // Source: adsb.lol (open ADS-B data, no key). Members only. A short CDN cache keeps the load low:
 // the position is rounded so nearby views share one answer.
-import { isMember, json } from './_lib/member.js';
+import { json } from './_lib/member.js';
 
 interface Plane {
   hex: string; flight: string; reg: string; type: string; desc: string; lat: number; lon: number;
@@ -36,7 +36,7 @@ function slim(a: any): Plane | null {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  if (!(await isMember(req))) return json({ error: 'unauthorized' }, 401);
+  // Open to everyone (Stage A: ships and aircraft for every plan, guests included).
   const q = new URL(req.url).searchParams;
   let url: string;
   if (q.get('mil') === '1') {

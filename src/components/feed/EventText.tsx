@@ -85,7 +85,7 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
       setFailed(m === 'budget' ? m : 'failed');
     } finally {
       setBusy(null);
-      void refreshFeatureUsage();
+      void refreshFeatureUsage(true);
     }
   };
 

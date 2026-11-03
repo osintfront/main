@@ -78,14 +78,25 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
   const { profile } = useAuth();
   const { t } = useI18n();
   const satUse = useFeatureUsage().satellite;
+  const satSpending = useRef(false); // one use per turn-on, even on a double click
+  const [satSpendErr, setSatSpendErr] = useState(false);
   const toggleSat = async (v: boolean) => {
     if (!v) return setSatOn(false);
     if (!profile) return openGate('signup');
-    const r = await spendFeature('satellite');
-    if (r.ok) setSatOn(true);
-    else openGateFor(r.reason);
+    if (satSpending.current) return;
+    satSpending.current = true;
+    setSatSpendErr(false);
+    try {
+      const r = await spendFeature('satellite');
+      if (r.ok) setSatOn(true);
+      else if (!openGateFor(r.reason)) setSatSpendErr(true); // network/server error: say so, try again
+    } finally {
+      satSpending.current = false;
+    }
   };
-  const satExtra = !profile
+  const satExtra = satSpendErr
+    ? T.error
+    : !profile
     ? '🔒'
     : profile.role === 'viewer' && satUse?.limit != null
       ? t('gate.left', { n: Math.max(satUse.limit - satUse.used, 0), limit: satUse.limit })
