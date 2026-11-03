@@ -4,6 +4,9 @@ import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import { Plane as PlaneIcon, RefreshCw, Satellite, Ship, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
+import { useAuth } from '@/hooks/useAuth';
+import { spendFeature, useFeatureUsage } from '@/lib/featureUse';
+import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { AreaLayersPanel, useAreaLayers } from './areaLayers';
 import {
   EMERGENCY_SQUAWKS, SAT_SOURCES, SHIP_COLORS, SHIP_KINDS, fetchPlanes, fetchVessels, satDays, satKey, satTiles, shipFlag, shipKind,
@@ -71,6 +74,33 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
   // ── Satellite ──
   const [satOn, setSatOn] = useState(false);
+  // Satellite: guests are invited to sign up; each turn-on is one counted use (free: 3 a day).
+  const { profile } = useAuth();
+  const { t } = useI18n();
+  const satUse = useFeatureUsage().satellite;
+  const satSpending = useRef(false); // one use per turn-on, even on a double click
+  const [satSpendErr, setSatSpendErr] = useState(false);
+  const toggleSat = async (v: boolean) => {
+    if (!v) return setSatOn(false);
+    if (!profile) return openGate('signup');
+    if (satSpending.current) return;
+    satSpending.current = true;
+    setSatSpendErr(false);
+    try {
+      const r = await spendFeature('satellite');
+      if (r.ok) setSatOn(true);
+      else if (!openGateFor(r.reason)) setSatSpendErr(true); // network/server error: say so, try again
+    } finally {
+      satSpending.current = false;
+    }
+  };
+  const satExtra = satSpendErr
+    ? T.error
+    : !profile
+    ? '🔒'
+    : profile.role === 'viewer' && satUse?.limit != null
+      ? t('gate.left', { n: Math.max(satUse.limit - satUse.used, 0), limit: satUse.limit })
+      : undefined;
   const [src, setSrc] = useState<SatSource>('hlss30');
   const [mode, setMode] = useState<'single' | 'compare'>('single');
   const [days, setDays] = useState<SatDay[]>([]);
@@ -444,8 +474,8 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
   // ── Panel ──
   const box = 'rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900';
-  const sectionHead = (Icon: typeof Ship, label: string, on: boolean, set: (v: boolean) => void, extra?: string) => (
-    <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+  const sectionHead = (Icon: typeof Ship, label: string, on: boolean, set: (v: boolean) => void, extra?: string, dim = false) => (
+    <label className={`flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100${dim ? ' opacity-50' : ''}`}>
       <input type="checkbox" className="size-4 accent-sky-600" checked={on} onChange={(e) => set(e.target.checked)} />
       <Icon className="size-4 text-slate-500" aria-hidden />
       <span className="flex-1">{label}</span>
@@ -520,7 +550,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Satellite */}
           <section className="space-y-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-            {sectionHead(Satellite, T.sat, satOn, (v) => (!v || hasFeature(undefined, 'satellite')) && setSatOn(v))}
+            {sectionHead(Satellite, T.sat, satOn, (v) => void toggleSat(v), satExtra, !profile)}
             {satOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 <select className={`${box} w-full`} value={src} onChange={(e) => setSrc(e.target.value as SatSource)} aria-label={T.source}>

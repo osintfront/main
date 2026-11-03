@@ -126,11 +126,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!failure) {
       setSessionExpired(false);
       startSessionClock();
-      void recordLogin();
-      void registerSession(); // one active session per user (the server ends the others)
+      // recordLogin + registerSession run in the effect below, for every way of signing in.
     }
     return failure;
   }, []);
+
+  // Once per new login session (password, Google, email-confirmation link): log the login and
+  // register the device — one active session per user (the server ends the others).
+  // Keyed on the token's session id, so other tabs of the same session do not repeat it.
+  const sessionId = (() => {
+    try {
+      return session ? (JSON.parse(atob(session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).session_id as string) ?? null : null;
+    } catch {
+      return null;
+    }
+  })();
+  useEffect(() => {
+    if (!sessionId) return;
+    try {
+      if (localStorage.getItem('ofm.session.registered') === sessionId) return;
+      localStorage.setItem('ofm.session.registered', sessionId);
+    } catch {
+      /* storage blocked: register anyway */
+    }
+    void recordLogin();
+    void registerSession();
+  }, [sessionId]);
 
   // Still the active session? Signed in on another device → sign out here with a message.
   useEffect(() => {

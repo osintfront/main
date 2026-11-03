@@ -435,15 +435,25 @@ async function handle(req: Request): Promise<Response> {
       });
       const { data: who } = await asUser.auth.getUser();
       const uid = who?.user?.id;
-      if (!uid) return json({ error: "sign in required" }, 401);
+      if (!uid) return json({ error: "signup_required" }, 401);
       const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
-      if (prof?.status !== "active") return json({ error: "unauthorized" }, 401);
+      if (prof?.status !== "active") return json({ error: "signup_required" }, 401);
       readerId = uid;
     }
   }
   if (action === "expand") {
     if (!UUID.test(id)) return json({ error: "bad id" }, 400);
-    return await runAsReader(readerId, () => expand(id, () => quotaGate(readerId)));
+    // Every expand click counts against the plan's daily uses (cached ones too). Staff: unlimited.
+    if (readerId) {
+      const { data: use, error: useErr } = await db.rpc("consume_feature", { p_uid: readerId, p_key: "expand_daily" });
+      if (useErr) return json({ error: "error" }, 503);
+      if (!use?.ok) return json({ error: use?.reason ?? "quota_exceeded", used: use?.used, limit: use?.limit }, use?.reason === "signup_required" ? 401 : 429);
+    }
+    const res = await runAsReader(readerId, () => expand(id, () => quotaGate(readerId)));
+    // Only a delivered text costs a use: a pending poll (202), a missing event, an AI-credit
+    // refusal or a failure gives it back — so one click never spends more than one use.
+    if (readerId && res.status !== 200) await db.rpc("refund_feature", { p_uid: readerId, p_key: "expand_daily" });
+    return res;
   }
   if (action === "claude_usage") {
     // Staff only: check the caller's own session.

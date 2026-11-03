@@ -12,6 +12,8 @@ import {
 import { useI18n } from '@/i18n';
 import { playChime, unlockAudio } from '@/lib/notifySound';
 import { cn } from '@/utils/cn';
+import { useAuth } from '@/hooks/useAuth';
+import { openGate } from '@/components/plans/GateDialog';
 import { disablePush, enablePush, getMinSeverity, setMinSeverity, usePushState, type MinSeverity } from '@/lib/push';
 
 const SLUGS = DEFAULT_CATEGORIES.map((c) => c.slug);
@@ -22,6 +24,7 @@ const SLUGS = DEFAULT_CATEGORIES.map((c) => c.slug);
  */
 export function SoundMenu({ onOpen }: { onOpen?: () => void } = {}) {
   const { t, categoryLabel } = useI18n();
+  const { profile } = useAuth(); // push is saved per account: guests are invited to sign up
   const sound = useSoundSetting();
   const audioReady = useAudioReady();
   const needsClick = !sound.muted && !audioReady;
@@ -131,7 +134,7 @@ export function SoundMenu({ onOpen }: { onOpen?: () => void } = {}) {
                 aria-checked={push === 'on'}
                 aria-label={t('push.title')}
                 disabled={push === 'busy' || push === 'unsupported' || push === 'needs-install' || push === 'denied'}
-                onClick={() => void (push === 'on' ? disablePush() : enablePush())}
+                onClick={() => (push === 'on' ? void disablePush() : !profile ? openGate('signup') : void enablePush())}
                 className={cn(
                   'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:opacity-50',
                   push === 'on' ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-700',

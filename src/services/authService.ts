@@ -129,3 +129,21 @@ export async function updatePassword(password: string): Promise<{ error: string 
   const { error } = await supabase.auth.updateUser({ password });
   return { error: error ? error.message : null };
 }
+
+/** Self sign-up (email + password). The account is usable after the emailed link is opened. */
+export async function signUp(fullName: string, email: string, password: string): Promise<{ error: string | null }> {
+  if (!supabase) return { error: 'not_configured' };
+  const { error } = await supabase.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+    options: { data: { full_name: fullName.trim() }, emailRedirectTo: `${window.location.origin}/` },
+  });
+  return { error: error?.message ?? null };
+}
+
+/** Sign in (or sign up) with Google; returns to the map. */
+export async function signInWithGoogle(): Promise<{ error: string | null }> {
+  if (!supabase) return { error: 'not_configured' };
+  const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/` } });
+  return { error: error?.message ?? null };
+}
