@@ -19,7 +19,16 @@
       try { if (localStorage.getItem('ofm.adfree') === '1') (window.adsbygoogle = window.adsbygoogle || []).pauseAdRequests = 1; } catch (e) {}
     </script>
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2232590000274943" crossorigin="anonymous"></script>
-    <link rel="icon" href="/favicon.png" type="image/png" />
+    <!-- Google Search shows a square favicon whose size is a multiple of 48 px. -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon-48.png" type="image/png" sizes="48x48" />
+    <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@graph":[
+        {"@type":"Organization","@id":"https://osintfront.com/#org","name":"Osintfront","url":"https://osintfront.com/","logo":"https://osintfront.com/icon-512.png","email":"osintfront@gmail.com"},
+        {"@type":"WebSite","name":"Osintfront","alternateName":"OSINTFront","url":"https://osintfront.com/","publisher":{"@id":"https://osintfront.com/#org"}}
+      ]}
+    </script>
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
