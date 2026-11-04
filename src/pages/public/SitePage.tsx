@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Logo } from '@/components/common/Logo';
 import { LanguageToggle, ThemeToggle } from '@/components/common/Toggles';
 import { SiteLinks } from '@/components/layout/SiteLinks';
+import { UserMenu } from '@/components/layout/UserMenu';
 import { useI18n } from '@/i18n';
 import { PAGES, UPDATED, type PageId } from '@/content/sitePages';
 
@@ -54,6 +55,7 @@ export function SitePage({ page }: { page: PageId }) {
         <div className="ms-auto flex items-center gap-1">
           <LanguageToggle />
           <ThemeToggle />
+          <UserMenu />
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">

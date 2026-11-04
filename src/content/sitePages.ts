@@ -6,7 +6,7 @@
 export const SITE_EMAIL = 'service@osintfront.com';
 export const SITE_NAME = 'Osintfront';
 export const SITE_DOMAIN = 'osintfront.com';
-export const UPDATED = '2026-11-03';
+export const UPDATED = '2026-11-04';
 
 export type PageId = 'about' | 'privacy' | 'terms' | 'refund' | 'contact';
 
@@ -234,6 +234,10 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           ],
         },
         {
+          h: 'רכישת חבילה בתשלום',
+          p: ['בשלב זה חבילות Pro, Max וה-API נרכשות ומופעלות ידנית. כתבו לנו ב-' + mail + ' וציינו את החבילה הרצויה (חודשית או שנתית) ואת כתובת המייל של החשבון באתר. נחזור אליכם עם פרטי התשלום ונפעיל את החבילה. המחירים מופיעים ב[דף החבילות](/packages).'],
+        },
+        {
           h: 'דיווחים, שיתופי פעולה ופרסום',
           p: ['רוצים להציע מקור מידע, לשתף פעולה או לפרסם באתר? כתבו לנו באותה כתובת.'],
         },
@@ -432,6 +436,10 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
             'Details showing you own the work (for example a link to where you first published it).',
             'What you would like: removal, or a credit and link.',
           ],
+        },
+        {
+          h: 'Buying a paid plan',
+          p: ['For now, Pro, Max and API plans are purchased and activated manually. Write to ' + mail + ' with the plan you want (monthly or yearly) and the email of your site account. We will reply with payment details and activate the plan. Prices are on the [plans page](/packages).'],
         },
         { h: 'Tips, partnerships and advertising', p: ['Want to suggest a source, work with us or advertise on the site? Write to the same address.'] },
       ],

@@ -33,6 +33,7 @@ import { UsersPage } from '@/pages/admin/UsersPage';
 import { ModulePlaceholderPage } from '@/pages/admin/ModulePlaceholderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SitePage } from '@/pages/public/SitePage';
+import { PackagesPage } from '@/pages/public/PackagesPage';
 
 /** Section id → page. Sections not listed render their phase placeholder. */
 const IMPLEMENTED: Record<string, ComponentType> = {
@@ -70,6 +71,8 @@ export function App() {
               <Route path="/about" element={<SitePage page="about" />} />
               <Route path="/privacy" element={<SitePage page="privacy" />} />
               <Route path="/contact" element={<SitePage page="contact" />} />
+              <Route path="/packages" element={<PackagesPage />} />
+              <Route path="/pricing" element={<Navigate to="/packages" replace />} />
               <Route path="/terms" element={<SitePage page="terms" />} />
               <Route path="/refund-policy" element={<SitePage page="refund" />} />
               <Route path="/cancel-subscription" element={<LegalPlaceholder page="cancel" />} />

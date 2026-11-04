@@ -58,7 +58,7 @@ export function GateHost() {
             </>
           ) : (
             <>
-              <Link to="/about#plans" onClick={close} className={primary}>{t('gate.plans')}</Link>
+              <Link to="/packages" onClick={close} className={primary}>{t('gate.plans')}</Link>
               <button type="button" onClick={close} className={secondary}>{t('common.close')}</button>
             </>
           )}

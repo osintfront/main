@@ -60,6 +60,12 @@ export function featureLimit(key: FeatureKey, user = me): number | null {
   return features.find((r) => r.feature_key === key && r.plan_id === effectivePlan(user))?.limit_value ?? null;
 }
 
+/** A plan's row for a feature, as configured in the database (for the packages page). */
+export function planFeature(plan: EffectivePlan, key: FeatureKey | 'social_search'): { enabled: boolean; limit: number | null } | null {
+  const row = features.find((r) => r.feature_key === key && r.plan_id === plan);
+  return row ? { enabled: row.enabled, limit: row.limit_value } : null;
+}
+
 export class PlanRequiredError extends Error {
   constructor(public feature: FeatureKey) { super('plan_required'); }
 }

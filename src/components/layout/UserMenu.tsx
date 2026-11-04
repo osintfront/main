@@ -1,12 +1,15 @@
 import { effectivePlan, PLAN_LABEL } from '@/lib/plans';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, LogOut, UserCog } from 'lucide-react';
+import { LayoutDashboard, LogIn, LogOut, Package, UserCog } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useI18n } from '@/i18n';
 
-/** The signed-in account: name, back office (staff), sign out — on every screen size. */
+/**
+ * The account corner of the header. Signed out: a "Sign up / Sign in" button.
+ * Signed in: name, plan (with a link to the packages page), back office (staff), sign out.
+ */
 export function UserMenu() {
   const { t } = useI18n();
   const { status, profile, user, signOut } = useAuth();
@@ -27,6 +30,17 @@ export function UserMenu() {
     };
   }, [open]);
 
+  if (status === 'signed_out')
+    return (
+      <Link
+        to="/login"
+        className="ms-1 inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3 text-sm font-semibold text-white hover:bg-sky-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+      >
+        <LogIn className="size-4 rtl:-scale-x-100" aria-hidden />
+        <span className="hidden sm:inline">{t('nav.signInUp')}</span>
+        <span className="sr-only sm:hidden">{t('nav.signInUp')}</span>
+      </Link>
+    );
   if (status !== 'signed_in') return null;
   const name = profile?.fullName || user?.email || '';
   const email = profile?.email || user?.email || '';
@@ -67,7 +81,16 @@ export function UserMenu() {
               </p>
             ) : null}
             {profile ? <p className="mt-1 text-[11px] font-medium text-sky-700 dark:text-sky-400">{t(`role.${profile.role}`)}</p> : null}
-            {profile ? <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400" dir="rtl">החבילה שלך: {PLAN_LABEL[effectivePlan(profile)]}</p> : null}
+            {profile ? (
+              <p className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <span>{t('user.plan', { plan: PLAN_LABEL[effectivePlan(profile)] })}</span>
+                {!staff ? (
+                  <Link to="/packages" onClick={() => setOpen(false)} className="font-semibold text-sky-700 hover:underline dark:text-sky-400">
+                    {t('user.upgrade')}
+                  </Link>
+                ) : null}
+              </p>
+            ) : null}
           </div>
           {staff ? (
             <Link role="menuitem" to="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
@@ -78,6 +101,10 @@ export function UserMenu() {
           <Link role="menuitem" to={staff ? '/admin/account' : '/account'} onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
             <UserCog className="size-4" aria-hidden />
             {t('user.account')}
+          </Link>
+          <Link role="menuitem" to="/packages" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+            <Package className="size-4" aria-hidden />
+            {t('user.packages')}
           </Link>
           <Link role="menuitem" to="/cancel-subscription" onClick={() => setOpen(false)} className="block px-4 py-2 text-xs text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800">
             ביטול מנוי
