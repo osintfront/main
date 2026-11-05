@@ -6,7 +6,7 @@
 export const SITE_EMAIL = 'service@osintfront.com';
 export const SITE_NAME = 'Osintfront';
 export const SITE_DOMAIN = 'osintfront.com';
-export const UPDATED = '2026-11-04';
+export const UPDATED = '2026-11-06';
 
 export type PageId = 'about' | 'privacy' | 'terms' | 'refund' | 'contact';
 
@@ -171,6 +171,14 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           h: 'מנויים ותשלום',
           p: [
             'באתר מוצגים מסלולי מנוי (Free / Pro / Max) שטרם הופעלו לגבייה בפועל. כאשר תופעל גבייה, יעודכנו תנאים אלה בפרטי מחיר ואמצעי תשלום, וזכות הביטול תפעל לפי [מדיניות הביטולים וההחזרים](/refund-policy).',
+          ],
+        },
+        {
+          h: 'תובנות OFI (מערכת ניסיונית)',
+          p: [
+            'מודול "תובנות OFI" מציג הערכה סטטיסטית ניסיונית לסבירות של אירועים מסוימים בפרק זמן קצוב (בדרך כלל 24 שעות). ההערכה מחושבת באופן אוטומטי ומתמטי ממקורות מידע גלויים – אירועים שנאספו באתר, שווקי תחזיות, נתונים פיננסיים והודעות רשמיות – ועשויה לכלול גם הערכה ידנית של מפעיל האתר.',
+            'ההערכה עשויה להיות חלקית, שגויה או לא עדכנית, ואינה מהווה תחזית ודאית, התרעה רשמית, מידע מודיעיני מוסמך או ייעוץ מכל סוג שהוא, לרבות ייעוץ ביטחוני, פיננסי או השקעות. אין להסתמך עליה לצורך קבלת החלטות. בכל מצב חירום יש לפעול אך ורק לפי הנחיות פיקוד העורף והרשויות המוסמכות.',
+            'השימוש במידע הוא באחריות המשתמש בלבד, ו-OSINTFront ומפעיליה לא יישאו באחריות לכל נזק, ישיר או עקיף, הנובע מהשימוש בו. הגישה לפרטי ההערכה תלויה במסלול המנוי, ואנו רשאים לשנות, להשהות או להפסיק את המודול בכל עת.',
           ],
         },
         {
@@ -381,6 +389,14 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
           h: 'Subscriptions and payment',
           p: [
             'The site lists subscription tiers (Free / Pro / Max) not yet charged in practice. When billing is enabled, these terms will be updated with price and payment details, and the cancellation right will follow the [cancellation and refund policy](/refund-policy).',
+          ],
+        },
+        {
+          h: 'OFI Insights (experimental)',
+          p: [
+            'The "OFI Insights" module shows an experimental statistical estimate of the likelihood of specific events within a set period (usually 24 hours). The estimate is calculated automatically and mathematically from open sources – events collected on the site, prediction markets, financial data and official announcements – and may also include a manual assessment by the site operator.',
+            'The estimate may be incomplete, wrong or out of date, and is not a certain forecast, an official alert, authorized intelligence or advice of any kind, including security, financial or investment advice. Do not rely on it to make decisions. In any emergency, follow only the instructions of the Home Front Command and the competent authorities.',
+            'Use of the information is solely at the user’s own risk, and OSINTFront and its operators accept no liability for any damage, direct or indirect, arising from its use. Access to the estimate’s details depends on the subscription plan, and we may change, suspend or discontinue the module at any time.',
           ],
         },
         {

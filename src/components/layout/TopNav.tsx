@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, SlidersHorizontal, History, LayoutDashboard, Radio, Search, X } from 'lucide-react';
+import { ArrowLeft, Gauge, SlidersHorizontal, History, LayoutDashboard, Radio, Search, X } from 'lucide-react';
 import { InstallAppButton } from '@/components/install/InstallAppButton';
 import { SoundMenu } from './SoundMenu';
 import { UserMenu } from './UserMenu';
@@ -88,6 +88,13 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
         >
           <History className="size-3" aria-hidden />
           {t('nav.archive')}
+        </Link>
+        <Link
+          to="/insights"
+          className="inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
+        >
+          <Gauge className="size-3" aria-hidden />
+          {t('nav.insights')}
         </Link>
       </nav>
 
@@ -186,6 +193,9 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
           className={cn(iconBtn, 'md:hidden')}
         >
           {mode === 'live' ? <History className="size-4" aria-hidden /> : <Radio className="size-4 text-red-500" aria-hidden />}
+        </Link>
+        <Link to="/insights" aria-label={t('nav.insights')} title={t('nav.insights')} className={cn(iconBtn, 'md:hidden')}>
+          <Gauge className="size-4" aria-hidden />
         </Link>
         {mode === 'live' ? <InstallAppButton /> : null}
         {mode === 'live' ? <SoundMenu onOpen={onSoundOpen} /> : null}
