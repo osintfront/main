@@ -48,7 +48,9 @@ Plan switches: `plan_features` keys `insights_basic`, `insights_pro`, `insights_
    - Finance: Yahoo spark (one call, 8 symbols); Stooq per-symbol fallback.
    - Advisories: US State Dept RSS + UK FCDO content API (level parsed). Israel NSC has no machine-readable
      level — hash of a configured page URL (none set yet → stale).
-3. Engine + scheduler + admin controls
+3. Engine + scheduler ✔ — `engine.ts` (tested), `ofi-runner` tick/recompute/compute, pg_cron every 15 min,
+   manual parameter (`ofi_admin_manual`, super admin only), NSC advisory off. Formula: `docs/ofi-model.md`.
+   Admin controls UI comes with phase 4 (on the OFI page itself).
 4. UI + OFI persona + intro/disclaimer + Terms section
 5. Alerts, brief, track record page, scenario explorer, API
 6. Unit tests for the math + backtest (markets/finance only — our own event data starts Oct 2026)

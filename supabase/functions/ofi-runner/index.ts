@@ -1,16 +1,24 @@
-// supabase/functions/ofi-runner/index.ts — OFI Insights data collection (phase 2).
+// supabase/functions/ofi-runner/index.ts — OFI Insights: data collection + probability engine.
 //
-// POST {"action":"collect", "slug"?: string, "scope"?: "all" | "internal" | "external"}
-//   Reads every enabled signal of the active insight events (or one event), writes one reading per
-//   signal, and records failures on the signal (last_error) so it goes stale. No forecast yet —
-//   the probability engine and the schedule come in phase 3.
+// POST {"action":"tick"}  (pg_cron, every 15 min; answers 202 at once and works in the background)
+//   · an active event whose next_run_at is due → collect every source, compute, schedule the next run;
+//   · otherwise, once an hour → collect our own data only (no external call) and, if the circuit
+//     breaker fires, publish an extra forecast (trigger = circuit_breaker) at most every 6 h.
+// POST {"action":"collect", "slug"?, "scope"?: "all" | "internal" | "external"} — readings only.
+// POST {"action":"recompute", "slug"}  (admin "Recompute now") — collect everything + compute.
+// POST {"action":"compute", "slug"}    (admin, e.g. after a manual parameter) — compute only.
 // POST {"action":"polymarket_search", "q": "iran"} — candidate markets for the admin page.
+// Page views never reach this function: readers only read stored forecasts.
 //
 // Who may call it: pg_cron (header x-cron-secret = intel_config.cron_secret) or the super admin
 // (Authorization: Bearer <session token>). Deployed with verify_jwt = false; checks are done here.
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { INTERNAL_SOURCES, readSignal, RunContext, type PrevReading, type SignalRow } from '../_shared/ofi/adapters.ts';
+import { computeForecast, summaries, type EngineSignal } from '../_shared/ofi/engine.ts';
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
+const HOUR = 3_600_000;
 
 const URL_ = Deno.env.get('SUPABASE_URL')!;
 const db = createClient(URL_, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
@@ -58,8 +66,9 @@ async function collect(slug: string | undefined, scope: string) {
     if (e2) throw e2;
     const ctx = new RunContext(db, ev.id);
     const results: any[] = [];
-    const wanted = (signals ?? []).filter((s: SignalRow) =>
-      scope === 'all' || (scope === 'internal') === INTERNAL_SOURCES.has(s.source_type));
+    // The manual parameter is never collected — only the super admin sets it.
+    const wanted = (signals ?? []).filter((s: SignalRow) => s.source_type !== 'manual' &&
+      (scope === 'all' || (scope === 'internal') === INTERNAL_SOURCES.has(s.source_type)));
     for (const s of wanted as SignalRow[]) {
       const { data: prev } = await db.from('insight_signal_readings')
         .select('ts,raw_value,normalized_score,metadata').eq('signal_id', s.id)
@@ -82,6 +91,84 @@ async function collect(slug: string | undefined, scope: string) {
     out.push({ slug: ev.slug, signals: results });
   }
   return out;
+}
+
+
+/** Run the engine on the latest reading of every enabled signal and (unless dry) store the forecast. */
+async function compute(eventId: string, trigger: 'schedule' | 'manual' | 'circuit_breaker', dry = false) {
+  const { data: ev, error } = await db.from('insight_events')
+    .select('id,slug,base_rate,refresh_interval_hours').eq('id', eventId).single();
+  if (error) throw error;
+  const { data: sigs, error: e2 } = await db.from('insight_signals')
+    .select('id,key,name_he,name_en,source_type,weight,direction,is_circuit_breaker,stale_after_hours')
+    .eq('event_id', eventId).eq('enabled', true);
+  if (e2) throw e2;
+  const now = Date.now();
+  const signals: EngineSignal[] = [];
+  for (const s of sigs ?? []) {
+    const { data: r } = await db.from('insight_signal_readings').select('ts,normalized_score')
+      .eq('signal_id', s.id).order('ts', { ascending: false }).limit(1).maybeSingle();
+    signals.push({
+      key: s.key, name_he: s.name_he, name_en: s.name_en, source_type: s.source_type,
+      weight: Number(s.weight), direction: s.direction === -1 ? -1 : 1, is_circuit_breaker: !!s.is_circuit_breaker,
+      score: r ? Number(r.normalized_score) : null,
+      age_hours: r ? (now - new Date(r.ts).getTime()) / HOUR : null,
+      stale_after_hours: s.stale_after_hours,
+    });
+  }
+  const { data: prevRow } = await db.from('insight_forecasts').select('probability,ts,trigger')
+    .eq('event_id', eventId).order('ts', { ascending: false }).limit(1).maybeSingle();
+  const previous = prevRow ? Number(prevRow.probability) : null;
+  const result = computeForecast(Number(ev.base_rate), signals, previous);
+  if (dry) return { slug: ev.slug, result, stored: false };
+  const text = summaries(result, previous);
+  const { error: e3 } = await db.from('insight_forecasts').insert({
+    event_id: eventId, probability: result.probability, confidence_low: result.confidence_low,
+    confidence_high: result.confidence_high, contributions: result.contributions, model_version: result.model_version,
+    trigger, summary_he: text.he, summary_en: text.en,
+  });
+  if (e3) throw e3;
+  const upd: Record<string, unknown> = { last_run_at: new Date().toISOString() };
+  if (trigger !== 'circuit_breaker') upd.next_run_at = new Date(now + Number(ev.refresh_interval_hours) * HOUR).toISOString();
+  await db.from('insight_events').update(upd).eq('id', eventId);
+  return { slug: ev.slug, probability: result.probability, breaker: result.breaker, stored: true, trigger };
+}
+
+/** The scheduler's work (see the header). */
+async function tick() {
+  const { data: events } = await db.from('insight_events').select('id,slug,next_run_at').eq('status', 'active');
+  const out: unknown[] = [];
+  for (const ev of events ?? []) {
+    try {
+      if (new Date(ev.next_run_at).getTime() <= Date.now()) {
+        await collect(ev.slug, 'all');
+        out.push(await compute(ev.id, 'schedule'));
+        continue;
+      }
+      const { data: internal } = await db.from('insight_signals').select('last_updated')
+        .eq('event_id', ev.id).eq('enabled', true).in('source_type', [...INTERNAL_SOURCES])
+        .order('last_updated', { ascending: true, nullsFirst: true }).limit(1).maybeSingle();
+      const oldest = internal?.last_updated ? new Date(internal.last_updated).getTime() : 0;
+      if (Date.now() - oldest < 55 * 60_000) continue;
+      await collect(ev.slug, 'internal');
+      const dry = await compute(ev.id, 'circuit_breaker', true) as { result: { breaker: boolean } };
+      if (!dry.result.breaker) { out.push({ slug: ev.slug, hourly: 'quiet' }); continue; }
+      const { data: recent } = await db.from('insight_forecasts').select('id').eq('event_id', ev.id)
+        .eq('trigger', 'circuit_breaker').gte('ts', new Date(Date.now() - 6 * HOUR).toISOString()).limit(1);
+      if (recent?.length) { out.push({ slug: ev.slug, hourly: 'breaker (already published)' }); continue; }
+      out.push(await compute(ev.id, 'circuit_breaker'));
+    } catch (err) {
+      out.push({ slug: ev.slug, error: String((err as Error)?.message ?? err).slice(0, 300) });
+    }
+  }
+  return out;
+}
+
+async function eventIdBySlug(slug: unknown): Promise<string> {
+  if (typeof slug !== 'string') throw new Error('slug required');
+  const { data } = await db.from('insight_events').select('id').eq('slug', slug).maybeSingle();
+  if (!data) throw new Error('unknown event');
+  return data.id;
 }
 
 async function polymarketSearch(q: string) {
@@ -108,6 +195,20 @@ Deno.serve(async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch { /* empty body */ }
   try {
+    if (body.action === 'tick') {
+      const work = tick().then((r) => console.log('ofi tick', JSON.stringify(r).slice(0, 2000)));
+      if (typeof EdgeRuntime !== 'undefined') { EdgeRuntime.waitUntil(work); return json({ ok: true, accepted: true }, 202); }
+      await work;
+      return json({ ok: true });
+    }
+    if (body.action === 'recompute' && who === 'admin') {
+      const id = await eventIdBySlug(body.slug);
+      const collected = await collect(body.slug, 'all');
+      return json({ ok: true, collected, forecast: await compute(id, 'manual') });
+    }
+    if (body.action === 'compute' && who === 'admin') {
+      return json({ ok: true, forecast: await compute(await eventIdBySlug(body.slug), 'manual') });
+    }
     if (body.action === 'collect') {
       const scope = ['all', 'internal', 'external'].includes(body.scope) ? body.scope : 'all';
       return json({ ok: true, by: who, results: await collect(typeof body.slug === 'string' ? body.slug : undefined, scope) });
