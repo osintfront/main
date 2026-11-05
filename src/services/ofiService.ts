@@ -178,3 +178,32 @@ export async function adminUpdateEvent(id: string, patch: Partial<Pick<OfiAdminE
   const { error } = await client().from('insight_events').update(patch).eq('id', id);
   if (error) throw toServiceError(error);
 }
+
+export interface OfiLexiconTerm { id: number; term: string; lang: string; category: string; weight: number; enabled: boolean }
+
+export async function adminLexicon(eventId: string): Promise<OfiLexiconTerm[]> {
+  const { data, error } = await client().from('insight_lexicon').select('id,term,lang,category,weight,enabled').eq('event_id', eventId).order('category').order('term');
+  if (error) throw toServiceError(error);
+  return (data ?? []) as OfiLexiconTerm[];
+}
+export async function adminAddTerm(eventId: string, term: string, category: string, weight: number): Promise<void> {
+  const lang = /[֐-׿]/.test(term) ? 'he' : /[؀-ۿ]/.test(term) ? 'ar' : /[a-z]/i.test(term) ? 'en' : 'any';
+  const { error } = await client().from('insight_lexicon').insert({ event_id: eventId, term: term.trim(), category, weight, lang });
+  if (error) throw toServiceError(error);
+}
+export async function adminRemoveTerm(id: number): Promise<void> {
+  const { error } = await client().from('insight_lexicon').delete().eq('id', id);
+  if (error) throw toServiceError(error);
+}
+export async function adminResolve(slug: string, startIso: string, outcome: boolean, notes: string): Promise<void> {
+  const { error } = await client().rpc('ofi_admin_resolve', { p_slug: slug, p_start: startIso, p_outcome: outcome, p_notes: notes || null });
+  if (error) throw toServiceError(error);
+}
+export async function adminSetSignalConfig(id: string, config: Record<string, unknown>): Promise<void> {
+  const { error } = await client().from('insight_signals').update({ config }).eq('id', id);
+  if (error) throw toServiceError(error);
+}
+export const adminSearchMarkets = (q: string) =>
+  runner({ action: 'polymarket_search', q }) as Promise<{ markets: { slug: string; question: string; end_date: string; prices: string }[] }>;
+export const adminBacktest = (slug: string) =>
+  runner({ action: 'backtest', slug }) as Promise<{ days: number; event_days: number; brier_model: number; brier_base_rate: number; mean_p_event_days: number; mean_p_other_days: number; note: string }>;

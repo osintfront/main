@@ -55,5 +55,11 @@ Plan switches: `plan_features` keys `insights_basic`, `insights_pro`, `insights_
    signal cards, history, track record, simplified model, intro + disclaimer on top, short disclaimer under
    every gauge, Beta badge, nav item, Terms section, super-admin panel (manual parameter, recompute,
    status/publish/interval/base rate, signal weights). Not yet: floating OFI button.
-5. Alerts, brief, track record page, scenario explorer, API
-6. Unit tests for the math + backtest (markets/finance only — our own event data starts Oct 2026)
+5. ✔ Threshold alerts (push via existing VAPID keys + webhook for Max; Pro 3, Max unlimited; `api/ofi-alerts`),
+   brief = OFI summary in-app + print-to-PDF for Max (no email: the site has no email provider — a paid
+   service needs the owner's OK), track record + "OFI saw it first" share, scenario explorer (Max, the same
+   engine in the browser), `/api/v1/insights`, upgrade window on big moves, funnel analytics
+   (view_gauge, click_locked_signal, upgrade_modal_shown/converted), floating OFI button, admin tools
+   (resolve windows, lexicon, markets, backtest).
+6. ✔ 18 unit tests; backtest (finance only — the only free history): 161 days, 17 strike days,
+   Brier 0.1006 vs 0.1018 for the base rate alone; mean estimate 2.6% on strike days vs 2.0% otherwise.

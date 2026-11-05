@@ -54,3 +54,18 @@ Start from how often this happened historically (the base rate). Each signal pus
 or down by an amount set by its weight and how unusual today's reading is; old data counts less.
 Prediction markets pull the estimate toward what traders expect. The result is blended with the
 previous estimate to avoid jumps — unless emergency signals fire — and kept between 1% and 95%.
+
+## 6. Backtest (2026-11-06)
+Windows 20 Mar–5 May 2024, 10 Sep–10 Nov 2024, 20 May–10 Jul 2025; outcome = a day with a direct
+Israel/US ↔ Iran strike (17 of 161 days). Only the financial signals have free history before Oct 2026,
+so this tests them alone (our own event data and the prediction-market history are not available).
+
+| | Brier (lower is better) |
+|---|---|
+| Model (finance signals) | 0.1006 |
+| Base rate 2% alone | 0.1018 |
+
+Mean estimate 2.6% on strike days vs 2.0% on other days: the financial signals carry a small, real
+signal, so their weights stay modest (0.3–0.5). The windows were chosen around escalations, so the
+event rate in them (10.6%) is far above the base rate — the Brier score here mostly measures that;
+calibration on live data (resolved windows) is what will tune the weights. Re-run from the admin panel.

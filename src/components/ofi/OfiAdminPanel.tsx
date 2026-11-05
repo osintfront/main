@@ -8,6 +8,7 @@ import {
 } from '@/services/ofiService';
 import { formatDateTime } from '@/utils/time';
 import { cn } from '@/utils/cn';
+import { OfiAdminTools } from './OfiAdminTools';
 
 const box = 'rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50/50 p-5 sm:p-6 dark:border-sky-500/40 dark:bg-sky-500/5';
 const input = 'h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
@@ -178,6 +179,8 @@ export function OfiAdminPanel({ slug, onChanged }: { slug: string; onChanged: ()
         </table>
       </div>
       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('ofi.admin.weightsHint')}</p>
+      <OfiAdminTools slug={slug} eventId={ev.id} polymarket={signals.find((x) => x.key === 'polymarket')}
+        onChanged={() => { void reload(); onChanged(); }} />
     </section>
   );
 }

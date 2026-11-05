@@ -41,6 +41,7 @@ import { compileEei, matchesEei } from '@/lib/eei';
 import { useAuth } from '@/hooks/useAuth';
 import { AskMap } from '@/components/map/AskMap';
 import type { AskAnswer } from '@/services/askService';
+import { OfiFab } from '@/components/ofi/OfiFab';
 
 type MobilePane = 'map' | 'feed';
 
@@ -418,6 +419,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
 
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      {!isArchive ? <OfiFab /> : null}
       <a
         href="#main-map"
         className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-[2000] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow"

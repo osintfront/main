@@ -11,6 +11,7 @@ import { formatDateTime } from '@/utils/time';
 import { cn } from '@/utils/cn';
 import { Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimerShort, pct, Sparkline } from '@/components/ofi/OfiParts';
 import { OfiAdminPanel } from '@/components/ofi/OfiAdminPanel';
+import { OfiAlerts, ofiTrack, PrintBrief, SawItFirstShare, ScenarioExplorer } from '@/components/ofi/OfiExtras';
 import { GuestGate, OfiFrame, Trend, UpdateTimes } from './InsightsPage';
 
 const card = 'rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6 dark:bg-slate-900 dark:ring-white/10';
@@ -134,7 +135,7 @@ function History({ history }: { history: NonNullable<OfiDetail['history']> }) {
   );
 }
 
-function TrackRecord({ tr }: { tr: OfiTrackRecord | null }) {
+function TrackRecord({ tr, slug, base }: { tr: OfiTrackRecord | null; slug: string; base: number }) {
   const { t, locale } = useI18n();
   if (!tr || tr.n === 0) return <p className="text-sm text-slate-500 dark:text-slate-400">{t('ofi.trackEmpty')}</p>;
   return (
@@ -146,6 +147,7 @@ function TrackRecord({ tr }: { tr: OfiTrackRecord | null }) {
             <span>{formatDateTime(w.start, locale)}</span>
             <span className="tabular-nums">{w.p != null ? pct(w.p) : '–'}</span>
             <span className={w.outcome ? 'font-semibold text-red-600 dark:text-red-400' : ''}>{t(w.outcome ? 'ofi.happened' : 'ofi.notHappened')}</span>
+            {w.outcome && w.p != null && w.p >= 2 * base ? <SawItFirstShare slug={slug} p={w.p} start={w.start} /> : null}
           </li>
         ))}
       </ul>
@@ -162,6 +164,22 @@ export function InsightDetailPage() {
   const [tr, setTr] = useState<OfiTrackRecord | null>(null);
   const signedIn = status === 'signed_in';
   const back = { to: '/insights', label: t('ofi.allInsights') };
+
+  // Funnel analytics, and the upgrade window once per visit when the number moved a lot (Free).
+  useEffect(() => {
+    if (!d || d.probability == null) return;
+    ofiTrack('view_gauge', { slug: d.slug, tier: d.tier });
+    const moved = d.previous_probability != null && Math.abs(d.probability - d.previous_probability) >= 0.03;
+    if (moved && d.signals === null && !d.locked) {
+      const key = `ofi.upsell.${d.slug}`;
+      try {
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, '1');
+      } catch { /* storage blocked: still show once now */ }
+      ofiTrack('upgrade_modal_shown', { slug: d.slug });
+      openGate('upgrade');
+    }
+  }, [d]);
 
   const load = useCallback(() => {
     if (!signedIn) return;
@@ -204,6 +222,7 @@ export function InsightDetailPage() {
                 </>
               )}
               <UpdateTimes last={d.last_update} next={d.next_update} />
+              {d.tier >= 3 && !d.locked ? <PrintBrief /> : null}
             </div>
           </div>
           <OfiDisclaimerShort className="mt-4" />
@@ -226,7 +245,7 @@ export function InsightDetailPage() {
                   </p>
                 ))}
                 {locked > 0 ? (
-                  <button type="button" onClick={() => openGate('upgrade')}
+                  <button type="button" onClick={() => { ofiTrack('click_locked_signal', { slug: d.slug }); openGate('upgrade'); }}
                     className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700">
                     <Lock className="size-4" aria-hidden /> {t('ofi.unlock', { n: locked })}
                   </button>
@@ -235,6 +254,10 @@ export function InsightDetailPage() {
             )}
           </section>
         ) : null}
+
+        {pro && !d.locked ? <OfiAlerts slug={d.slug} eventTier={d.tier} /> : null}
+
+        {d.tier >= 3 && d.signals ? <ScenarioExplorer d={d} /> : null}
 
         {pro && d.signals ? (
           <section className={card}>
@@ -261,7 +284,7 @@ export function InsightDetailPage() {
 
         <section className={card}>
           <h2 className={h2}>{t('ofi.trackTitle')}</h2>
-          <div className="mt-3"><TrackRecord tr={tr} /></div>
+          <div className="mt-3"><TrackRecord tr={tr} slug={d.slug} base={d.base_rate ?? 0.02} /></div>
         </section>
 
         {profile?.role === 'super_admin' ? <OfiAdminPanel slug={d.slug} onChanged={load} /> : null}

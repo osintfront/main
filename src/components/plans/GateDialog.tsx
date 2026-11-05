@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
 import { Lock } from 'lucide-react';
+import { track } from '@vercel/analytics';
 import { useI18n } from '@/i18n';
 import type { UseReason } from '@/lib/featureUse';
 
@@ -58,7 +59,7 @@ export function GateHost() {
             </>
           ) : (
             <>
-              <Link to="/packages" onClick={close} className={primary}>{t('gate.plans')}</Link>
+              <Link to="/packages" onClick={() => { try { track('upgrade_modal_converted'); } catch { /* blocked */ } close(); }} className={primary}>{t('gate.plans')}</Link>
               <button type="button" onClick={close} className={secondary}>{t('common.close')}</button>
             </>
           )}

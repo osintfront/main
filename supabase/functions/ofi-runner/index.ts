@@ -8,6 +8,7 @@
 // POST {"action":"recompute", "slug"}  (admin "Recompute now") — collect everything + compute.
 // POST {"action":"compute", "slug"}    (admin, e.g. after a manual parameter) — compute only.
 // POST {"action":"polymarket_search", "q": "iran"} — candidate markets for the admin page.
+// POST {"action":"backtest", "slug"}  (admin) — replay the engine over Apr 2024 / Oct 2024 / Jun 2025.
 // Page views never reach this function: readers only read stored forecasts.
 //
 // Who may call it: pg_cron (header x-cron-secret = intel_config.cron_secret) or the super admin
@@ -16,6 +17,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { INTERNAL_SOURCES, readSignal, RunContext, type PrevReading, type SignalRow } from '../_shared/ofi/adapters.ts';
 import { computeForecast, summaries, type EngineSignal } from '../_shared/ofi/engine.ts';
+import { runBacktest } from '../_shared/ofi/backtest.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 const HOUR = 3_600_000;
@@ -122,12 +124,15 @@ async function compute(eventId: string, trigger: 'schedule' | 'manual' | 'circui
   const result = computeForecast(Number(ev.base_rate), signals, previous);
   if (dry) return { slug: ev.slug, result, stored: false };
   const text = summaries(result, previous);
-  const { error: e3 } = await db.from('insight_forecasts').insert({
+  const { data: stored, error: e3 } = await db.from('insight_forecasts').insert({
     event_id: eventId, probability: result.probability, confidence_low: result.confidence_low,
     confidence_high: result.confidence_high, contributions: result.contributions, model_version: result.model_version,
     trigger, summary_he: text.he, summary_en: text.en,
-  });
+  }).select('id').single();
   if (e3) throw e3;
+  // Threshold alerts tripped by this estimate (queued in the DB; /api/ofi-alerts delivers them).
+  const { error: e4 } = await db.rpc('ofi_queue_alerts', { p_forecast: stored.id });
+  if (e4) console.warn('ofi_queue_alerts', e4.message);
   const upd: Record<string, unknown> = { last_run_at: new Date().toISOString() };
   if (trigger !== 'circuit_breaker') upd.next_run_at = new Date(now + Number(ev.refresh_interval_hours) * HOUR).toISOString();
   await db.from('insight_events').update(upd).eq('id', eventId);
@@ -212,6 +217,17 @@ Deno.serve(async (req) => {
     if (body.action === 'collect') {
       const scope = ['all', 'internal', 'external'].includes(body.scope) ? body.scope : 'all';
       return json({ ok: true, by: who, results: await collect(typeof body.slug === 'string' ? body.slug : undefined, scope) });
+    }
+    if (body.action === 'backtest') {
+      const id = await eventIdBySlug(body.slug);
+      const { data: ev } = await db.from('insight_events').select('base_rate').eq('id', id).single();
+      const { data: fin } = await db.from('insight_signals').select('key,name_he,name_en,weight,config')
+        .eq('event_id', id).eq('source_type', 'finance').eq('enabled', true);
+      const result = await runBacktest(Number(ev?.base_rate ?? 0.02), (fin ?? []).map((f: any) => ({
+        key: f.key, name_he: f.name_he, name_en: f.name_en, weight: Number(f.weight), symbols: f.config?.symbols ?? [] })));
+      await db.from('insight_source_cache').upsert({ key: `backtest:${body.slug}`, fetched_at: new Date().toISOString(), body: result });
+      const { rows: _rows, ...summary } = result;
+      return json({ ok: true, ...summary });
     }
     if (body.action === 'polymarket_search' && who === 'admin') {
       return json({ ok: true, markets: await polymarketSearch(String(body.q ?? 'iran').slice(0, 80)) });
