@@ -36,18 +36,24 @@ begin
   update public.profiles set status = 'active', role = 'viewer' where id in (u_free, u_pro);
   perform public._plan_set(u_pro, 'pro', 'paid', null, 'set', '{}'::jsonb);
 
-  -- Guest: sees the card, never the number.
-  perform set_config('request.jwt.claims', '{"role":"anon"}', true);
-  set local role anon;
-  assert public.ofi_tier() = 0, 'guest tier ' || public.ofi_tier();
-  j := public.ofi_list() -> 0;
-  assert j ->> 'slug' = 'iran-direct-confrontation', 'guest: card missing';
-  assert (j ->> 'locked')::boolean and j -> 'probability' = 'null'::jsonb, 'guest sees the probability';
-  j := public.ofi_detail('iran-direct-confrontation');
-  assert j -> 'probability' = 'null'::jsonb and jsonb_array_length(j -> 'contributions') = 0, 'guest detail leaks';
-  j := public.ofi_track_record('iran-direct-confrontation');
-  assert (j ->> 'n')::int = 1 and (j ->> 'brier')::numeric = 0.0009, 'track record ' || j::text;
+  -- Guest: cannot call OFI at all (the page asks them to sign up). API key admin likewise.
+  assert not has_function_privilege('anon', 'public.ofi_list()', 'execute'), 'guest can call ofi_list';
+  assert not has_function_privilege('anon', 'public.ofi_detail(text)', 'execute'), 'guest can call ofi_detail';
+  assert not has_function_privilege('anon', 'public.ofi_track_record(text)', 'execute'), 'guest can call ofi_track_record';
+  assert not has_function_privilege('anon', 'public.api_create_key(text, text, text, int)', 'execute'), 'guest can call api_create_key';
+  assert not has_function_privilege('anon', 'public.api_revoke_key(uuid)', 'execute'), 'guest can call api_revoke_key';
+  assert has_function_privilege('authenticated', 'public.api_create_key(text, text, text, int)', 'execute'), 'admin panel lost api_create_key';
+
+  -- An account that is not active (pending / suspended) sees nothing either.
+  update public.profiles set status = 'pending' where id = u_free;
+  perform set_config('request.jwt.claims', json_build_object('sub', u_free, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  assert public.ofi_tier() = 0, 'pending tier';
+  assert jsonb_array_length(public.ofi_list()) = 0, 'pending account sees cards';
+  assert public.ofi_detail('iran-direct-confrontation') is null, 'pending account sees detail';
+  assert public.ofi_track_record('iran-direct-confrontation') is null, 'pending account sees track record';
   reset role;
+  update public.profiles set status = 'active' where id = u_free;
 
   -- Free: number + trend + one teaser signal; no band, history, signals or summary.
   perform set_config('request.jwt.claims', json_build_object('sub', u_free, 'role', 'authenticated')::text, true);
@@ -68,6 +74,8 @@ begin
   assert (j ->> 'signal_count')::int = 3, 'free signal count';
   assert j -> 'confidence_low' = 'null'::jsonb and j -> 'signals' = 'null'::jsonb and j -> 'history' = 'null'::jsonb
      and j -> 'summary_he' = 'null'::jsonb, 'free gets Pro data';
+  j := public.ofi_track_record('iran-direct-confrontation');
+  assert (j ->> 'n')::int = 1 and (j ->> 'brier')::numeric = 0.0009, 'track record ' || j::text;
   reset role;
 
   -- Pro: everything except history older than 30 days.

@@ -30,12 +30,12 @@ Readers use security-definer functions that return only what their tier may see:
 
 | Tier (`ofi_tier`) | Who | Gets |
 |---|---|---|
-| 0 | guest | card + title, no number |
+| 0 | guest / pending / suspended | nothing — the page asks them to sign up (functions not callable by guests) |
 | 1 | Free | probability, previous probability, last/next update, 1 teaser signal |
 | 2 | Pro | + band, all contributions, signals with weights + 30-day readings, summary, 30-day history, sparkline |
 | 3 | Max / Intel / staff | + full history, early-access events (`min_tier = 3`) |
 
-`ofi_track_record(slug)` is public: closed windows only, with the Brier score.
+`ofi_track_record(slug)`: registered users (tier ≥ 1), closed windows only, with the Brier score.
 Plan switches: `plan_features` keys `insights_basic`, `insights_pro`, `insights_max`.
 
 ## Phases
