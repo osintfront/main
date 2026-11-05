@@ -40,8 +40,9 @@ export function OfiFrame({ children, back, mood = 'calm' }: { children: ReactNod
           <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
           {back?.label ?? t('site.backToMap')}
         </Link>
-        <div className="flex items-center gap-3">
-          <OfiAvatar mood={mood} size={52} />
+        <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-lime-50 to-emerald-100 p-3 ring-1 ring-emerald-700/15 dark:from-emerald-950 dark:to-slate-900 dark:ring-emerald-400/20">
+          <OfiAvatar mood={mood} size={80} className="shrink-0 drop-shadow motion-safe:animate-[ofi-bob_3s_ease-in-out_infinite]" />
+          <style>{'@keyframes ofi-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}'}</style>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{t('ofi.title')}</h1>

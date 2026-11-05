@@ -1048,6 +1048,8 @@ export const he: Record<TranslationKey, string> = {
   "ofi.reading": "קריאה {s}/100.",
   "ofi.historyTitle": "היסטוריה",
   "ofi.historyShort": "ההיסטוריה תופיע אחרי כמה עדכונים.",
+  "ofi.historyLocked": "רוצים לראות איך ההערכה השתנתה לאורך זמן?",
+  "ofi.historyLockedCta": "פתחו את ההיסטוריה, למעבר לחבילות",
   "ofi.trigBreaker": "עדכון חירום",
   "ofi.trigManual": "עדכון ידני",
   "ofi.modelTitle": "איך מחושבת ההערכה",

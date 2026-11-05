@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Gauge, SlidersHorizontal, History, LayoutDashboard, Radio, Search, X } from 'lucide-react';
+import { OfiAvatar } from '@/components/ofi/OfiParts';
+import { ArrowLeft, SlidersHorizontal, History, LayoutDashboard, Radio, Search, X } from 'lucide-react';
 import { InstallAppButton } from '@/components/install/InstallAppButton';
 import { SoundMenu } from './SoundMenu';
 import { UserMenu } from './UserMenu';
@@ -89,14 +90,17 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
           <History className="size-3" aria-hidden />
           {t('nav.archive')}
         </Link>
-        <Link
-          to="/insights"
-          className="inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
-        >
-          <Gauge className="size-3" aria-hidden />
-          {t('nav.insights')}
-        </Link>
       </nav>
+
+      {/* OFI: its own button, outside the live/archive pills */}
+      <Link
+        to="/insights"
+        title={t('nav.insights')}
+        className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-b from-lime-50 to-emerald-100 py-0.5 pe-3 ps-1 text-xs font-bold text-emerald-900 shadow-sm ring-1 ring-emerald-700/25 transition hover:-translate-y-px hover:shadow md:inline-flex dark:from-emerald-900/50 dark:to-emerald-950 dark:text-emerald-100 dark:ring-emerald-400/30"
+      >
+        <OfiAvatar mood="calm" size={30} />
+        {t('nav.insights')}
+      </Link>
 
       <form
         role="search"
@@ -194,8 +198,8 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
         >
           {mode === 'live' ? <History className="size-4" aria-hidden /> : <Radio className="size-4 text-red-500" aria-hidden />}
         </Link>
-        <Link to="/insights" aria-label={t('nav.insights')} title={t('nav.insights')} className={cn(iconBtn, 'md:hidden')}>
-          <Gauge className="size-4" aria-hidden />
+        <Link to="/insights" aria-label={t('nav.insights')} title={t('nav.insights')} className="grid size-9 shrink-0 place-items-center rounded-full ring-1 ring-emerald-700/25 md:hidden">
+          <OfiAvatar mood="calm" size={30} />
         </Link>
         {mode === 'live' ? <InstallAppButton /> : null}
         {mode === 'live' ? <SoundMenu onOpen={onSoundOpen} /> : null}

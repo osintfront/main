@@ -26,37 +26,52 @@ function usePrefersReducedMotion(): boolean {
 }
 
 /**
- * OFI — a round "lens" with a radar sweep for an eye. Calm: relaxed lids. Alert: open eye.
- * High alert: wide eye with a raised brow and a quicker sweep. Original artwork.
+ * OFI — a cute little soldier: olive helmet with a radar dish on top (it sweeps), a star on the front,
+ * big eyes. The mood sets the ring colour, the star colour and the face: calm = relaxed smile,
+ * alert = wide eyes, high = wide eyes, frown and a quicker radar. Original artwork.
  */
 export function OfiAvatar({ mood = 'calm', size = 44, className }: { mood?: OfiMood; size?: number; className?: string }) {
   const c = MOOD_COLOR[mood];
   const reduce = usePrefersReducedMotion();
   const id = useId();
+  const spin = reduce ? undefined : `ofi-sweep ${mood === 'high' ? 1.6 : mood === 'alert' ? 3 : 6}s linear infinite`;
   return (
     <svg viewBox="0 0 48 48" width={size} height={size} className={className} role="img" aria-label={`OFI (${mood})`}>
       <defs>
-        <radialGradient id={`${id}-g`} cx="50%" cy="40%" r="60%">
-          <stop offset="0%" stopColor={c} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={c} stopOpacity="0.05" />
-        </radialGradient>
+        <clipPath id={`${id}-c`}><circle cx="24" cy="24" r="21" /></clipPath>
       </defs>
-      <circle cx="24" cy="24" r="22" fill={`url(#${id}-g)`} stroke={c} strokeWidth="2" />
-      <circle cx="24" cy="24" r="15" fill="none" stroke={c} strokeOpacity="0.35" strokeWidth="1" strokeDasharray="2 3" />
-      {/* the eye */}
-      {mood === 'calm' ? (
-        <path d="M14 25 Q24 19 34 25" fill="none" stroke={c} strokeWidth="2.5" strokeLinecap="round" />
-      ) : (
-        <>
-          <ellipse cx="24" cy="25" rx="10" ry={mood === 'high' ? 8 : 6} fill="none" stroke={c} strokeWidth="2.2" />
-          <circle cx="24" cy="25" r={mood === 'high' ? 3.6 : 3} fill={c} />
-        </>
-      )}
-      {mood === 'high' ? <path d="M15 14 L24 12 L33 14" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" /> : null}
-      {/* radar sweep */}
-      <g style={{ transformOrigin: '24px 24px', animation: reduce ? undefined : `ofi-sweep ${mood === 'high' ? 2.2 : 5}s linear infinite` }}>
-        <path d="M24 24 L24 3 A21 21 0 0 1 38 9 Z" fill={c} fillOpacity="0.12" />
+      <circle cx="24" cy="24" r="22" fill="#e8efe2" stroke={c} strokeWidth="2.5" />
+      <g clipPath={`url(#${id}-c)`}>
+        <path d="M6 48 Q8 37 24 36 Q40 37 42 48 Z" fill="#5b6b3a" />
+        <path d="M20 36 L24 41 L28 36 Z" fill="#f0c9a0" />
       </g>
+      <ellipse cx="24" cy="27" rx="11" ry="10" fill="#f6d3ae" />
+      <path d="M11.5 24 Q11 9 24 8.5 Q37 9 36.5 24 Q24 20 11.5 24 Z" fill="#6f8040" stroke="#4a5a2a" strokeWidth="1" />
+      <path d="M9.5 24.5 Q24 19.5 38.5 24.5" fill="none" stroke="#4a5a2a" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M24 11.2 l1.2 2.5 2.7.3-2 1.9.6 2.7-2.5-1.4-2.5 1.4.6-2.7-2-1.9 2.7-.3z" fill={c} stroke="#fff" strokeWidth=".5" />
+      <g style={{ transformOrigin: '33px 9px', animation: spin }}>
+        <path d="M33 9 L33 4.2" stroke="#33401c" strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx="33" cy="4" r="1.6" fill={c} />
+      </g>
+      <circle cx="19.5" cy="27.5" r={mood === 'calm' ? 2 : 2.6} fill="#fff" stroke="#33401c" strokeWidth=".8" />
+      <circle cx="28.5" cy="27.5" r={mood === 'calm' ? 2 : 2.6} fill="#fff" stroke="#33401c" strokeWidth=".8" />
+      <circle cx="19.5" cy="27.8" r="1.2" fill="#1e2a10" />
+      <circle cx="28.5" cy="27.8" r="1.2" fill="#1e2a10" />
+      {mood === 'high' ? (
+        <>
+          <path d="M16.5 23.6 L21.5 25" stroke="#4a3a20" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M31.5 23.6 L26.5 25" stroke="#4a3a20" strokeWidth="1.3" strokeLinecap="round" />
+        </>
+      ) : null}
+      {mood === 'calm' ? (
+        <path d="M20.5 32.2 Q24 35 27.5 32.2" fill="none" stroke="#8a4a32" strokeWidth="1.4" strokeLinecap="round" />
+      ) : mood === 'alert' ? (
+        <path d="M21.5 33 L26.5 33" stroke="#8a4a32" strokeWidth="1.4" strokeLinecap="round" />
+      ) : (
+        <path d="M20.5 34 Q24 31.2 27.5 34" fill="none" stroke="#8a4a32" strokeWidth="1.4" strokeLinecap="round" />
+      )}
+      <circle cx="16" cy="31" r="1.6" fill="#f08a7a" fillOpacity=".45" />
+      <circle cx="32" cy="31" r="1.6" fill="#f08a7a" fillOpacity=".45" />
       <style>{'@keyframes ofi-sweep{to{transform:rotate(360deg)}}'}</style>
     </svg>
   );

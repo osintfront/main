@@ -273,6 +273,25 @@ export function InsightDetailPage() {
           </section>
         ) : null}
 
+        {!pro && !d.locked ? (
+          <section className={card}>
+            <h2 className={h2}>{t('ofi.historyTitle')}</h2>
+            <div className="relative mt-4 overflow-hidden rounded-xl">
+              <div aria-hidden className="pointer-events-none select-none blur-sm text-slate-400">
+                <Sparkline points={[0, 1, 2, 3, 4, 5, 6, 7].map((i) => [`2026-01-0${i + 1}T00:00:00Z`, 0.02 + 0.015 * Math.abs(Math.sin(i * 1.7))] as [string, number])} width={640} height={90} className="h-auto w-full" />
+              </div>
+              <div className="absolute inset-0 grid place-items-center bg-white/50 p-3 text-center dark:bg-slate-950/50">
+                <div>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{t('ofi.historyLocked')}</p>
+                  <Link to="/packages" className="mt-2 inline-flex h-9 items-center rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700">
+                    {t('ofi.historyLockedCta')}
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         {pro ? (
           <section className={card}>
             <h2 className={h2}>{t('ofi.modelTitle')}</h2>

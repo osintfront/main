@@ -1046,6 +1046,8 @@ export const en = {
   "ofi.reading": "Reading {s}/100.",
   "ofi.historyTitle": "History",
   "ofi.historyShort": "History appears after a few updates.",
+  "ofi.historyLocked": "Want to see how the estimate moved over time?",
+  "ofi.historyLockedCta": "Unlock history, see plans",
   "ofi.trigBreaker": "emergency update",
   "ofi.trigManual": "manual update",
   "ofi.modelTitle": "How the estimate is calculated",
