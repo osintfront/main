@@ -40,7 +40,14 @@ Plan switches: `plan_features` keys `insights_basic`, `insights_pro`, `insights_
 
 ## Phases
 1. Schema + RLS + gating + seed ✔
-2. Adapters: internal events, Polymarket, finance (Stooq), advisories
+2. Adapters ✔ — `ofi-runner` edge function (`collect`, `polymarket_search`), `ofi_internal_stats` (SQL)
+   - Internal counts are compared with their own 7-day baseline (absolute counts saturate on a busy front).
+   - Polymarket: no direct "confrontation in 24 h" market; anchor = inverted ceasefire markets
+     (Israel×Iran, US×Iran, through Nov 30), max of their 24 h probabilities; fetched via one search call.
+     Markets expire — the admin page (phase 3) must let the admin swap them (`expiring_soon` flag).
+   - Finance: Yahoo spark (one call, 8 symbols); Stooq per-symbol fallback.
+   - Advisories: US State Dept RSS + UK FCDO content API (level parsed). Israel NSC has no machine-readable
+     level — hash of a configured page URL (none set yet → stale).
 3. Engine + scheduler + admin controls
 4. UI + OFI persona + intro/disclaimer + Terms section
 5. Alerts, brief, track record page, scenario explorer, API
