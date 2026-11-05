@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isSupabaseConfigured } from '@/integrations/supabase/client';
-import { fetchPublishedEvents } from '@/services/eventService';
+import { fetchPublishedEventStamps, fetchPublishedEventsByIds, fetchPublishedEventsStamped } from '@/services/eventService';
 import { subscribeToPulse } from '@/services/realtime';
 import { toServiceError } from '@/services/serviceError';
 import { buildDemoEvents } from '@/data/demoEvents';
@@ -14,6 +14,9 @@ const REFRESH_INTERVAL_MS = 60_000;
 const NEW_HIGHLIGHT_MS = 90_000;
 /** Busy feeds push many changes a minute: refetch at most this often. */
 const MIN_REFETCH_GAP_MS = 6_000;
+/** Refreshes load only what changed; every so often a full reload catches what an edit stamp
+ *  cannot show (a category renamed or recoloured, media attached to an event). */
+const FULL_RELOAD_MS = 10 * 60_000;
 
 interface UsePublicEvents {
   events: PublicEvent[];
@@ -40,6 +43,9 @@ export function usePublicEvents(enabled = true): UsePublicEvents {
    *  so the map and the feed only redraw what actually changed. */
   const previous = useRef<Map<string, { event: PublicEvent; sig: string }>>(new Map());
   const lastLoadAt = useRef(0);
+  const lastFullAt = useRef(0);
+  /** Change stamp (`updated_at`) of each event on screen. */
+  const stamps = useRef<Map<string, string>>(new Map());
   const pending = useRef<number | undefined>(undefined);
   const [newIds, setNewIds] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -54,11 +60,45 @@ export function usePublicEvents(enabled = true): UsePublicEvents {
       lastLoadAt.current = Date.now();
       if (!background) setStatus('loading');
       try {
-        const fetched = await fetchPublishedEvents();
         const prevMap = previous.current;
+        let fetched: PublicEvent[];
+        // First load, a manual reload, or the periodic safety reload: every row. Otherwise only the
+        // tiny id + change-stamp list, then full rows for just the new or changed events.
+        const full = !background || !hasData.current || Date.now() - lastFullAt.current > FULL_RELOAD_MS;
+        if (full) {
+          const rows = await fetchPublishedEventsStamped();
+          stamps.current = new Map(rows.map((r) => [r.event.id, r.stamp]));
+          fetched = rows.map((r) => r.event);
+          lastFullAt.current = Date.now();
+        } else {
+          const list = await fetchPublishedEventStamps();
+          const known = stamps.current;
+          const need = new Set(list.filter((s) => !prevMap.has(s.id) || known.get(s.id) !== s.stamp).map((s) => s.id));
+          const fresh = need.size ? await fetchPublishedEventsByIds([...need]) : [];
+          const byId = new Map(fresh.map((r) => [r.event.id, r]));
+          const nextStamps = new Map<string, string>();
+          fetched = [];
+          for (const s of list) {
+            const got = byId.get(s.id);
+            if (got) {
+              fetched.push(got.event);
+              nextStamps.set(s.id, got.stamp);
+            } else if (!need.has(s.id)) {
+              fetched.push(prevMap.get(s.id)!.event);
+              nextStamps.set(s.id, s.stamp);
+            } // changed, then left the live map before its row was read: dropped
+          }
+          stamps.current = nextStamps;
+        }
         const nextMap = new Map<string, { event: PublicEvent; sig: string }>();
         let changed = fetched.length !== prevMap.size;
         const next = fetched.map((e) => {
+          const same = prevMap.get(e.id);
+          if (same && same.event === e) {
+            // Unchanged and reused as is: no need to fingerprint it again.
+            nextMap.set(e.id, same);
+            return e;
+          }
           const sig = JSON.stringify(e);
           const old = prevMap.get(e.id);
           const keep = old && old.sig === sig ? old.event : e;

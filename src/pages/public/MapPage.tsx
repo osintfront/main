@@ -257,6 +257,11 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
       },
     };
   }
+  // A different list (filters, search, "ask the map", archive day) starts the feed again at its first batch.
+  const feedResetKey = useMemo(
+    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? ask.events.length : null]),
+    [isArchive, day, effectiveFilters, deferredQuery, ask],
+  );
   // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
   const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
 
@@ -472,6 +477,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             onLocateAlert={handleLocateAlert}
             title={isArchive ? t('archive.title') : undefined}
             live={!isArchive}
+            resetKey={feedResetKey}
             toolbar={
               isArchive || filterCount || ask ? (
                 <div className="space-y-2">

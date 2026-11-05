@@ -42,7 +42,13 @@ interface EventFeedProps {
   footer?: ReactNode;
   /** One ad after every N cards (guests and Free only; undefined = no ads). */
   adEvery?: number;
+  /** Changes when the list is a different one (filters, search, archive day): the feed goes
+   *  back to its first batch of cards. Live updates to the same list keep what is shown. */
+  resetKey?: string;
 }
+
+/** Cards drawn at first, and added each time the reader nears the bottom of the list. */
+const BATCH = 20;
 
 /** Re-renders relative timestamps once a minute. */
 function useNow(intervalMs = 60_000): number {
@@ -97,6 +103,7 @@ export function EventFeed({
   live = true,
   toolbar,
   emptyText,
+  resetKey,
 }: EventFeedProps) {
   const { t, locale } = useI18n();
   const now = useNow();
@@ -108,9 +115,33 @@ export function EventFeed({
   const listRef = useRef<HTMLDivElement>(null);
   const [spinning, setSpinning] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  // Infinite scroll: only the first `shown` cards are drawn; a marker after the last card loads
+  // the next batch when it comes within reach. The map still has every event.
+  const [shown, setShown] = useState(BATCH);
+  const sentinelRef = useRef<HTMLLIElement>(null);
+  const hasMore = shown < events.length;
+  useEffect(() => {
+    setShown(BATCH);
+    listRef.current?.scrollTo({ top: 0 });
+  }, [resetKey]);
+  useEffect(() => {
+    const node = sentinelRef.current;
+    const root = listRef.current;
+    if (!node || !root || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setShown((n) => n + BATCH);
+      },
+      // Start drawing the next batch a little before the reader reaches the end.
+      { root, rootMargin: '0px 0px 600px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, status, shown]);
   const refresh = () => {
     if (!onRefresh) return;
     onRefresh();
+    setShown(BATCH);
     listRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     setSpinning(true);
     window.setTimeout(() => setSpinning(false), 800);
@@ -118,12 +149,18 @@ export function EventFeed({
   useEffect(() => {
     if (!focusRequest || focusRequest.source === 'feed') return;
     if (scrolledFor.current === focusRequest.nonce) return;
+    // The selected card may be further down than what is drawn yet: draw up to its batch first.
+    const index = events.findIndex((e) => e.id === focusRequest.id);
+    if (index >= shown) {
+      setShown(Math.ceil((index + 1) / BATCH) * BATCH);
+      return; // runs again once those cards are drawn
+    }
     const node = document.getElementById(`event-card-${focusRequest.id}`);
     if (!node) return; // not loaded yet: try again when the list arrives
     scrolledFor.current = focusRequest.nonce;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     node.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
-  }, [focusRequest, events]);
+  }, [focusRequest, events, shown]);
 
   return (
     <section aria-labelledby="feed-heading" className="flex min-h-0 flex-1 flex-col">
@@ -222,7 +259,7 @@ export function EventFeed({
           <ul className="space-y-3">
             {/* One flat keyed list: the ad item has its own key, so new events move it but never
                 remount it (an ad must not reload without a user action). */}
-            {events.flatMap((event, index) => {
+            {events.slice(0, shown).flatMap((event, index) => {
               const items = [
                 <li key={event.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_180px]">
                   <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} onOpenDetails={onOpenDetails} />
@@ -237,6 +274,13 @@ export function EventFeed({
               }
               return items;
             })}
+            {hasMore ? (
+              <li ref={sentinelRef} className="flex justify-center py-3">
+                <Button variant="secondary" size="sm" onClick={() => setShown((n) => n + BATCH)}>
+                  {t('feed.more', { count: Math.min(BATCH, events.length - shown) })}
+                </Button>
+              </li>
+            ) : null}
           </ul>
         )}
       </div>

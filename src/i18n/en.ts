@@ -14,6 +14,7 @@ export const en = {
 
   'feed.title': 'Live feed',
   'feed.count': '{count} events',
+  'feed.more': 'Show {count} more',
   'feed.demoBadge': 'Demo data',
   'feed.demoHint': 'Supabase is not configured — showing demonstration events.',
   'feed.locate': 'Locate',

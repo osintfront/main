@@ -230,28 +230,76 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
   };
 }
 
-/**
- * Every event on the live map (published, not yet archived). Read in pages of 1000 — the API's
- * page size — so a busy day is never cut off: one fixed limit of 500 used to drop everything
- * older than the newest 500 (a busy day has 900+), even inside the 12-hour view.
- */
-export async function fetchPublishedEvents(max = 5000): Promise<PublicEvent[]> {
+/** A live event as loaded, with its last-change stamp (`updated_at` in the view). */
+export interface StampedEvent {
+  event: PublicEvent;
+  stamp: string;
+}
+
+/** Live view columns plus the change stamp (only the live view is read with a stamp). */
+const STAMPED_COLUMNS = `${PUBLIC_EVENT_COLUMNS},updated_at`;
+
+function toStamped(rows: (PublishedEventRow & { updated_at?: string | null })[]): StampedEvent[] {
+  return rows.flatMap((row) => {
+    const event = mapPublishedEventRow(row);
+    return event ? [{ event, stamp: row.updated_at ?? '' }] : [];
+  });
+}
+
+/** Every live event with its change stamp (the full load: first visit and the periodic safety reload). */
+export async function fetchPublishedEventsStamped(max = 5000): Promise<StampedEvent[]> {
   if (!supabase) throw new ServiceError('not_configured', 'Supabase is not configured.');
   const PAGE = 1000;
-  const rows: PublishedEventRow[] = [];
+  const rows: (PublishedEventRow & { updated_at?: string | null })[] = [];
   for (let from = 0; from < max; from += PAGE) {
     const { data, error } = await supabase
       .from('published_events')
-      .select(PUBLIC_EVENT_COLUMNS)
+      .select(STAMPED_COLUMNS)
       .order('occurred_at', { ascending: false })
       .order('id', { ascending: true })
       .range(from, Math.min(from + PAGE, max) - 1);
     if (error) throw toServiceError(error);
-    const page = (data ?? []) as unknown as PublishedEventRow[];
+    const page = (data ?? []) as unknown as (PublishedEventRow & { updated_at?: string | null })[];
     rows.push(...page);
     if (page.length < PAGE) break;
   }
-  return rows.map(mapPublishedEventRow).filter((e): e is PublicEvent => e !== null);
+  return toStamped(rows);
+}
+
+/**
+ * Just the id and change stamp of every live event, in feed order — about 3% of the full rows.
+ * A refresh compares these with what is on screen and loads full rows only for what changed.
+ */
+export async function fetchPublishedEventStamps(max = 5000): Promise<{ id: string; stamp: string }[]> {
+  if (!supabase) throw new ServiceError('not_configured', 'Supabase is not configured.');
+  const PAGE = 1000;
+  const out: { id: string; stamp: string }[] = [];
+  for (let from = 0; from < max; from += PAGE) {
+    const { data, error } = await supabase
+      .from('published_events')
+      .select('id,updated_at')
+      .order('occurred_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, Math.min(from + PAGE, max) - 1);
+    if (error) throw toServiceError(error);
+    const page = (data ?? []) as { id: string; updated_at: string | null }[];
+    for (const r of page) out.push({ id: r.id, stamp: r.updated_at ?? '' });
+    if (page.length < PAGE) break;
+  }
+  return out;
+}
+
+/** Full rows of some live events (the new or changed ones), in batches that keep the URL short. */
+export async function fetchPublishedEventsByIds(ids: string[]): Promise<StampedEvent[]> {
+  if (!supabase) throw new ServiceError('not_configured', 'Supabase is not configured.');
+  const BATCH = 150;
+  const out: StampedEvent[] = [];
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const { data, error } = await supabase.from('published_events').select(STAMPED_COLUMNS).in('id', ids.slice(i, i + BATCH));
+    if (error) throw toServiceError(error);
+    out.push(...toStamped((data ?? []) as unknown as (PublishedEventRow & { updated_at?: string | null })[]));
+  }
+  return out;
 }
 
 /**

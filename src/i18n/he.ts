@@ -16,6 +16,7 @@ export const he: Record<TranslationKey, string> = {
 
   'feed.title': 'עדכונים שוטפים',
   'feed.count': '{count} אירועים',
+  'feed.more': 'עוד {count}',
   'feed.demoBadge': 'נתוני הדגמה',
   'feed.demoHint': 'Supabase אינו מחובר — מוצגים אירועי הדגמה.',
   'feed.locate': 'הצג במפה',
