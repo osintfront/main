@@ -72,6 +72,12 @@ Run `supabase/tests/rls_checks.sql` in the SQL editor after seeding. It imperson
 - Dark/light theme (tiles switch too), English/Hebrew with full RTL, phone layout with a Map/Feed switcher.
 - **Ad slots:** 728×90 / 320×50 banner, 300×250 rectangle (docked under the feed on desktop, between cards on phones), 160×600 skyscraper. Fixed sizes, so filling them never shifts the layout. None appear in `/admin`.
 
+### Weather layer + sun/moon clock
+- **Right-click (long-press) on the map → "Weather & sun/moon here"** (registered users; guests get the sign-up gate): now, 48 hours, 7 days, and a sun & moon tab — astronomical/nautical/civil dawn and dusk, sunrise/sunset, moonrise/moonset, moon state and the moon's light after clouds, hour by hour tonight. Point forecast: MET Norway (CC BY 4.0) through `api/weather.ts`; astronomy computed in the browser (`suncalc`).
+- **Intelligence layers → Weather:** clouds and rain on a timeline (−6 h observed from EUMETSAT/EUMETView, +72 h forecast from NOAA GFS), temperature and wind now (OpenWeatherMap, proxied).
+- **Forecast frames:** `.github/workflows/gfs-frames.yml` runs `tools/gfs/render_frames.py` every 6 h and writes PNGs + `gfs/latest.json` to the public Storage bucket `weather`. Needs the GitHub secret `SUPABASE_SERVICE_ROLE_KEY`.
+- **Env (Vercel):** `OWM_API_KEY`. Access: `plan_features` key `weather` (Free and up).
+
 ### Phase 1 — foundation (complete)
 | Requirement | Where |
 |---|---|
