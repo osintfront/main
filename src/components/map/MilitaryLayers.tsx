@@ -1,7 +1,7 @@
 // "Military bases" inside the "Airfields & ports" section: OpenStreetMap + Wikidata sites for the Middle East
 // without Israel (static files built by tools/military/build_military.py), square clustered markers, foreign
 // operators ringed in gold with their flag. Bunkers & checkpoints load on demand and draw from zoom 11.
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { Shield } from 'lucide-react';
@@ -10,6 +10,7 @@ import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { clusterIconHtml, isNotBuilt, loadInfra } from '@/lib/infra';
+import { MilitaryMarkers, foreignShown } from '@/lib/militaryMarkers';
 import { FOREIGN_RING, MIL_COLORS, MIL_GLYPH, MIL_TXT, flag, milName, militaryPopup, type MilKind, type MilProps } from '@/lib/military';
 
 const KINDS: MilKind[] = ['base', 'naval', 'range', 'minor'];
@@ -95,42 +96,30 @@ export function useMilitaryLayers(map: L.Map | null, lang: string, dir: 'ltr' | 
     });
   }, [he]);
 
-  // Markers: built once per file and language, re-filtered when toggles, the filter or the zoom gate change.
-  const groups = useRef<Partial<Record<MilKind, L.MarkerClusterGroup>>>({});
-  const markers = useRef<Record<MilKind, { f: boolean; m: L.Marker }[]>>({ base: [], naval: [], range: [], minor: [] });
-  useEffect(() => {
-    if (!map) return;
-    for (const [fc, kinds] of [[loaded.main, MAIN_KINDS], [loaded.minor, ['minor'] as MilKind[]]] as const) {
-      if (!fc) continue;
-      for (const k of kinds) {
-        groups.current[k] ??= cluster(MIL_COLORS[k]);
-        markers.current[k] = [];
-      }
-      for (const feat of fc.features) {
-        const p = feat.properties as MilProps;
-        if (!kinds.includes(p.k)) continue;
-        const [lng, lat] = (feat.geometry as GeoJSON.Point).coordinates;
-        const mk = L.marker([lat, lng], { icon: icon(p), title: milName(p, he ? 'he' : 'en') ?? '' });
-        bindPopup(mk, p);
-        markers.current[p.k].push({ f: !!p.f, m: mk });
-      }
+  // Markers: built per file (and again on a language change); a group is refilled only when its own inputs change.
+  const ctrl = useRef<MilitaryMarkers<L.Marker> | null>(null);
+  ctrl.current ??= new MilitaryMarkers<L.Marker>((k) => cluster(MIL_COLORS[k]));
+  const build = useCallback((fc: GeoJSON.FeatureCollection, kinds: MilKind[]) => {
+    const list = [];
+    for (const feat of fc.features) {
+      const p = feat.properties as MilProps;
+      if (!kinds.includes(p.k)) continue;
+      const [lng, lat] = (feat.geometry as GeoJSON.Point).coordinates;
+      const mk = L.marker([lat, lng], { icon: icon(p), title: milName(p, he ? 'he' : 'en') ?? '' });
+      bindPopup(mk, p);
+      list.push({ k: p.k, f: !!p.f, m: mk });
     }
-  }, [map, loaded, bindPopup, he]);
-
+    ctrl.current!.setMarkers(kinds, list);
+  }, [bindPopup, he]);
+  const [built, setBuilt] = useState(0);
+  useEffect(() => { if (loaded.main) { build(loaded.main, MAIN_KINDS); setBuilt((n) => n + 1); } }, [loaded.main, build]);
+  useEffect(() => { if (loaded.minor) { build(loaded.minor, ['minor']); setBuilt((n) => n + 1); } }, [loaded.minor, build]);
   useEffect(() => {
-    if (!map) return;
-    for (const k of KINDS) {
-      const g = groups.current[k];
-      if (!g) continue;
-      g.clearLayers();
-      if (!on[k] || (k === 'minor' && !zoomOk)) { g.remove(); continue; }
-      g.addLayers(markers.current[k].filter((x) => !foreignOnly || x.f).map((x) => x.m));
-      g.addTo(map);
-    }
-  }, [map, on, foreignOnly, zoomOk, loaded, bindPopup]);
-  useEffect(() => () => { for (const g of Object.values(groups.current)) g?.remove(); }, []);
+    if (map) ctrl.current!.apply({ on, foreignOnly, zoomOk }, map);
+  }, [map, on, foreignOnly, zoomOk, built]);
+  useEffect(() => () => ctrl.current?.removeAll(), []);
 
-  const anyForeign = KINDS.some((k) => on[k] && markers.current[k].some((x) => x.f));
+  const anyForeign = useMemo(() => foreignShown([loaded.main, loaded.minor], on), [loaded, on]);
   return { T, dir, on, foreignOnly, setForeignOnly, toggle, status, zoomOk, guest: !profile, any: KINDS.some((k) => on[k]), anyForeign };
 }
 
