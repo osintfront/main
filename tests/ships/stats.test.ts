@@ -44,3 +44,9 @@ test('chokepoints come from the RPC, errors are thrown', async () => {
   assert.equal(list[0].id, 'hormuz');
   await assert.rejects(fetchChokepoints(async () => ({ data: null, error: { message: 'boom' } })));
 });
+
+test('the placeholder sanctions file (never built) counts as unknown, not as zero', async () => {
+  const { loadSanctions: fresh } = await import('../../src/lib/ships.ts?placeholder');
+  const placeholder = (async () => new Response('{"updated":null,"vessels":{}}', { status: 200 })) as typeof fetch;
+  assert.equal(await fresh(placeholder), null);
+});

@@ -34,8 +34,23 @@ class Rows(unittest.TestCase):
         self.assertEqual(vessels_from_rows([row], 'UK'), {'9074729': {'n': 'ANYSHIP', 'l': ['UK']}})
 
     def test_uk_imo_inside_free_text(self):
-        row = {'Name 6': 'OTHER SHIP', 'Other Information': '(IMO number):9074729 (Current owner): X'}
+        row = {'Name 6': 'OTHER SHIP', 'Group Type': 'Ship', 'Other Information': '(IMO number):9074729 (Current owner): X'}
         self.assertEqual(vessels_from_rows([row], 'UK'), {'9074729': {'n': 'OTHER SHIP', 'l': ['UK']}})
+
+
+class OnlyShips(unittest.TestCase):
+    # Review finding 7: companies carry IMO company numbers; only ship rows count.
+    def test_ofac_company_with_imo_number_is_ignored(self):
+        row = ['99', 'SHIPPING CO LLC', 'entity', 'IRAN', '', '', '', '', '', '', '', 'Company Number IMO 9074729; Website x']
+        self.assertEqual(vessels_from_rows([row], 'OFAC'), {})
+
+    def test_uk_entity_with_imo_number_is_ignored(self):
+        row = {'Name 6': 'SHIPPING CO LLC', 'Group Type': 'Entity', 'Other Information': '(IMO number):9074729'}
+        self.assertEqual(vessels_from_rows([row], 'UK'), {})
+
+    def test_uk_without_type_column_uses_only_imo_columns(self):
+        self.assertEqual(vessels_from_rows([{'Name 6': 'X', 'Other Information': 'IMO 9074729'}], 'UK'), {})
+        self.assertEqual(vessels_from_rows([{'Name 6': 'X', 'IMO number': '9074729'}], 'UK'), {'9074729': {'n': 'X', 'l': ['UK']}})
 
 
 class Merge(unittest.TestCase):

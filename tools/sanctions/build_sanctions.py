@@ -49,13 +49,24 @@ def _name(row: list[str] | dict) -> str:
     return next((v for k, v in lower.items() if 'name' in k and v), '')
 
 
+TYPE_KEYS = ('group type', 'type', 'entity type', 'regime type')
+
+
 def vessels_from_rows(rows: list, source: str) -> dict[str, dict]:
+    """Only ship rows count: shipping companies carry IMO *company* numbers that can pass the ship check digit."""
     out: dict[str, dict] = {}
     for row in rows:
         if isinstance(row, dict):
-            found = [str(v).strip() for k, v in row.items() if k and 'imo' in k.lower() and imo_valid(str(v or '').strip())]
-            found += imos_in(' '.join(str(v or '') for v in row.values()))
+            lower = {k.strip().lower(): str(v or '').strip() for k, v in row.items() if k}
+            kind = next((lower[k] for k in TYPE_KEYS if k in lower), None)
+            if kind is not None and kind.lower() not in ('ship', 'vessel'):
+                continue
+            found = [v for k, v in lower.items() if 'imo' in k and imo_valid(v)]
+            if kind is not None:  # a row typed as a ship: free-text IMO numbers count too
+                found += imos_in(' '.join(lower.values()))
         else:
+            if len(row) < 3 or row[2].strip().lower() != 'vessel':  # OFAC SDN: column 3 is the entry type
+                continue
             found = imos_in(' '.join(row))
         name = _name(row)
         for imo in dict.fromkeys(found):

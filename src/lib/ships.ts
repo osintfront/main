@@ -58,7 +58,8 @@ export async function loadSanctions(fetcher: typeof fetch = fetch): Promise<Map<
     const res = await fetcher('/data/sanctioned-vessels.json');
     if (!res.ok) return null;
     const out = await res.json();
-    if (!out || typeof out.vessels !== 'object') return null;
+    // The committed placeholder ({updated: null, vessels: {}}) means "not built yet": unknown, not zero.
+    if (!out || !out.updated || typeof out.vessels !== 'object' || !Object.keys(out.vessels).length) return null;
     sanctions = new Map(Object.entries(out.vessels as Record<string, Sanction>));
     return sanctions;
   } catch {
