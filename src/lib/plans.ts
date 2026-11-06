@@ -8,7 +8,7 @@ import type { PlanId, Profile } from '@/types/user';
  */
 export type FeatureKey =
   | 'live_map' | 'feed' | 'hfc_alerts' | 'translation_he' | 'push' | 'archive_days'
-  | 'ships_aircraft' | 'satellite' | 'ai_expand_ask' | 'insights' | 'data_export' | 'expand_daily';
+  | 'ships_aircraft' | 'satellite' | 'ai_expand_ask' | 'insights' | 'data_export' | 'expand_daily' | 'weather';
 
 /** The plan whose limits apply: 'guest' when nobody is signed in (never stored on a profile). */
 export type EffectivePlan = PlanId | 'guest';
