@@ -9,6 +9,7 @@ import { spendFeature, useFeatureUsage } from '@/lib/featureUse';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { AreaLayersPanel, useAreaLayers } from './areaLayers';
 import { WeatherLayersPanel, WeatherOverlay, useWeatherLayers } from './WeatherLayers';
+import { InfraLayersPanel, InfraLegend, useInfraLayers } from './InfraLayers';
 import {
   EMERGENCY_SQUAWKS, SAT_SOURCES, SHIP_COLORS, SHIP_KINDS, fetchPlanes, fetchVessels, satDays, satKey, satTiles, shipFlag, shipKind,
   type Plane, type SatDay, type SatSource, type ShipKind, type Vessel,
@@ -373,6 +374,8 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
   // ── Aircraft ──
   const [planesOn, setPlanesOn] = useState(false);
+  // Airfields & ports: "Live traffic nearby" turns on aircraft or ships here.
+  const infra = useInfraLayers(map, lang, dir, { aircraft: () => setPlanesOn(true), ships: () => setShipsOn(true) });
   const [milOnly, setMilOnly] = useState(false);
   const [milWorld, setMilWorld] = useState(false);
   const [emergency, setEmergency] = useState(false);
@@ -514,6 +517,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
     <>
       {mapLegend}
       <WeatherOverlay s={weather} />
+      <InfraLegend s={infra} />
       {container && satOn && mode === 'compare'
         ? createPortal(
             <div
@@ -608,6 +612,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
           </section>
 
           <WeatherLayersPanel s={weather} />
+          <InfraLayersPanel s={infra} />
 
           {/* Ships */}
           <section className="space-y-2 border-b border-slate-100 py-3 dark:border-slate-800">
