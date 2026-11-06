@@ -10,11 +10,14 @@ const KEY = Deno.env.get("AISSTREAM_API_KEY") ?? "";
 const LISTEN_MS = 50_000;
 const FLUSH_MS = 10_000;
 
-// [[minLat, minLon], [maxLat, maxLon]]: eastern Mediterranean, Red Sea + Gulf of Aden, Persian Gulf + Gulf of Oman.
+// [[minLat, minLon], [maxLat, maxLon]]
 const BOXES = [
-  [[29.5, 28.0], [37.5, 37.0]],
-  [[11.0, 32.0], [30.5, 51.5]],
-  [[22.0, 47.0], [31.0, 60.0]],
+  [[29.5, 28.0], [37.5, 37.0]], // eastern Mediterranean (incl. Suez north)
+  [[11.0, 32.0], [30.5, 51.5]], // Red Sea + Gulf of Aden (Suez south, Tiran, Bab el-Mandeb)
+  [[22.0, 47.0], [31.0, 60.0]], // Persian Gulf + Gulf of Oman (Hormuz)
+  [[39.5, 25.5], [41.6, 30.0]], // Turkish Straits + Sea of Marmara (Bosphorus, Dardanelles)
+  [[36.5, 46.5], [47.5, 55.0]], // Caspian Sea
+  [[10.0, 51.5], [25.0, 66.0]], // Arabian Sea approaches
 ];
 
 async function cronOk(req: Request): Promise<boolean> {
