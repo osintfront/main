@@ -1,0 +1,18 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.1 084b4234",
+  "osm3s": {"timestamp_osm_base": "2026-11-06T10:00:00Z", "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."},
+  "elements": [
+    {"type": "node", "id": 1001, "lat": 25.2001, "lon": 51.4002, "tags": {"military": "bunker"}},
+    {"type": "way", "id": 2001, "bounds": {"minlat": 25.1600, "minlon": 51.3000, "maxlat": 25.1800, "maxlon": 51.3300},
+     "nodes": [1, 2, 3, 1], "tags": {"military": "base", "landuse": "military", "name": "Al Sailiya Camp", "name:en": "Al Sailiya Camp", "wikidata": "Q900001"}},
+    {"type": "way", "id": 2002, "bounds": {"minlat": 25.6500, "minlon": 51.5500, "maxlat": 25.6600, "maxlon": 51.5700},
+     "nodes": [4, 5, 6, 4], "tags": {"military": "naval_base", "name": "قاعدة بحرية"}},
+    {"type": "way", "id": 2003, "bounds": {"minlat": 24.9000, "minlon": 51.0000, "maxlat": 24.9100, "maxlon": 51.0200},
+     "nodes": [7, 8, 9, 7], "tags": {"landuse": "military"}},
+    {"type": "way", "id": 2004, "bounds": {"minlat": 25.1000, "minlon": 51.2900, "maxlat": 25.1400, "maxlon": 51.3400},
+     "nodes": [10, 11, 12, 10], "tags": {"military": "airfield", "name": "Al Udeid Air Base", "aeroway": "aerodrome"}},
+    {"type": "relation", "id": 3001, "bounds": {"minlat": 24.6000, "minlon": 50.9000, "maxlat": 24.7000, "maxlon": 51.1000},
+     "members": [{"type": "way", "ref": 13, "role": "outer"}], "tags": {"type": "multipolygon", "military": "training_area", "name": "Southern Training Area"}}
+  ]
+}
