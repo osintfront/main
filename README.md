@@ -78,6 +78,10 @@ Run `supabase/tests/rls_checks.sql` in the SQL editor after seeding. It imperson
 - **Forecast frames:** `.github/workflows/gfs-frames.yml` runs `tools/gfs/render_frames.py` every 6 h and writes PNGs + `gfs/latest.json` to the public Storage bucket `weather`. Needs the GitHub secret `SUPABASE_SERVICE_ROLE_KEY`.
 - **Env (Vercel):** `OWM_API_KEY`. Access: `plan_features` key `weather` (Free and up).
 
+### Airfields & ports
+- **Intelligence layers → Airfields & ports** (registered users): civil, military (by name), strips & helipads, closed, and ports for the Middle East without Israel; clustered pins, a popup with codes, runways / harbour details, the nearest town in Hebrew and "Live traffic nearby".
+- **Data:** `public/data/airfields.geojson` (OurAirports) and `public/data/ports.geojson` (NGA World Port Index), built by `tools/infra/build_infra.py` in `.github/workflows/infra-data.yml` (monthly, or Actions → "Airfields and ports data" → Run workflow). Access: `plan_features` key `airfields_ports`.
+
 ### Phase 1 — foundation (complete)
 | Requirement | Where |
 |---|---|
