@@ -4,9 +4,9 @@
 
 **Goal:** Right-click weather card (now / 48 h / 7 days / sun & moon) and a "Weather" section in the Intelligence layers panel with clouds and rain that move on a forecast timeline.
 
-**Architecture:** One Vercel route `api/weather.ts` (point forecast from MET Norway, OpenWeatherMap tile proxy, weekly member key) with a pure normalizer in `api/_lib/weatherNormalize.ts`. Astronomy is computed in the browser with `suncalc` in `src/lib/moon.ts`. Cloud and rain frames are WMS layers loaded straight from EUMETView (observed) and DWD (ICON forecast), driven by a timeline component.
+**Architecture:** One Vercel route `api/weather.ts` (point forecast from MET Norway, OpenWeatherMap tile proxy, weekly member key) with a pure normalizer in `api/_lib/weatherNormalize.ts`. Astronomy is computed in the browser with `suncalc` in `src/lib/moon.ts`. Past cloud and rain frames are WMS layers from EUMETView; forecast frames are PNGs rendered every 6 h from NOAA GFS by a GitHub Actions job into the public Storage bucket `weather`; one timeline component drives both.
 
-**Tech Stack:** React 19, Leaflet 1.9, TypeScript 5.8, Vite, Vercel functions (Web `Request`/`Response`), Supabase (Postgres migrations), `node --test` with `--experimental-strip-types`, `suncalc`.
+**Tech Stack:** Python 3.12 (eccodes, numpy, Pillow) in GitHub Actions, React 19, Leaflet 1.9, TypeScript 5.8, Vite, Vercel functions (Web `Request`/`Response`), Supabase (Postgres migrations), `node --test` with `--experimental-strip-types`, `suncalc`.
 
 **Spec:** `docs/superpowers/specs/2026-11-06-weather-layer-design.md`
 
@@ -22,8 +22,9 @@
 - Times shown in the user's clock; the point's local time shown small next to it when its zone differs.
 - Moon state thresholds (lit fraction): `<0.03` no moon · `0.45–0.55` half · `>0.97` full · otherwise partial.
 - Effective moonlight: `fraction × (1 − 0.9 × cloud/100)`, `0` when the moon's altitude ≤ 0.
-- Timeline: −6 h … +72 h, step 1 h; past = Meteosat clouds only; from now = DWD ICON clouds + rain; play ≈ 2 frames/s; preload at most the next 3 frames.
-- Credits: "MET Norway (CC BY 4.0)", "EUMETSAT", "Deutscher Wetterdienst", "OpenWeatherMap".
+- Timeline: −6 h … +72 h, step 1 h; past = EUMETView `msg_fes:ir108` clouds + `msg_fes:h60b` rain; from now = GFS cloud + rain frames; play ≈ 2 frames/s; preload at most the next 3 frames.
+- GFS box: lon 25–65, lat 10–45; frames +1…+72 h; bucket `weather` (public); manifest `gfs/latest.json`.
+- Credits: "MET Norway (CC BY 4.0)", "EUMETSAT", "NOAA GFS", "OpenWeatherMap".
 - Texts in Hebrew + English using the `TXT = { he, en }` pattern of `IntelLayers.tsx`. Code, comments, commit messages and DB names in English.
 - Commits end with the session's Co-Authored-By / Claude-Session lines.
 
@@ -37,30 +38,63 @@
 
 ---
 
-### Task 0: Verify the external sources and capture fixtures
+### Task 0: Verify the external sources and capture fixtures — DONE (gate result changed the plan)
 
-No product code. Uses the user's browser (built-in browser, or Claude in Chrome), because these hosts refuse this environment's proxy.
+DWD has no cloud-cover forecast (rain only as 6 h totals); ECMWF public WMS has neither. EUMETView verified:
+`https://view.eumetsat.int/geoserver/wms`, layers `msg_fes:ir108` and `msg_fes:h60b`, TIME every 15 min, ISO
+`2026-11-06T07:00:00.000Z`, AccessConstraints none, Fees none. Owner chose GFS frames (Task 0b).
+MET fixture: synthetic values with the live response's exact shape (see the file's generator note in the ledger).
 
-**Files:**
-- Create: `src/lib/weatherSources.ts`
-- Create: `tests/weather/fixtures/met-compact.json`
+**Files:** `src/lib/weatherSources.ts`, `tests/weather/fixtures/met-compact.json`
 
 **Interfaces:**
-- Produces (`src/lib/weatherSources.ts`, exported consts, values filled from what you verify):
-  `DWD_WMS_URL: string`, `DWD_LAYER_CLOUD: string`, `DWD_LAYER_RAIN: string`,
-  `EUMET_WMS_URL: string`, `EUMET_LAYER_CLOUD: string`, `WMS_TIME_FORMAT: 'iso-hour'` (comment the exact format the servers accept, e.g. `2026-11-06T09:00:00.000Z`).
+- Produces (`src/lib/weatherSources.ts`): `EUMET_WMS_URL`, `EUMET_LAYER_CLOUD = 'msg_fes:ir108'`,
+  `EUMET_LAYER_RAIN = 'msg_fes:h60b'`, `GFS_BOUNDS: [[10, 25], [45, 65]]`, `GFS_MANIFEST_PATH = 'gfs/latest.json'`,
+  `WEATHER_BUCKET = 'weather'`.
 
-- [ ] **Step 1: Read DWD capabilities** at `https://maps.dwd.de/geoserver/dwd/wms?service=WMS&request=GetCapabilities`. Find global ICON layers for total precipitation and total cloud cover. Record: names, bounding box, `TIME` dimension extent and step, the service's AccessConstraints/Fees text.
-- [ ] **Step 2: Gate.** The bbox must cover 25°E–65°E / 10°N–45°N, the TIME extent must reach ≥ +48 h hourly, and AccessConstraints must allow reuse with attribution. **If any fails: STOP, do not continue the plan, report to the owner with alternative C (own GFS tiles).**
-- [ ] **Step 3: Read EUMETView capabilities** at `https://view.eumetsat.int/geoserver/wms?service=WMS&request=GetCapabilities`. Pick the Meteosat 0° IR 10.8 µm (or cloud) layer covering the Middle East; record its name and TIME extent (must include each of the last 6 hours).
-- [ ] **Step 4: Load one tile of each layer in the browser** for the Middle East at a forecast hour (DWD) and the last hour (EUMETView) and confirm pictures come back (not blank, not an XML error).
-- [ ] **Step 5: Save a MET sample**: open `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=33.27&lon=35.20` and save the JSON to `tests/weather/fixtures/met-compact.json`.
-- [ ] **Step 6: Write `src/lib/weatherSources.ts`** with the verified values and a header comment listing the AccessConstraints text and the date checked.
-- [ ] **Step 7: Commit**
+---
+
+### Task 0b: GFS forecast frames pipeline
+
+**Files:**
+- Create: `tools/gfs/render_frames.py`, `tools/gfs/requirements.txt` (`eccodes`, `numpy`, `Pillow`, `requests`)
+- Create: `tools/gfs/test_render.py`
+- Create: `.github/workflows/gfs-frames.yml`
+- Create: `supabase/migrations/20261106000093_weather_bucket.sql`
+
+**Interfaces:**
+- Produces (Python, pure, tested): `merc_rows(lat_top: float, lat_bottom: float, height: int) -> np.ndarray` (latitude of each
+  output row centre, evenly spaced in Web-Mercator y); `resample(grid: np.ndarray, lats: np.ndarray, lons: np.ndarray, width: int)
+  -> np.ndarray` (bilinear onto the Mercator raster, width px across lon 25–65); `cloud_rgba(pct: np.ndarray) -> np.ndarray`
+  (alpha 0 at ≤10%, rising linearly to 0.85·255 at 100%, colour #f1f5f9); `rain_rgba(mmh: np.ndarray) -> np.ndarray`
+  (transparent < 0.1 mm/h; bands 0.1/0.5/2/5/10 mm/h → #93c5fd, #3b82f6, #1d4ed8, #facc15, #dc2626, alpha 210);
+  `manifest(run: datetime, hours: list[int]) -> dict`.
+- Produces (storage): `weather/gfs/<run YYYYMMDDHH>/{cloud,rain}/<fff>.png` and `weather/gfs/latest.json` =
+  `{ "run": ISO, "bounds": [[10,25],[45,65]], "frames": [{ "time": ISO, "cloud": path, "rain": path }] }` (paths relative to the bucket).
+
+- [ ] **Step 1: Write failing tests** `tools/gfs/test_render.py` (unittest): `merc_rows(45, 10, 100)` → first ≈ 44.8, last ≈ 10.2,
+  strictly decreasing, row spacing larger in latitude near 10 than near 45; `cloud_rgba([0, 10, 100])` alpha `[0, 0, 216]`;
+  `rain_rgba([0.05, 0.3, 12])` → alpha 0, colour #93c5fd, colour #dc2626; `resample` of a constant grid returns the constant;
+  `manifest(datetime(2026,11,6,6), [1, 2])` → frames times `2026-11-06T07:00:00Z`, `2026-11-06T08:00:00Z`, paths
+  `gfs/2026110606/cloud/001.png`.
+- [ ] **Step 2: Run** `python3 -m unittest tools/gfs/test_render.py -v`. Expected: FAIL (import error).
+- [ ] **Step 3: Implement the pure functions**, then `main()`: pick the newest cycle whose `f072` exists on NOMADS
+  (`filter_gfs_0p25_1hr.pl`, `var_TCDC` + `lev_entire_atmosphere`, `var_PRATE` + `lev_surface`, subregion 25–65 / 10–45),
+  download f001…f072 (1 s apart, 3 retries), decode with eccodes (`tcc` %, `prate` kg m⁻² s⁻¹ × 3600 → mm/h), render 800 px wide,
+  upload with `x-upsert: true` and `cache-control: public, max-age=21600` via `$SUPABASE_URL/storage/v1/object/weather/...`
+  (service-role key from env), then the manifest (`max-age=300`), then delete runs older than the previous one.
+- [ ] **Step 4: Run tests.** Expected: PASS.
+- [ ] **Step 5: Migration** — public bucket `weather` (`insert into storage.buckets (id, name, public) values ('weather','weather',true) on conflict do nothing`); apply with Supabase MCP.
+- [ ] **Step 6: Workflow** — `schedule: cron '40 3,9,15,21 * * *'` + `workflow_dispatch`; Python 3.12; `pip install -r tools/gfs/requirements.txt`;
+  env `SUPABASE_URL` (the project URL, not secret) and `SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}`; timeout 30 min.
+- [ ] **Step 7: Owner action** — ask the owner to add the GitHub secret `SUPABASE_SERVICE_ROLE_KEY`. After it exists, run the
+  workflow once (workflow_dispatch) and check `gfs/latest.json` lists 72 frames and one PNG opens. Until then, later tasks proceed;
+  the forecast part of the timeline shows "forecast not available yet".
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/lib/weatherSources.ts tests/weather/fixtures/met-compact.json
-git commit -m "Weather: verified WMS sources + MET sample fixture"
+git add tools/gfs .github/workflows/gfs-frames.yml supabase/migrations/20261106000093_weather_bucket.sql
+git commit -m "Weather: GFS cloud and rain forecast frames (GitHub Actions → Storage)"
 ```
 
 ---
@@ -198,13 +232,16 @@ git commit -m "Weather: api route (MET point forecast, OWM tile proxy, member ke
   - `owmTileUrl(layer: 'temp' | 'wind', key: string): string` → `/api/weather?tile=${layer}/{z}/{x}/{y}&k=${key}`
   - `interface Frame { time: string; offsetH: number; kind: 'observed' | 'forecast' }`
   - `buildFrames(now: Date, past = 6, future = 72): Frame[]` — `time` = whole UTC hour ISO; offsets −6…−1 `observed`, 0…72 `forecast`.
-  - `wmsLayer(kind: 'cloudObserved' | 'cloudForecast' | 'rainForecast', time: string, opacity: number): L.TileLayer.WMS`
+  - `fetchGfsManifest(): Promise<GfsManifest | null>` — public Storage URL of `gfs/latest.json`; null on 404/error.
+  - `interface GfsManifest { run: string; bounds: [[number, number], [number, number]]; frames: { time: string; cloud: string; rain: string }[] }`
+  - `pastLayer(kind: 'cloud' | 'rain', time: string, opacity: number): L.TileLayer.WMS` (EUMETView)
+  - `forecastLayer(kind: 'cloud' | 'rain', frame: GfsManifest['frames'][number], opacity: number): L.ImageOverlay`
 
 - [ ] **Step 1: Write failing tests** `tests/weather/client.test.ts`:
   - `buildFrames(new Date('2026-11-06T09:41:00Z'))` → length 79; first `{ time: '2026-11-06T03:00:00.000Z', offsetH: -6, kind: 'observed' }`; the one with `offsetH: 0` is `forecast` at `09:00Z`; last `offsetH === 72`
   - Review Focus 3: `fetchPoint` with a fake fetcher that answers 403 to the first point call and 200 after a new `?key=1` → resolves; the fake saw exactly two `?key=1` calls (initial + forced) and two point calls
 - [ ] **Step 2: Run** `node --experimental-strip-types --test tests/weather/client.test.ts`. Expected: FAIL.
-- [ ] **Step 3: Implement** (keep Leaflet imports out of the functions under test, or import `wmsLayer` from a separate tiny module if `node --test` cannot load Leaflet).
+- [ ] **Step 3: Implement** (keep Leaflet imports out of the functions under test, or import `pastLayer` / `forecastLayer` from a separate tiny module if `node --test` cannot load Leaflet).
 - [ ] **Step 4: Run tests.** Expected: PASS.
 - [ ] **Step 5: Commit**
 
@@ -250,13 +287,13 @@ git commit -m "Weather: right-click weather and sun/moon card"
 - Modify: `src/components/map/IntelLayers.tsx` (render `<WeatherLayers map={map} />` as a section; add its legend rows to `mapLegend`)
 
 **Interfaces:**
-- Consumes: `buildFrames`, `wmsLayer`, `owmTileUrl`, `weatherKey` (Task 4); `hasFeature(undefined, 'weather')`, `openGate`, `useAuth`.
+- Consumes: `buildFrames`, `fetchGfsManifest`, `pastLayer`, `forecastLayer`, `owmTileUrl`, `weatherKey` (Task 4); `hasFeature(undefined, 'weather')`, `openGate`, `useAuth`.
 - Produces: `<WeatherLayers map={L.Map | null} />` — owns its toggles, opacity, timeline bar (portal into the map container, bottom centre) and legend state.
 
 - [ ] **Step 1: Section UI** — four toggles (Clouds, Rain, Temperature, Wind) with the same `sectionHead` look as the other sections; one opacity slider (default 0.7); guests see 🔒 and get `openGate('signup')`; a toggle whose layer fires `tileerror` for its first tiles shows ⚠️ "לא זמין" / "Unavailable".
 - [ ] **Step 2: Temperature / wind** — `L.tileLayer(owmTileUrl(...))`, attribution "OpenWeatherMap", "now" only.
-- [ ] **Step 3: Timeline** (visible while Clouds or Rain is on) — slider over `buildFrames(new Date())`, ▶️/⏸, label in the user's clock e.g. "ו׳ 18:00 (+9 ש׳)" / "Fri 18:00 (+9 h)", "now" mark. Observed frames show `cloudObserved` only; forecast frames show `cloudForecast` (if Clouds) and `rainForecast` (if Rain). Play at 500 ms per frame; keep at most the current + next 3 frame layers on the map (hidden ones at opacity 0); remove layers that fall out of the window; a frame whose tiles error is marked and skipped by play.
-- [ ] **Step 4: Legends** — colour legends for active weather layers in the map legend, with credits (EUMETSAT, Deutscher Wetterdienst, OpenWeatherMap).
+- [ ] **Step 3: Timeline** (visible while Clouds or Rain is on) — slider over `buildFrames(new Date())`, ▶️/⏸, label in the user's clock e.g. "ו׳ 18:00 (+9 ש׳)" / "Fri 18:00 (+9 h)", "now" mark. Observed frames use `pastLayer` (clouds and/or rain); forecast frames use `forecastLayer` from the manifest entry whose `time` equals the frame's; no manifest or no entry → that frame is skipped and the bar notes "תחזית עדיין לא זמינה" / "Forecast not available yet". Play at 500 ms per frame; keep at most the current + next 3 frame layers on the map (hidden ones at opacity 0); remove layers that fall out of the window; a frame whose tiles error is marked and skipped by play.
+- [ ] **Step 4: Legends** — colour legends for active weather layers in the map legend, with credits (EUMETSAT, NOAA GFS, OpenWeatherMap).
 - [ ] **Step 5: Verify** `npm run check` exit 0; in the dev server: each toggle shows its layer over the Middle East; ▶️ advances the label and the clouds/rain move; the network panel never shows more than 4 frame layers loading at once; opacity applies to all.
 - [ ] **Step 6: Commit**
 

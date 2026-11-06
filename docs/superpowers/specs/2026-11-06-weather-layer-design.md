@@ -22,11 +22,15 @@ Registered users (Free and up) can:
 - **Sun and moon (all of it):** computed in the browser with `suncalc` (`src/lib/moon.ts`), no network —
   dawns/dusks (civil, nautical, astronomical), sunrise/sunset, moonrise/moonset, illumination and the
   moon's altitude per hour. (Changed while planning: MET Sunrise 3.0 does not return twilight times.)
-- **Observed clouds:** EUMETSAT Meteosat (0°) imagery via EUMETView WMS, hourly frames
-  (hourly imagery is licence-free; 15-minute imagery is free only with a 3-hour delay).
-- **Forecast clouds and rain (moving layer):** DWD ICON global model via the DWD GeoServer WMS
-  (open data, credit "Deutscher Wetterdienst"), with the WMS `TIME` parameter, hourly steps, 48–72 h.
-  **Unverified from the design environment** — see Task 0.
+- **Observed clouds and rain (past hours):** EUMETView WMS (no access constraints, no fees):
+  `msg_fes:ir108` (Meteosat 0° IR 10.8 µm) for clouds and `msg_fes:h60b` (blended observed precipitation),
+  both every 15 min; we use hourly frames.
+- **Forecast clouds and rain (moving layer):** NOAA GFS 0.25° (public domain), total cloud cover
+  (`TCDC`, entire atmosphere) and precipitation rate (`PRATE`, surface), hourly +1…+72 h. A GitHub
+  Actions job (`tools/gfs/render_frames.py`, every 6 h) downloads only the Middle East box
+  (25°E–65°E, 10°N–45°N) from NOMADS, renders one Web-Mercator PNG per hour per layer, uploads them to
+  the public Supabase Storage bucket `weather` and writes `gfs/latest.json`. The map shows them with
+  `L.imageOverlay`. (Changed in Task 0: DWD has no cloud-cover forecast and only 6-hour rain totals.)
 - **Temperature and wind layers:** OpenWeatherMap Weather Maps 1.0 tiles (Free plan: ODbL,
   commercial use allowed, 60 calls/min, 1M/month), proxied so the key stays on the server.
 - **Units:** °C, mm, km/h with knots in brackets. **Times:** the user's clock; when the point's
@@ -34,13 +38,9 @@ Registered users (Free and up) can:
 - **Languages:** Hebrew + English, following the `TXT` pattern in `IntelLayers.tsx`.
   Code, comments, commit messages and DB names in English.
 
-## Task 0 — verify DWD coverage (first step of the plan)
-Through the user's browser (the WMS refuses this environment's proxy), read
-`https://maps.dwd.de/geoserver/dwd/wms?service=WMS&request=GetCapabilities` and confirm:
-a global ICON layer for total precipitation and one for total cloud cover; their bounding box covers
-25°E–65°E / 10°N–45°N; a `TIME` dimension with hourly forecast steps; the service's access/licence text.
-If any of these fail, stop and return to the owner with alternative C: our own tiles from NOAA GFS
-(a job every 6 h that downloads GFS for the region and renders PNG tiles to Supabase Storage).
+## Task 0 result (2026-11-06)
+DWD GeoServer: ICON rain only as `Icon_reg025_fd_sl_TOTPREC06H` (6 h totals, 3 h step); no cloud-cover
+layer. ECMWF public WMS: no cloud/precipitation layers. EUMETView: verified as above. → GFS pipeline.
 
 ## Architecture
 
@@ -61,9 +61,9 @@ If any of these fail, stop and return to the owner with alternative C: our own t
   (stale-while-revalidate 3600) and log.
 
 ### Browser-direct layers (no server route)
-- **EUMETView WMS** (Meteosat IR/cloud product): one `L.tileLayer.wms` per frame, `TIME` = the hour.
-- **DWD WMS** (ICON precipitation + cloud cover): one `L.tileLayer.wms` per frame, `TIME` = the hour.
-- Both are free public WMS endpoints; attribution strings are set on the layers.
+- **EUMETView WMS** (`msg_fes:ir108`, `msg_fes:h60b`): one `L.tileLayer.wms` per past frame, `TIME` = the hour.
+- **GFS frames**: `L.imageOverlay(<public storage URL>, [[10, 25], [45, 65]])` per forecast frame, listed in `gfs/latest.json`.
+- Attribution strings are set on the layers ("EUMETSAT", "NOAA GFS").
 
 ### Client
 - `src/lib/weather.ts` — fetchers (`weatherKey`, `fetchPoint`), types, tile URL builders,
@@ -99,8 +99,8 @@ Footer: source credits (MET Norway, CC BY 4.0) and last-updated time.
 
 ### Timeline (clouds and rain that move with the forecast)
 Shown under the map while Clouds or Rain is on.
-- Range: last 6 h → +72 h, step 1 h, "now" marked. Past hours show Meteosat observed clouds only
-  (no rain layer in the past); from "now" on, clouds and rain come from the DWD ICON forecast.
+- Range: last 6 h → +72 h, step 1 h, "now" marked. Past hours show observed clouds and rain
+  (EUMETView); from "now" on, clouds and rain come from the GFS frames.
 - Slider + ▶️/⏸ + current label, e.g. "Fri 18:00 (+9 h)". Play loops at ~2 frames/s.
 - Before play: preload only the next 3 frames for the current view and zoom; while playing, show one
   frame and load the next. Never 72 layers at once. Frames that fail are skipped.
