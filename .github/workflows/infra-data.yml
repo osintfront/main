@@ -20,8 +20,14 @@ jobs:
       - name: Tests
         run: python -m unittest tools/infra/test_build.py -v
       - name: Build
-        # Exit 1 = airfields written but ports kept from the last run; commit what changed and fail visibly.
-        run: python tools/infra/build_infra.py || echo "PORTS_FAILED=1" >> "$GITHUB_ENV"
+        # Exit 2 = airfields written, ports kept from the last run (commit, then fail visibly).
+        # Exit 3 = airfields failed, nothing written (fail now).
+        run: |
+          set +e
+          python tools/infra/build_infra.py
+          code=$?
+          if [ "$code" = "2" ]; then echo "PORTS_FAILED=1" >> "$GITHUB_ENV"; exit 0; fi
+          exit $code
       - name: Commit
         run: |
           git config user.name "infra-data bot"
@@ -31,4 +37,4 @@ jobs:
           git push
       - name: Ports status
         if: env.PORTS_FAILED == '1'
-        run: echo "::error::World Port Index could not be read; ports.geojson was not updated (see the Build step log)" && exit 1
+        run: echo "::error::World Port Index could not be read; ports.geojson was not updated (see the Build step log for the reason and the per-country counts)" && exit 1

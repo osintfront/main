@@ -97,3 +97,10 @@ export function loadInfra(kind: 'airfields' | 'ports', fetcher: typeof fetch = f
   }
   return p;
 }
+
+/** The bubble for a cluster of airfields or ports: the count on a circle in the layer's colour. */
+export function clusterIconHtml(count: number, color: string): string {
+  const size = count < 10 ? 28 : count < 100 ? 32 : count < 1000 ? 36 : 40;
+  return `<span style="display:grid;place-items:center;width:${size}px;height:${size}px;border-radius:9999px;background:${color};`
+    + `color:#fff;font:600 12px/1 system-ui,sans-serif;box-shadow:0 0 0 3px rgba(255,255,255,.85),0 1px 4px rgba(0,0,0,.35)">${count}</span>`;
+}

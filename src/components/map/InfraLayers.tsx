@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { supabase } from '@/integrations/supabase/client';
-import { INFRA_TXT, airfieldPopup, loadInfra, portPopup, type AirfieldClass, type AirfieldProps, type PortProps } from '@/lib/infra';
+import { INFRA_TXT, airfieldPopup, clusterIconHtml, loadInfra, portPopup, type AirfieldClass, type AirfieldProps, type PortProps } from '@/lib/infra';
 
 type Toggle = AirfieldClass | 'ports';
 const CLASSES: AirfieldClass[] = ['civil', 'military', 'strip', 'closed'];
@@ -81,9 +81,16 @@ export function useInfraLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rt
   const markers = useRef<{ airfields: { k: AirfieldClass; m: L.Marker }[]; ports: L.Marker[] }>({ airfields: [], ports: [] });
   useEffect(() => {
     if (!map) return;
-    const cluster = () => L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false, disableClusteringAtZoom: 11, chunkedLoading: true });
+    const cluster = (color: string) => L.markerClusterGroup({
+      maxClusterRadius: 40, showCoverageOnHover: false, disableClusteringAtZoom: 11, chunkedLoading: true,
+      iconCreateFunction: (c) => {
+        const n = c.getChildCount();
+        const size = n < 10 ? 28 : n < 100 ? 32 : n < 1000 ? 36 : 40;
+        return L.divIcon({ className: 'ofm-infra-cluster', iconSize: [size, size], html: clusterIconHtml(n, color) });
+      },
+    });
     if (loaded.airfields) {
-      groups.current.airfields ??= cluster();
+      groups.current.airfields ??= cluster('#334155');
       markers.current.airfields = loaded.airfields.features.map((f) => {
         const p = f.properties as AirfieldProps;
         const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
@@ -93,7 +100,7 @@ export function useInfraLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rt
       });
     }
     if (loaded.ports) {
-      groups.current.ports ??= cluster();
+      groups.current.ports ??= cluster(COLORS.ports);
       markers.current.ports = loaded.ports.features.map((f) => {
         const p = f.properties as PortProps;
         const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
