@@ -19,8 +19,9 @@ Registered users (Free and up) can:
 - **Point forecast:** MET Norway Locationforecast 2.0 (`compact`), CC BY 4.0 — commercial use OK
   with credit. Requests identify the site (`User-Agent: osintfront.com weather (+https://osintfront.com)`);
   responses are cached; total traffic stays far below 20 req/s.
-- **Sun/moon times:** MET Norway Sunrise 3.0 (`/sun` and `/moon`), cached for the day.
-- **Moon phase and illumination:** computed in the browser (`src/lib/moon.ts`), no network.
+- **Sun and moon (all of it):** computed in the browser with `suncalc` (`src/lib/moon.ts`), no network —
+  dawns/dusks (civil, nautical, astronomical), sunrise/sunset, moonrise/moonset, illumination and the
+  moon's altitude per hour. (Changed while planning: MET Sunrise 3.0 does not return twilight times.)
 - **Observed clouds:** EUMETSAT Meteosat (0°) imagery via EUMETView WMS, hourly frames
   (hourly imagery is licence-free; 15-minute imagery is free only with a 3-hour delay).
 - **Forecast clouds and rain (moving layer):** DWD ICON global model via the DWD GeoServer WMS
@@ -48,7 +49,6 @@ If any of these fail, stop and return to the owner with alternative C: our own t
 |---|---|---|
 | `GET ?key=1` | — returns the member's weekly tile key (`isMember` + the existing signed weekly key in `api/_lib/member.ts`) | `no-store` |
 | `GET ?point=lat,lng&k=` | MET Locationforecast; lat/lng rounded to 0.05° | 1800 s, honour upstream `Expires` |
-| `GET ?sun=lat,lng&date=YYYY-MM-DD&offset=±HH:MM&k=` | MET Sunrise 3.0 (sun + moon) | 86400 s |
 | `GET ?tile=temp\|wind/z/x/y&k=` | OpenWeatherMap tiles (`OWM_API_KEY` env var) | 600 s |
 
 - Every route except `key` requires a valid weekly key `k`. The key is part of the URL, so CDN-cached
@@ -66,9 +66,9 @@ If any of these fail, stop and return to the owner with alternative C: our own t
 - Both are free public WMS endpoints; attribution strings are set on the layers.
 
 ### Client
-- `src/lib/weather.ts` — fetchers (`weatherKey`, `fetchPoint`, `fetchSun`), types, tile URL builders,
+- `src/lib/weather.ts` — fetchers (`weatherKey`, `fetchPoint`), types, tile URL builders,
   frame list builder (past observed hours + future forecast hours).
-- `src/lib/moon.ts` — pure functions: `moonPhase(date)` → `{ fraction, phase: 'new'|'partial'|'half'|'full', waxing }`;
+- `src/lib/moon.ts` — pure functions over `suncalc`: `sunTimes(date, lat, lng)`, `moonPhase(date)` → `{ fraction, phase: 'new'|'partial'|'half'|'full', waxing }`;
   `effectiveLight(fraction, cloudPct, moonUp)` → `fraction × (1 − 0.9 × cloud/100)`, 0 when the moon is down.
   Phase names follow the project plan: **no moon** (<3% lit), **partial**, **half** (45–55%), **full** (>97%).
 - `src/components/map/WeatherCard.tsx` — the right-click card (four tabs, below).
@@ -107,8 +107,8 @@ Shown under the map while Clouds or Rain is on.
 - Temperature and wind stay "now" (OWM 1.0 has no forecast).
 
 ## Errors
-- MET down → card shows "No weather data right now" + retry; the Sun & moon tab still shows the
-  moon computed locally (times show "—").
+- MET down → card shows "No weather data right now" + retry; the Sun & moon tab still works fully
+  (computed locally); only "light after clouds" shows "—".
 - A tile source failing → that toggle shows ⚠️ "Unavailable"; nothing else changes.
 - Missing timeline frames are skipped; if no forecast frames load, the timeline shows observed hours only
   with a note.
