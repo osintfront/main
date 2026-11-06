@@ -260,6 +260,7 @@ export const he: Record<TranslationKey, string> = {
   'login.perk1': "מפה חיה 24/7",
   'login.perk2': "התראות בזמן אמת",
   'login.perk3': "ניתוח מקורות גלויים",
+  'login.guest': 'המשך כאורח',
   'login.subscribe': "עוד אין לך גישה? הצטרפו למנוי ←",
   'push.title': "התראות למכשיר",
   'push.subtitle': "צליל והתראה גם כשהאתר סגור, לפי הסינון ובחירת הסוגים כאן",

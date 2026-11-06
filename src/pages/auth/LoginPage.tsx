@@ -225,6 +225,13 @@ export function LoginPage() {
         </p>
       </form>
       )}
+            <Link
+              to="/"
+              data-auth="guest"
+              className="mt-4 flex h-10 w-full items-center justify-center rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              {t('login.guest')}
+            </Link>
           </div>
 
           <Link to="/contact" className="mt-5 flex items-center justify-center gap-2 rounded-xl border border-sky-400/30 bg-gradient-to-r from-sky-500/15 to-indigo-500/15 px-4 py-3 text-sm font-semibold text-sky-100 transition hover:border-sky-300/60 hover:from-sky-500/25 hover:to-indigo-500/25">

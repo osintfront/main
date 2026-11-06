@@ -258,6 +258,7 @@ export const en = {
   'login.perk1': "Live map 24/7",
   'login.perk2': "Real-time alerts",
   'login.perk3': "Open-source analysis",
+  'login.guest': 'Continue as guest',
   'login.subscribe': "No access yet? Get a subscription →",
   'push.title': "Device notifications",
   'push.subtitle': "Sound + alert even when the site is closed, by your filters and the types here",
