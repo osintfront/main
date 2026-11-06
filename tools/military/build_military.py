@@ -26,6 +26,7 @@ OUT = os.path.join(os.path.dirname(__file__), '..', '..', 'public', 'data')
 MIN_SITES = 9500  # about 70 % of the first run (13,950 sites, 2026-11-06)
 MAX_BYTES = 8_000_000
 MUST_HAVE = ('TR', 'IR', 'EG', 'SA')
+EMPTY_OK = {'PS'}  # both servers answer PS with nothing (checked on the second run, 2026-11-06)
 WD_RETRY = (30, 90)
 PAUSE = 5           # seconds between Overpass countries
 RETRY = (60, 180, 420)  # waits before the 2nd, 3rd and 4th try of a country (the public server is often full)
@@ -127,7 +128,7 @@ def parse_overpass(data: dict, cc: str) -> list[dict]:
     elements = data.get('elements')
     if not isinstance(elements, list):
         raise ValueError(f'Overpass {cc}: no "elements" in the answer (keys: {sorted(data)})')
-    if not elements:  # every one of the 20 countries has some; an empty answer is a server that lost its area index
+    if not elements and cc not in EMPTY_OK:  # an empty answer is a server that lost its area index
         raise ValueError(f'Overpass {cc}: an empty answer')
     sites = []
     for el in elements:

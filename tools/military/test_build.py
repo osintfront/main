@@ -140,6 +140,10 @@ class Parse(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'EG'):
             parse_overpass({'elements': []}, 'EG')
 
+    def test_palestine_may_be_empty(self):
+        # Second run: both servers answered PS with nothing three times (its sites are Israeli and not tagged as such).
+        self.assertEqual(parse_overpass({'elements': []}, 'PS'), [])
+
     def test_israeli_sites_are_dropped(self):
         data = {'elements': [
             {'type': 'node', 'id': 1, 'lat': 31.9, 'lon': 35.2, 'tags': {'military': 'checkpoint'}},
