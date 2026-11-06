@@ -272,7 +272,9 @@ def _set_ops(site: dict, ops: list[tuple[str | None, str | None]]):
     ccs = [cc for _, cc in ops if cc]
     foreign = [cc for cc in ccs if cc != site['cc']]
     site['op'] = foreign[0] if foreign else (ccs[0] if ccs else None)
-    site['opn'] = ' · '.join(n for n, _ in ops if n) or None
+    # Foreign operators first, so the name next to the flag is the flag's.
+    ordered = sorted(ops, key=lambda o: 0 if o[1] and o[1] != site['cc'] else 1)
+    site['opn'] = ' · '.join(n for n, _ in ordered if n) or None
     site['f'] = True if foreign else None
     site['_ccs'] = ccs
 

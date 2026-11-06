@@ -207,7 +207,7 @@ class Wikidata(unittest.TestCase):
         by = {s.get('wd'): s for s in self.merged()}
         u = by['Q542588']
         self.assertEqual((u['k'], u['air'], u['f'], u['op'], u['cc']), ('base', True, True, 'US', 'QA'))
-        self.assertEqual(u['opn'], 'Qatar Emiri Air Force · United States Air Force · Royal Air Force')
+        self.assertEqual(u['opn'], 'United States Air Force · Royal Air Force · Qatar Emiri Air Force')  # foreign first, next to the flag
         self.assertEqual(by['Q1083424']['op'], 'US')
         self.assertEqual(by['Q21582584']['op'], 'RU')
         self.assertEqual(by['Q2886453']['op'], 'FR')

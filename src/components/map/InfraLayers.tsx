@@ -1,6 +1,6 @@
 // "Airfields & ports" in the Intelligence layers panel: OurAirports and the NGA World Port Index for the
 // Middle East without Israel (static files built by tools/infra/build_infra.py), clustered, with popups.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { Anchor, Plane } from 'lucide-react';
@@ -132,7 +132,7 @@ export function useInfraLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rt
 
 type InfraState = ReturnType<typeof useInfraLayers>;
 
-export function InfraLayersPanel({ s }: { s: InfraState }) {
+export function InfraLayersPanel({ s, children }: { s: InfraState; children?: ReactNode }) {
   const { T } = s;
   const row = (k: Toggle, label: string) => {
     const failed = k === 'ports' ? s.bad.ports : s.bad.airfields;
@@ -152,14 +152,15 @@ export function InfraLayersPanel({ s }: { s: InfraState }) {
       </p>
       <div className="space-y-1.5 ps-6">
         {row('civil', T.civilToggle)}{row('military', T.militaryToggle)}{row('strip', T.stripToggle)}{row('closed', T.closedToggle)}{row('ports', T.ports)}
+        {children}
       </div>
     </section>
   );
 }
 
-/** A small legend while any airfield/port toggle is on. */
-export function InfraLegend({ s }: { s: InfraState }) {
-  if (!s.any) return null;
+/** A small legend while any airfield/port toggle (or, through `extra`, a military-bases toggle) is on. */
+export function InfraLegend({ s, extra, children }: { s: InfraState; extra?: boolean; children?: ReactNode }) {
+  if (!s.any && !extra) return null;
   const { T } = s;
   const items: [Toggle, string][] = [['civil', T.civil], ['military', T.military], ['strip', T.strip], ['closed', T.closed], ['ports', T.ports]];
   return (
@@ -169,6 +170,7 @@ export function InfraLegend({ s }: { s: InfraState }) {
           <span className="grid size-3.5 place-items-center rounded-full text-[8px] text-white" style={{ background: COLORS[k] }} aria-hidden>{GLYPH[k]}</span>{label}
         </span>
       ))}
+      {children}
     </div>
   );
 }

@@ -51,6 +51,11 @@ test('Hebrew popup is right-to-left with Hebrew labels and the town', () => {
   assert.ok(h.includes('בסיס ימי'));
   assert.ok(h.includes('מופעל על ידי'));
   assert.ok(h.includes('ליד ג׳יבוטי'));
+  assert.ok(/<div dir="ltr"[^>]*>© OpenStreetMap contributors/.test(h), 'credit stays left-to-right');
+});
+
+test('row labels never wrap', () => {
+  assert.ok(militaryPopup(foreign, 'en', null, 1, 2).includes('white-space:nowrap'));
 });
 
 test('a foreign air base is labelled as an air base', () => {

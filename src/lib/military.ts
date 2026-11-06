@@ -64,5 +64,5 @@ export function militaryPopup(p: MilProps, lang: Lang, near: string | null, lat:
     + `<div style="color:#64748b;margin-bottom:4px">${esc(p.air ? T.air : T.kind[p.k])}</div>`
     + rows.join('')
     + (links.length ? `<div style="margin-top:6px;display:flex;gap:10px;color:#0369a1">${links.join('')}</div>` : '')
-    + `<div style="margin-top:4px;font-size:10px;color:#94a3b8">${esc(credit)}</div></div>`;
+    + `<div dir="ltr" style="margin-top:4px;font-size:10px;color:#94a3b8;text-align:start">${esc(credit)}</div></div>`;
 }

@@ -43,7 +43,8 @@ export function countryName(cc: string, lang: Lang): string {
 
 /** One label/value line of a popup; `value` is HTML (escape it first). */
 export function infoRow(label: string, value: string): string {
-  return `<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#64748b">${esc(label)}</span><span dir="auto">${value}</span></div>`;
+  return `<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#64748b;white-space:nowrap">${esc(label)}</span>`
+    + `<span dir="auto" style="text-align:end">${value}</span></div>`;
 }
 
 function shell(lang: Lang, name: string, near: string | null, kind: string, rows: string[], button: string, credit: string): string {

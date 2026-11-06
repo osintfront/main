@@ -10,6 +10,7 @@ import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { AreaLayersPanel, useAreaLayers } from './areaLayers';
 import { WeatherLayersPanel, WeatherOverlay, useWeatherLayers } from './WeatherLayers';
 import { InfraLayersPanel, InfraLegend, useInfraLayers } from './InfraLayers';
+import { MilitaryLayersGroup, MilitaryLegendItems, useMilitaryLayers } from './MilitaryLayers';
 import { ChokepointPanel } from './ChokepointPanel';
 import { CHOKEPOINT_TXT, fetchSilentVessels, loadSanctions, sanctionOf, type Sanction } from '@/lib/ships';
 import { supabase } from '@/integrations/supabase/client';
@@ -410,6 +411,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
   const [planesOn, setPlanesOn] = useState(false);
   // Airfields & ports: "Live traffic nearby" turns on aircraft or ships here.
   const infra = useInfraLayers(map, lang, dir, { aircraft: () => setPlanesOn(true), ships: () => setShipsOn(true) });
+  const mil = useMilitaryLayers(map, lang, dir);
   const [milOnly, setMilOnly] = useState(false);
   const [milWorld, setMilWorld] = useState(false);
   const [emergency, setEmergency] = useState(false);
@@ -551,7 +553,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
     <>
       {mapLegend}
       <WeatherOverlay s={weather} />
-      <InfraLegend s={infra} />
+      <InfraLegend s={infra} extra={mil.any}><MilitaryLegendItems s={mil} /></InfraLegend>
       {container && satOn && mode === 'compare'
         ? createPortal(
             <div
@@ -646,7 +648,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
           </section>
 
           <WeatherLayersPanel s={weather} />
-          <InfraLayersPanel s={infra} />
+          <InfraLayersPanel s={infra}><MilitaryLayersGroup s={mil} /></InfraLayersPanel>
 
           {/* Ships */}
           <section className="space-y-2 border-b border-slate-100 py-3 dark:border-slate-800">
