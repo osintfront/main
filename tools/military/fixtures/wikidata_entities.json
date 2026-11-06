@@ -1,0 +1,1118 @@
+{
+"entities": {
+"Q1083424": {
+"type": "item",
+"id": "Q1083424",
+"labels": {
+"he": {
+"language": "he",
+"value": "בסיס חיל האוויר אינג'ירליק"
+},
+"en": {
+"language": "en",
+"value": "Incirlik Air Base"
+}
+},
+"claims": {
+"P31": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q695850"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P137": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q1983085"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q520693"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q2886453": {
+"type": "item",
+"id": "Q2886453",
+"labels": {
+"en": {
+"language": "en",
+"value": "Al Dhafra Air Base"
+},
+"he": {
+"language": "he",
+"value": "בסיס חיל האוויר א-זפרה"
+}
+},
+"claims": {
+"P31": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q695850"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P137": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q2556685"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q820827"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q11223"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q21582584": {
+"type": "item",
+"id": "Q21582584",
+"labels": {
+"en": {
+"language": "en",
+"value": "Khmeimim"
+},
+"he": {
+"language": "he",
+"value": "חמיימים"
+}
+},
+"claims": {
+"P31": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q695850"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q734818"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P137": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q209833"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q7275300": {
+"type": "item",
+"id": "Q7275300",
+"labels": {
+"en": {
+"language": "en",
+"value": "RAF El Amiriya"
+}
+},
+"claims": {
+"P31": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q695850"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P137": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q165862"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P576": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P576",
+"datavalue": {
+"value": {
+"time": "+1946-00-00T00:00:00Z",
+"timezone": 0,
+"before": 0,
+"after": 0,
+"precision": 11,
+"calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+},
+"type": "time"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q4327132": {
+"type": "item",
+"id": "Q4327132",
+"labels": {
+"en": {
+"language": "en",
+"value": "Nokra Military Base"
+}
+},
+"claims": {
+"P31": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q245016"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P137": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q7915590"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q542588": {
+"type": "item",
+"id": "Q542588",
+"labels": {
+"en": {
+"language": "en",
+"value": "Al Udeid Air Base"
+},
+"he": {
+"language": "he",
+"value": "בסיס חיל האוויר אל-חודייד"
+}
+},
+"claims": {
+"P31": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q695850"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q1248784"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q7373622"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "deprecated"
+}
+],
+"P137": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q17485530"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "preferred"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q11223"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q165862"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q123128037": {
+"type": "item",
+"id": "Q123128037",
+"labels": {
+"en": {
+"language": "en",
+"value": "Camp Faouar"
+}
+},
+"claims": {
+"P31": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q245016"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P137": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q1065"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q900001": {
+"type": "item",
+"id": "Q900001",
+"labels": {
+"en": {
+"language": "en",
+"value": "Al Sailiya Camp"
+}
+},
+"claims": {
+"P31": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P31",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q245016"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P137": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q11223"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal",
+"qualifiers": {
+"P582": [
+{
+"snaktype": "value",
+"property": "P582",
+"datavalue": {
+"value": {
+"time": "+2005-00-00T00:00:00Z",
+"timezone": 0,
+"before": 0,
+"after": 0,
+"precision": 9,
+"calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+},
+"type": "time"
+}
+}
+]
+}
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P137",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q209833"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "deprecated"
+}
+]
+}
+},
+"Q1983085": {
+"type": "item",
+"id": "Q1983085",
+"labels": {
+"en": {
+"language": "en",
+"value": "Turkish Air Force"
+}
+},
+"claims": {
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q43"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q520693": {
+"type": "item",
+"id": "Q520693",
+"labels": {
+"en": {
+"language": "en",
+"value": "United States Air Forces in Europe – Air Forces Africa"
+}
+},
+"claims": {
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q183"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q2556685": {
+"type": "item",
+"id": "Q2556685",
+"labels": {
+"en": {
+"language": "en",
+"value": "United Arab Emirates Air Force"
+}
+},
+"claims": {
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q878"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q820827": {
+"type": "item",
+"id": "Q820827",
+"labels": {
+"en": {
+"language": "en",
+"value": "French Air Force"
+}
+},
+"claims": {
+"P576": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P576",
+"datavalue": {
+"value": {
+"time": "+2020-09-11T00:00:00Z",
+"timezone": 0,
+"before": 0,
+"after": 0,
+"precision": 11,
+"calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+},
+"type": "time"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q142"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q11223": {
+"type": "item",
+"id": "Q11223",
+"labels": {
+"en": {
+"language": "en",
+"value": "United States Air Force"
+}
+},
+"claims": {
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q30"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q209833": {
+"type": "item",
+"id": "Q209833",
+"labels": {
+"en": {
+"language": "en",
+"value": "Russian Air Force"
+}
+},
+"claims": {
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q159"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q165862": {
+"type": "item",
+"id": "Q165862",
+"labels": {
+"en": {
+"language": "en",
+"value": "Royal Air Force"
+}
+},
+"claims": {
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q145"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q7915590": {
+"type": "item",
+"id": "Q7915590",
+"labels": {
+"en": {
+"language": "en",
+"value": "Soviet Armed Forces"
+}
+},
+"claims": {
+"P576": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P576",
+"datavalue": {
+"value": {
+"time": "+1992-02-14T00:00:00Z",
+"timezone": 0,
+"before": 0,
+"after": 0,
+"precision": 11,
+"calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+},
+"type": "time"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q2305208"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q15180"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q17485530": {
+"type": "item",
+"id": "Q17485530",
+"labels": {
+"en": {
+"language": "en",
+"value": "Qatar Emiri Air Force"
+}
+},
+"claims": {
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q846"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q1065": {
+"type": "item",
+"id": "Q1065",
+"labels": {
+"en": {
+"language": "en",
+"value": "United Nations"
+}
+},
+"claims": {
+"P17": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P17",
+"datavalue": {
+"value": {
+"entity-type": "item",
+"id": "Q30"
+},
+"type": "wikibase-entityid"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+],
+"P297": [
+{
+"mainsnak": {
+"snaktype": "novalue",
+"property": "P297"
+},
+"type": "statement",
+"rank": "preferred"
+},
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "UN",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q43": {
+"type": "item",
+"id": "Q43",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "TR",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q183": {
+"type": "item",
+"id": "Q183",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "DE",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q878": {
+"type": "item",
+"id": "Q878",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "AE",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q142": {
+"type": "item",
+"id": "Q142",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "FR",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q30": {
+"type": "item",
+"id": "Q30",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "US",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q159": {
+"type": "item",
+"id": "Q159",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "RU",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q145": {
+"type": "item",
+"id": "Q145",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "GB",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q846": {
+"type": "item",
+"id": "Q846",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "QA",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q15180": {
+"type": "item",
+"id": "Q15180",
+"claims": {
+"P297": [
+{
+"mainsnak": {
+"snaktype": "value",
+"property": "P297",
+"datavalue": {
+"value": "SU",
+"type": "string"
+}
+},
+"type": "statement",
+"rank": "normal"
+}
+]
+}
+},
+"Q2305208": {
+"type": "item",
+"id": "Q2305208",
+"claims": {}
+}
+},
+"success": 1
+}

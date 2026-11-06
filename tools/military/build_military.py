@@ -31,6 +31,9 @@ HEBREW = re.compile('[֐-׿]')
 # Operator text → country code. First match wins, so the narrower patterns come first.
 OPERATORS: list[tuple[str, re.Pattern]] = [(cc, re.compile(p, re.I)) for cc, p in [
     ('IL', r'israel|\bidf\b|צה"ל|צבא'),
+    ('UN', r'united nations|\bundof\b|\bunifil\b'),
+    ('SU', r'soviet'),
+    ('OM', r'\bof oman\b|\bomani\b'),  # "Royal Air Force of Oman" is not British
     ('GB', r'royal air force|royal navy|british|\bRAF\b'),
     ('US', r'united states|\bu\.s\.|\bus (?:navy|army|air force|marine)|usaf|centcom'),
     ('FR', r'french|france|armée|marine nationale'),
@@ -42,7 +45,7 @@ OPERATORS: list[tuple[str, re.Pattern]] = [(cc, re.compile(p, re.I)) for cc, p i
     ('CN', r'chinese|china|\bpla\b'),
     ('JP', r'japan'),
     ('IN', r'\bindian\b|\bindia\b'),
-    ('AE', r'emirati|\buae\b'),
+    ('AE', r'emirati|emirates|\buae\b'),
     ('SA', r'saudi'),
     ('EG', r'egypt'),
 ]]
@@ -158,3 +161,167 @@ def dedupe(sites: list[dict]) -> list[dict]:
     for group in groups.values():
         keep.extend(group)
     return keep
+
+
+# ── Wikidata ────────────────────────────────────────────────────────
+# Discovery only (sites, labels, classes): the light query that answers in time. Operators, end dates and
+# closures come from wbgetentities, because heavier SPARQL queries time out (checked 2026-11-06).
+# Q245016 = "military base"; "airbase" (Q695850) and "naval base" are subclasses of it.
+WIKIDATA_QUERY = """SELECT ?item ?itemLabel ?he ?coord ?cc (GROUP_CONCAT(DISTINCT ?clsLabel; separator="|") AS ?classes) WHERE {
+  VALUES ?cc { %s }
+  ?country wdt:P297 ?cc .
+  ?item wdt:P17 ?country ; wdt:P625 ?coord ; wdt:P31/wdt:P279* wd:Q245016 .
+  OPTIONAL { ?item rdfs:label ?he FILTER(lang(?he) = "he") }
+  OPTIONAL { ?item wdt:P31 ?cls . ?cls rdfs:label ?clsLabel FILTER(lang(?clsLabel) = "en") }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". ?item rdfs:label ?itemLabel . }
+} GROUP BY ?item ?itemLabel ?he ?coord ?cc""" % ' '.join(f'"{c}"' for c in sorted(COUNTRIES))
+
+ENTITIES = 'https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims%7Clabels&languages=en%7Che&ids='
+CLOSED_PROPS = ('P576', 'P3999', 'P582')  # dissolved / closed / end time
+DISSOLVED = {'SU', 'YU', 'CS', 'DD'}
+NAVAL_CLASS = re.compile(r'naval', re.I)
+AIR_CLASS = re.compile(r'air ?base|air station|aerodrome|airport', re.I)
+HISTORIC_CLASS = re.compile(r'^(ruins|destroyed building or structure|archaeological site|museum|castle|fortress|palace)$', re.I)
+POINT = re.compile(r'Point\(\s*(-?[\d.]+(?:[eE]-?\d+)?)\s+(-?[\d.]+(?:[eE]-?\d+)?)\s*\)')
+
+
+def parse_wikidata(data: dict) -> list[dict]:
+    """SPARQL JSON → items {qid, lat, lng, cc, en, he, naval, air, historic}, one per QID."""
+    try:
+        rows = data['results']['bindings']
+    except (KeyError, TypeError):
+        raise ValueError(f'Wikidata: unexpected answer (keys: {sorted(data) if isinstance(data, dict) else type(data)})')
+    items: dict[str, dict] = {}
+    for b in rows:
+        qid = b['item']['value'].rsplit('/', 1)[-1]
+        m = POINT.match(b.get('coord', {}).get('value', ''))
+        if qid in items or not m:
+            continue
+        classes = [c for c in b.get('classes', {}).get('value', '').split('|') if c]
+        en = b.get('itemLabel', {}).get('value')
+        items[qid] = {
+            'qid': qid, 'lng': round(float(m.group(1)), 5), 'lat': round(float(m.group(2)), 5), 'cc': b['cc']['value'],
+            'en': None if not en or en == qid else en, 'he': b.get('he', {}).get('value'),
+            'naval': any(NAVAL_CLASS.search(c) for c in classes), 'air': any(AIR_CLASS.search(c) for c in classes),
+            'historic': any(HISTORIC_CLASS.match(c) for c in classes),
+        }
+    return list(items.values())
+
+
+def _claims(e: dict, p: str) -> list[dict]:
+    return [c for c in (e.get('claims') or {}).get(p, []) if c.get('rank') != 'deprecated']
+
+
+def _value(c: dict):
+    dv = c.get('mainsnak', {}).get('datavalue')
+    return dv['value'] if dv else None
+
+
+def _label(e: dict, lang: str) -> str | None:
+    return ((e.get('labels') or {}).get(lang) or {}).get('value')
+
+
+def site_facts(ents: dict) -> dict[str, dict]:
+    """wbgetentities entities → {qid: {closed, ops: [operator QIDs], en, he}}; ended or deprecated operator statements left out."""
+    out = {}
+    for qid, e in ents.items():
+        ops = []
+        for c in _claims(e, 'P137'):
+            v = _value(c)
+            if isinstance(v, dict) and v.get('id') and 'P582' not in (c.get('qualifiers') or {}):
+                ops.append(v['id'])
+        out[qid] = {'closed': any(_claims(e, p) for p in CLOSED_PROPS), 'ops': ops, 'en': _label(e, 'en'), 'he': _label(e, 'he')}
+    return out
+
+
+def operator_facts(ents: dict) -> dict[str, dict]:
+    """{operator QID: {name, cc, gone}}: the country from the name first, then the operator's own code, then its country's code."""
+    def code(e: dict | None) -> str | None:
+        for c in _claims(e or {}, 'P297'):
+            v = _value(c)
+            if isinstance(v, str) and v:
+                return v.upper()
+        return None
+    out = {}
+    for qid, e in ents.items():
+        name = _label(e, 'en')
+        cc = operator_cc(name) or code(e)
+        if not cc:
+            for c in _claims(e, 'P17'):
+                v = _value(c)
+                cc = code(ents.get(v['id'])) if isinstance(v, dict) else None
+                if cc:
+                    break
+        gone = cc in DISSOLVED
+        out[qid] = {'name': name, 'cc': None if gone else cc, 'gone': gone}
+    return out
+
+
+def _set_ops(site: dict, ops: list[tuple[str | None, str | None]]):
+    """ops = [(name, cc)]: op = the first foreign country (else the first known one), opn = all names."""
+    ccs = [cc for _, cc in ops if cc]
+    foreign = [cc for cc in ccs if cc != site['cc']]
+    site['op'] = foreign[0] if foreign else (ccs[0] if ccs else None)
+    site['opn'] = ' · '.join(n for n, _ in ops if n) or None
+    site['f'] = True if foreign else None
+    site['_ccs'] = ccs
+
+
+def merge(sites: list[dict], items: list[dict], facts: dict, ops: dict) -> list[dict]:
+    """Operators and Wikidata links onto the OSM sites; unmatched Wikidata sites added; Israeli-operated sites dropped."""
+    def wops(qid: str) -> list[tuple[str | None, str | None]]:
+        f = facts.get(qid)
+        if not f or f['closed']:
+            return []
+        return [(ops[o]['name'], ops[o]['cc']) for o in f['ops'] if o in ops and not ops[o].get('gone')]
+
+    def link(site: dict, qid: str):
+        site['wd'] = qid
+        f = facts.get(qid) or {}
+        site.setdefault('en', f.get('en'))
+        site.setdefault('he', f.get('he'))
+        o = wops(qid)
+        if o:
+            _set_ops(site, o)
+
+    by_tag = {s['tags']['wikidata']: s for s in sites if s['tags'].get('wikidata')}
+    linked: set[str] = set()
+    out = list(sites)
+    for it in items:
+        qid = it['qid']
+        if (facts.get(qid) or {}).get('closed'):
+            continue
+        match = by_tag.get(qid)
+        if not match:
+            near = [s for s in sites if s['k'] in ('base', 'naval') and s['tags'].get('wikidata') in (None, qid)
+                    and km(s['lat'], s['lng'], it['lat'], it['lng']) <= 3.0]
+            match = min(near, key=lambda s: km(s['lat'], s['lng'], it['lat'], it['lng'])) if near else None
+        if match:
+            link(match, qid)
+            linked.add(qid)
+            continue
+        if it['historic']:
+            continue
+        new = {'k': 'naval' if it['naval'] else 'base', 'lat': it['lat'], 'lng': it['lng'], 'cc': it['cc'], 'tags': {}, 'osm': None,
+               'km2': None, 'n': it['en'], 'en': it['en'], 'he': it['he'], 'air': True if it['air'] else None}
+        link(new, qid)
+        if it['air'] and not new.get('f'):
+            continue  # the airfields layer shows host-country air bases
+        out.append(new)
+    for qid, s in by_tag.items():
+        if qid not in linked and qid in facts:
+            link(s, qid)
+    for s in out:
+        if not s.get('op') and s['tags'].get('operator'):
+            _set_ops(s, [(s['tags']['operator'], operator_cc(s['tags']['operator']))])
+    return [s for s in out if not israeli(s['tags'], s['cc'], 'IL' if 'IL' in s.get('_ccs', []) else s.get('op'), s['k'])]
+
+
+def site_feature(s: dict) -> dict:
+    """GeoJSON point with the published properties only; empty values left out."""
+    t = s['tags']
+    props = {'k': s['k'], 'cc': s['cc'], 'osm': s.get('osm'), 'n': t.get('name') or s.get('n'), 'en': t.get('name:en') or s.get('en'),
+             'he': t.get('name:he') or s.get('he'), 'km2': s.get('km2'), 'wd': s.get('wd'), 'op': s.get('op'), 'opn': s.get('opn'),
+             'f': s.get('f'), 'air': s.get('air')}
+    return {'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [s['lng'], s['lat']]},
+            'properties': {k: v for k, v in props.items() if v not in (None, '', False)}}
