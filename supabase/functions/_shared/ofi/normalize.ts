@@ -101,6 +101,30 @@ export function fcdoLevel(statuses: string[]): number {
   return Math.max(1, ...statuses.map((s) => rank[s] ?? 1));
 }
 
+/**
+ * Embassy staff drawdowns in the US State Dept advisories RSS for the given countries:
+ * "ordered departure" (staff must leave) = 2, "authorized departure" (may leave) = 1, embassy
+ * "suspended operations" = 2. Returns the total and which countries carry what.
+ */
+export function embassyDepartures(rss: string, countries: string[]): { total: number; hits: { country: string; kind: string }[] } {
+  const items = rss.split(/<item>/i).slice(1);
+  const hits: { country: string; kind: string }[] = [];
+  let total = 0;
+  for (const it of items) {
+    const title = (it.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ?? '').replace(/<!\[CDATA\[|\]\]>/g, '').trim().toLowerCase();
+    const country = countries.find((c) => title.startsWith(c.toLowerCase()));
+    if (!country) continue;
+    const text = it.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+    let kind: string | null = null;
+    let w = 0;
+    if (/ordered (the )?departure/.test(text)) { kind = 'ordered'; w = 2; }
+    else if (/suspended (routine |all )?(embassy |consular )?operations/.test(text)) { kind = 'suspended'; w = 2; }
+    else if (/authorized (the )?departure/.test(text)) { kind = 'authorized'; w = 1; }
+    if (kind) { hits.push({ country, kind }); total += w; }
+  }
+  return { total, hits };
+}
+
 /** US State Dept RSS: the "Level N" of the item whose title starts with `country`. */
 export function stateDeptLevel(rss: string, country: string): number | null {
   const titles = [...rss.matchAll(/<title>([\s\S]*?)<\/title>/gi)].map((m) => m[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim());

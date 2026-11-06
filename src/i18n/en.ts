@@ -1123,6 +1123,7 @@ export const en = {
   "ofi.cat.proxy": "Proxies",
   "ofi.cat.airspace": "Airspace",
   "ofi.cat.threat": "Threats",
+  "ofi.cat.evacuation": "Embassy evacuation",
   "ofi.admin.resolve": "Did it happen? (track record)",
   "ofi.admin.resolveHint": "Mark a 24-hour window as happened or not. The estimate that covered it is linked automatically and counts in the Brier score.",
   "ofi.admin.windowStart": "Window start",

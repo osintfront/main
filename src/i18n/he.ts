@@ -1125,6 +1125,7 @@ export const he: Record<TranslationKey, string> = {
   "ofi.cat.proxy": "שלוחים",
   "ofi.cat.airspace": "מרחב אווירי",
   "ofi.cat.threat": "איומים",
+  "ofi.cat.evacuation": "פינוי שגרירויות",
   "ofi.admin.resolve": "האם זה קרה? (רשומת דיוק)",
   "ofi.admin.resolveHint": "סמנו חלון של 24 שעות כ\"קרה\" או \"לא קרה\". ההערכה שכיסתה אותו מקושרת אוטומטית ונספרת בציון ה-Brier.",
   "ofi.admin.windowStart": "תחילת החלון",

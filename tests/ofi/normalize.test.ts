@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ratioScore, balanceVsBaseline, shareShift, latestReturnZ, zToScore, levelChangeScore,
-  marketTo24h, fcdoLevel, stateDeptLevel, clamp01,
+  marketTo24h, fcdoLevel, stateDeptLevel, clamp01, embassyDepartures,
 } from '../../supabase/functions/_shared/ofi/normalize.ts';
 
 const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -61,4 +61,15 @@ test('advisory parsers', () => {
 test('clamp01 maps NaN to neutral', () => {
   near(clamp01(NaN), 0.5);
   near(clamp01(2), 1);
+});
+
+test('embassyDepartures: ordered = 2, authorized = 1, other countries ignored', () => {
+  const rss = `<rss><item><title>Iraq - Level 4: Do Not Travel</title><description><![CDATA[On June 11 the Department <b>ordered the departure</b> of non-emergency staff.]]></description></item>
+<item><title>Kuwait - Level 3: Reconsider Travel</title><description>The Department authorized departure of family members.</description></item>
+<item><title>China - Level 2</title><description>ordered departure</description></item>
+<item><title>Qatar - Level 3</title><description>Nothing new.</description></item></rss>`;
+  const r = embassyDepartures(rss, ['Iraq', 'Kuwait', 'Qatar']);
+  assert.equal(r.total, 3);
+  assert.deepEqual(r.hits, [{ country: 'Iraq', kind: 'ordered' }, { country: 'Kuwait', kind: 'authorized' }]);
+  assert.equal(embassyDepartures(rss, ['Qatar']).total, 0);
 });

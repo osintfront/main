@@ -11,7 +11,7 @@ import { cn } from '@/utils/cn';
 const input = 'h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
 const btn = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3.5 text-sm font-semibold disabled:opacity-60';
 const h3 = 'mt-6 text-sm font-semibold text-slate-900 dark:text-white';
-const CATS = ['escalation', 'de_escalation', 'intercept', 'proxy', 'airspace', 'threat'] as const;
+const CATS = ['escalation', 'de_escalation', 'intercept', 'proxy', 'airspace', 'threat', 'evacuation'] as const;
 
 /** More super-admin tools under the main panel: resolve windows, lexicon, prediction markets, backtest. */
 export function OfiAdminTools({ slug, eventId, polymarket, onChanged }: { slug: string; eventId: string; polymarket?: OfiAdminSignal; onChanged: () => void }) {

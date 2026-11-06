@@ -7,7 +7,7 @@
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import {
-  balanceVsBaseline, fcdoLevel, hashChangeScore, latestReturnZ, levelChangeScore, marketTo24h,
+  balanceVsBaseline, embassyDepartures, fcdoLevel, hashChangeScore, latestReturnZ, levelChangeScore, marketTo24h,
   ratioScore, shareShift, stateDeptLevel, zToScore,
 } from './normalize.ts';
 
@@ -237,6 +237,13 @@ async function advisorySignal(ctx: RunContext, s: SignalRow, prev: PrevReading[]
   const country = s.config?.country;
   const since = Date.now() - 7 * 24 * 3_600_000;
   const recentLevels = prev.filter((p) => new Date(p.ts).getTime() >= since && Number.isFinite(p.raw_value)).map((p) => Number(p.raw_value));
+  if (country === 'US' && s.config?.mode === 'departures') {
+    // Same RSS as the US advisory signal (fetched once per run): embassy drawdowns across the region.
+    const r = await ctx.fetchCached('advisory:us-state', 'https://travel.state.gov/_res/rss/TAsTWs.xml', 'text', s.stale_after_hours);
+    const { total, hits } = embassyDepartures(String(r.body), s.config?.countries ?? []);
+    const { delta, score } = levelChangeScore(total, recentLevels);
+    return { raw_value: total, score, metadata: { total, delta, hits, cached: r.cached } };
+  }
   if (country === 'US') {
     const r = await ctx.fetchCached('advisory:us-state', 'https://travel.state.gov/_res/rss/TAsTWs.xml', 'text', s.stale_after_hours);
     const level = stateDeptLevel(String(r.body), s.config?.match ?? 'Israel');

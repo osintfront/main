@@ -2,15 +2,19 @@ import { Link } from 'react-router-dom';
 import { useI18n } from '@/i18n';
 import { OfiAvatar } from './OfiParts';
 
-/** Floating "Insights by OFI" button on the live map (above the phone tab bar, clear of map controls). */
-export function OfiFab() {
+/**
+ * "Insights by OFI" button in the map's bottom-end corner. It sits on top of the other buttons in that
+ * corner (quick report, social search), so `stack` = how many of them are showing below it.
+ */
+export function OfiFab({ stack = 0 }: { stack?: number }) {
   const { t } = useI18n();
   return (
     <Link
       to="/insights"
       aria-label={t('nav.insights')}
       title={t('nav.insights')}
-      className="group fixed bottom-20 end-3 z-[1100] flex items-center gap-2 lg:bottom-10 lg:end-5"
+      style={{ bottom: `${1.5 + stack * 2.75}rem` }}
+      className="group absolute end-3 z-[600] flex items-center gap-2"
     >
       <span className="hidden rounded-full bg-emerald-800 px-2.5 py-1 text-[11px] font-bold text-white opacity-0 shadow transition group-hover:opacity-100 group-focus-visible:opacity-100 sm:inline">
         {t('nav.insights')}

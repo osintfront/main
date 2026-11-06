@@ -13,6 +13,7 @@ Tests: `node --experimental-strip-types --test tests/ofi/normalize.test.ts tests
 | share shift | share = (high + 2·base) / (n + 2); s = 0.5 + (share − base) | severity mix |
 | z-score | z = latest daily log-return vs. mean/sd of the previous 30; s = 0.5 + 0.5·tanh(z/2), averaged over the signal's symbols | defense stocks, oil/gold/VIX, USD/ILS |
 | level change | Δ = rise (or fall) of the advisory level vs. the last 7 days; s = 0.5 + 0.2·Δ | US State Dept, UK FCDO |
+| embassy drawdowns | sum over the region's countries in the State Dept RSS: ordered departure / suspended operations = 2, authorized departure = 1; level change vs. 7 days | US embassy drawdowns (same RSS call) |
 | market | p₂₄ = 1 − (1 − P)^(24/H), H = hours to the market's end (≥ 24); inverted markets use 1 − P(yes); several markets → max | Polymarket |
 | manual | s = 0.5 + level/200, level −100…+100, held for N hours | super admin |
 
@@ -41,13 +42,14 @@ spread of the fresh signals); band = σ(logit(p) ± half-width).
 
 ## 3. Schedule
 pg_cron every 15 min → `ofi-runner tick`: an event whose `next_run_at` is due gets a full cycle
-(every source once, then the estimate; next run = now + `refresh_interval_hours`, default 24 h).
+(every source once, then the estimate; next run = now + `refresh_interval_hours`: 8 h for the Iran
+event — the question stays "in the next 24 h", only the check runs three times a day).
 In between, once an hour, only our own data is re-read (no external calls) to check the circuit
 breaker. Page views never compute anything.
 
 ## 4. Cost
-Per event per day: 1 Polymarket search, 1 Yahoo call (8 symbols), 1 State Dept RSS, 1 FCDO page —
-all free, no keys. Database work ≈ 4 s/hour. Expected monthly cost: **$0**.
+Per event per full cycle (3 a day at 8 h): 1 Polymarket search, 1 Yahoo call (8 symbols), 1 State Dept
+RSS (shared by the advisory and embassy-drawdown signals), 1 FCDO page — all free, no keys. Database work ≈ 4 s/hour. Expected monthly cost: **$0**.
 
 ## 5. Simplified version (shown to Pro / Max)
 Start from how often this happened historically (the base rate). Each signal pushes the estimate up
