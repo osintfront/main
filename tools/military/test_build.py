@@ -2,14 +2,16 @@
 import json
 import os
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(__file__)
 sys.path.insert(0, HERE)
 import build_military  # noqa: E402
 from build_military import (  # noqa: E402
     area_km2, classify, dedupe, israeli, merge, operator_cc, operator_facts, overpass_query, parse_overpass, parse_wikidata, site_facts,
-    site_feature,
+    site_feature, check, size_guard,
 )
 
 
@@ -38,6 +40,11 @@ class Classify(unittest.TestCase):
     def test_minor(self):
         self.assertEqual(classify({'military': 'checkpoint'}), 'minor')
         self.assertEqual(classify({'military': 'bunker'}), 'minor')
+
+    def test_tag_values_seen_in_the_live_data(self):
+        self.assertEqual(classify({'military': 'coastguard'}), 'naval')
+        self.assertEqual(classify({'military': 'danger_zone'}), 'range')
+        self.assertEqual(classify({'military': 'shelter'}), 'minor')
 
     def test_skipped(self):
         for tags in ({'military': 'airfield'}, {'military': 'base', 'aeroway': 'aerodrome'}, {'military': 'base', 'disused': 'yes'},
@@ -269,6 +276,107 @@ class Wikidata(unittest.TestCase):
                           'osm': 'w1', 'km2': 2.5, 'wd': 'Q1', 'op': 'US', 'opn': 'USAF', 'f': True})
         self.assertEqual(g['properties'], {'k': 'base', 'cc': 'QA', 'osm': 'w1', 'n': 'معسكر', 'en': 'Camp', 'he': 'מחנה', 'km2': 2.5,
                                            'wd': 'Q1', 'op': 'US', 'opn': 'USAF', 'f': True})
+
+
+
+def feat(cc, k='base', name='Camp', km2=None):
+    p = {'k': k, 'cc': cc, 'osm': 'n1'}
+    if name:
+        p['n'] = name
+    if km2 is not None:
+        p['km2'] = km2
+    return {'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [40.0, 30.0]}, 'properties': p}
+
+
+def fake_fetch(fail=None):
+    """_fetch stand-in: the QA Overpass fixture for every country, the Wikidata fixtures for Wikidata."""
+    ents = fixture('wikidata_entities.json')['entities']
+
+    def f(url, data=None):
+        if fail and fail(url, data):
+            raise OSError('boom')
+        if url in (build_military.OVERPASS, build_military.OVERPASS_MIRROR):
+            return fixture('overpass_qa.json')
+        if url.startswith(build_military.ENTITIES):
+            ids = url[len(build_military.ENTITIES):].split('%7C')
+            return {'entities': {i: ents.get(i, {'id': i, 'missing': ''}) for i in ids}, 'success': 1}
+        if url.startswith(build_military.WIKIDATA):
+            return fixture('wikidata_sparql.json')
+        raise AssertionError(url)
+    return f
+
+
+class Gate(unittest.TestCase):
+    def test_size_guard_drops_small_unnamed_zones_first(self):
+        named = [feat('TR', name=f'Camp {i}') for i in range(20)]
+        small = [feat('TR', k='range', name=None, km2=0.01) for _ in range(20)]
+        big = feat('TR', k='range', name=None, km2=3.0)
+        limit = len(json.dumps({'type': 'FeatureCollection', 'features': named + [big]}, ensure_ascii=False, separators=(',', ':')).encode()) + 50
+        out = size_guard(named + small + [big], limit)
+        self.assertEqual(len(out), 21)
+        self.assertIn(big, out)
+
+    def test_size_guard_fails_when_still_too_big(self):
+        with self.assertRaises(ValueError):
+            size_guard([feat('TR')], 10)
+
+    def test_check(self):
+        ok = [feat(cc) for cc in ('TR', 'IR', 'EG', 'SA') for _ in range(250)]
+        check(ok, [])
+        with self.assertRaisesRegex(ValueError, 'IR'):
+            check(ok, ['IR'])
+        with self.assertRaises(ValueError):
+            check(ok[:999], [])
+        with self.assertRaisesRegex(ValueError, 'SA'):
+            check([f for f in ok if f['properties']['cc'] != 'SA'] + [feat('TR')] * 300, [])
+
+    def run_main(self, fetch, min_sites=None):
+        out = tempfile.mkdtemp()
+        patches = [mock.patch.object(build_military, '_fetch', fetch), mock.patch.object(build_military, 'OUT', out),
+                   mock.patch.object(build_military.time, 'sleep', lambda s: None)]
+        if min_sites is not None:
+            patches.append(mock.patch.object(build_military, 'MIN_SITES', min_sites))
+        for p in patches:
+            p.start()
+        try:
+            code = build_military.main([])
+        finally:
+            for p in patches:
+                p.stop()
+        return code, out, sorted(os.listdir(out))
+
+    def test_floor_not_reached_writes_nothing(self):
+        self.assertEqual(self.run_main(fake_fetch())[::2], (3, []))
+
+    def test_wikidata_down_writes_nothing(self):
+        code, _, files = self.run_main(fake_fetch(lambda url, data: url.startswith(build_military.WIKIDATA)), min_sites=1)
+        self.assertEqual((code, files), (3, []))
+
+    def test_busy_server_falls_back_to_the_mirror(self):
+        seen = []
+        def fail(url, data):
+            if data and b'IR' in data:
+                seen.append(url)
+                return url == build_military.OVERPASS
+            return False
+        code, _, files = self.run_main(fake_fetch(fail), min_sites=1)
+        self.assertEqual(code, 0)
+        self.assertEqual(seen[:2], [build_military.OVERPASS, build_military.OVERPASS_MIRROR])
+
+    def test_a_country_down_writes_nothing(self):
+        code, _, files = self.run_main(fake_fetch(lambda url, data: bool(data) and b'IR' in data), min_sites=1)
+        self.assertEqual((code, files), (3, []))
+
+    def test_success_writes_both_files(self):
+        code, out, files = self.run_main(fake_fetch(), min_sites=1)
+        self.assertEqual((code, files), (0, ['military-minor.geojson', 'military.geojson']))
+        with open(os.path.join(out, 'military-minor.geojson'), encoding='utf-8') as f:
+            minor = json.load(f)['features']
+        with open(os.path.join(out, 'military.geojson'), encoding='utf-8') as f:
+            main = json.load(f)['features']
+        self.assertTrue(minor and all(x['properties']['k'] == 'minor' for x in minor))
+        self.assertTrue(main and all(x['properties']['k'] != 'minor' for x in main))
+        self.assertIn('Q542588', {x['properties'].get('wd') for x in main})
 
 
 if __name__ == '__main__':

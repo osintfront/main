@@ -1,0 +1,32 @@
+# Military sites of the Middle East (without Israel) for the map's "Military bases" group.
+# OpenStreetMap (Overpass) + Wikidata → public/data/military.geojson and public/data/military-minor.geojson.
+# Monthly, or by hand (Actions → "Military bases data" → Run workflow). Needs no secrets.
+name: Military bases data
+on:
+  schedule:
+    - cron: '29 3 2 * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tests
+        run: python -m unittest tools/military/test_build.py -v
+      - name: Build
+        # Exit 3 = nothing written (a country, Wikidata or the quality gate failed); last month's files stay.
+        run: python tools/military/build_military.py
+      - name: Commit
+        run: |
+          git config user.name "military-data bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/data/military.geojson public/data/military-minor.geojson
+          git diff --cached --quiet || git commit -m "Data: military bases (OpenStreetMap, Wikidata)"
+          git pull --rebase
+          git push

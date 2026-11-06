@@ -8,22 +8,31 @@ public/data/military-minor.geojson (bunkers and checkpoints). Run by .github/wor
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 import re
+import sys
+import time
+import urllib.parse
+import urllib.request
 
 COUNTRIES = frozenset('LB SY JO IQ IR SA YE OM AE QA BH KW EG TR CY PS SD ER DJ SO'.split())
 UA = 'osintfront.com data build (+https://osintfront.com)'
 OVERPASS = 'https://overpass-api.de/api/interpreter'
+OVERPASS_MIRROR = 'https://overpass.private.coffee/api/interpreter'  # tried when the main server is full
 WIKIDATA = 'https://query.wikidata.org/sparql'
 OUT = os.path.join(os.path.dirname(__file__), '..', '..', 'public', 'data')
 MIN_SITES = 1000
 MAX_BYTES = 8_000_000
+MUST_HAVE = ('TR', 'IR', 'EG', 'SA')
+PAUSE = 5           # seconds between Overpass countries
+RETRY = (60, 180, 420)  # waits before the 2nd, 3rd and 4th try of a country (the public server is often full)
 
 # ── Classification ──────────────────────────────────────────────────
 SKIP_MILITARY = {'airfield', 'trench', 'obstacle_course'}
-MINOR = {'bunker', 'checkpoint'}
-RANGES = {'range', 'training_area', 'danger_area', 'nuclear_explosion_site'}
+MINOR = {'bunker', 'checkpoint', 'shelter'}
+RANGES = {'range', 'training_area', 'danger_area', 'danger_zone', 'nuclear_explosion_site'}
 # Navy / coast guard in English, Arabic, Turkish and Persian.
 NAVAL = re.compile(r'naval|navy|coast ?guard|بحري|خفر السواحل|deniz|donanma|sahil güvenlik|دریایی', re.I)
 HEBREW = re.compile('[֐-׿]')
@@ -62,7 +71,7 @@ def classify(tags: dict[str, str]) -> str | None:
         return None
     if mil in MINOR:
         return 'minor'
-    if mil == 'naval_base' or NAVAL.search(_name(tags)):
+    if mil in ('naval_base', 'coastguard') or NAVAL.search(_name(tags)):
         return 'naval'
     if mil in RANGES:
         return 'range'
@@ -89,6 +98,7 @@ def israeli(tags: dict, cc: str, op_cc: str | None, kind: str) -> bool:
 
 # ── Overpass ────────────────────────────────────────────────────────
 def overpass_query(cc: str) -> str:
+    # "out bb": bounds for areas, coordinates for points (checked live 2026-11-06; way node lists come along).
     return (f'[out:json][timeout:300];area["ISO3166-1"="{cc}"][admin_level=2]->.a;'
             '(nwr["military"](area.a);nwr["landuse"="military"](area.a););out bb qt;')
 
@@ -325,3 +335,127 @@ def site_feature(s: dict) -> dict:
              'f': s.get('f'), 'air': s.get('air')}
     return {'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [s['lng'], s['lat']]},
             'properties': {k: v for k, v in props.items() if v not in (None, '', False)}}
+
+
+# ── Gate and build ──────────────────────────────────────────────────
+def _fc(features: list[dict]) -> dict:
+    return {'type': 'FeatureCollection', 'features': features}
+
+
+def _bytes(features: list[dict]) -> int:
+    return len(json.dumps(_fc(features), ensure_ascii=False, separators=(',', ':')).encode())
+
+
+def size_guard(features: list[dict], limit: int = MAX_BYTES) -> list[dict]:
+    """Over the limit: drop unnamed zones under 0.05 km² (a point counts as 0), then fail if still over."""
+    if _bytes(features) <= limit:
+        return features
+    def small_unnamed(f: dict) -> bool:
+        p = f['properties']
+        return p['k'] == 'range' and not (p.get('n') or p.get('en') or p.get('he')) and (p.get('km2') or 0) < 0.05
+    kept = [f for f in features if not small_unnamed(f)]
+    size = _bytes(kept)
+    if size > limit:
+        raise ValueError(f'military.geojson is {size} bytes after dropping small unnamed zones (limit {limit})')
+    print(f'size guard: dropped {len(features) - len(kept)} small unnamed zones')
+    return kept
+
+
+def check(main: list[dict], failed: list[str]) -> None:
+    if failed:
+        raise ValueError(f'Overpass failed for {failed}')
+    if len(main) < MIN_SITES:
+        raise ValueError(f'only {len(main)} sites (floor {MIN_SITES}) — a short or broken download?')
+    have = {f['properties']['cc'] for f in main}
+    missing = [cc for cc in MUST_HAVE if cc not in have]
+    if missing:
+        raise ValueError(f'no sites for {missing}')
+
+
+def _fetch(url: str, data: bytes | None = None) -> dict:
+    accept = 'application/sparql-results+json' if url.startswith(WIKIDATA) else 'application/json'
+    req = urllib.request.Request(url, data=data, headers={'user-agent': UA, 'accept': accept})
+    with urllib.request.urlopen(req, timeout=360) as r:
+        return json.loads(r.read().decode('utf-8'))
+
+
+def _overpass(cc: str) -> list[dict]:
+    data = urllib.parse.urlencode({'data': overpass_query(cc)}).encode()
+    last: Exception | None = None
+    for n, wait in enumerate((0, *RETRY)):
+        if wait:
+            time.sleep(wait)
+        url = OVERPASS if n % 2 == 0 else OVERPASS_MIRROR
+        try:
+            return parse_overpass(_fetch(url, data), cc)
+        except Exception as e:  # a timeout remark, HTTP 429/504, a dropped connection
+            last = e
+            print(f'Overpass {cc}: {e}', file=sys.stderr)
+    raise last  # type: ignore[misc]
+
+
+def _entities(ids) -> dict:
+    out: dict = {}
+    ids = sorted(set(ids))
+    for i in range(0, len(ids), 50):
+        out.update(_fetch(ENTITIES + '%7C'.join(ids[i:i + 50])).get('entities', {}))
+    return out
+
+
+def _write(name: str, features: list[dict]):
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, name), 'w', encoding='utf-8') as f:
+        json.dump(_fc(features), f, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
+    print(f'{name}: {len(features)} features, {os.path.getsize(os.path.join(OUT, name))} bytes')
+
+
+def build() -> None:
+    sites: list[dict] = []
+    failed: list[str] = []
+    for n, cc in enumerate(sorted(COUNTRIES)):
+        if n:
+            time.sleep(PAUSE)
+        try:
+            got = _overpass(cc)
+            print(f'{cc}: {len(got)} sites')
+            sites += got
+        except Exception:
+            failed.append(cc)
+    if failed:
+        check([], failed)
+    sites = dedupe(sites)
+    items = parse_wikidata(_fetch(WIKIDATA + '?format=json&query=' + urllib.parse.quote(WIKIDATA_QUERY)))
+    ents = _entities({i['qid'] for i in items} | {s['tags']['wikidata'] for s in sites if s['tags'].get('wikidata')})
+    ents.update(_entities({o for f in site_facts(ents).values() for o in f['ops']} - ents.keys()))
+    countries = {v['id'] for e in ents.values() for c in _claims(e, 'P17') if isinstance(v := _value(c), dict)}
+    ents.update(_entities(countries - ents.keys()))
+    feats = [site_feature(s) for s in merge(sites, items, site_facts(ents), operator_facts(ents))]
+    feats.sort(key=lambda f: (f['properties']['cc'], f['properties']['k'], f['properties'].get('n') or ''))
+    main = [f for f in feats if f['properties']['k'] != 'minor']
+    minor = [f for f in feats if f['properties']['k'] == 'minor']
+    check(main, [])
+    main = size_guard(main)
+    counts: dict[str, dict[str, int]] = {}
+    for f in feats:
+        p = f['properties']
+        counts.setdefault(p['cc'], {}).setdefault(p['k'], 0)
+        counts[p['cc']][p['k']] += 1
+    print('per country and kind:', json.dumps(counts, sort_keys=True))
+    print('foreign-operated:', sum(1 for f in main if f['properties'].get('f')), '· from Wikidata only:',
+          sum(1 for f in main if 'osm' not in f['properties']))
+    _write('military.geojson', main)
+    _write('military-minor.geojson', minor)
+
+
+def main(argv: list[str]) -> int:
+    """0 = both files written · 3 = nothing written (last month's files stay)."""
+    try:
+        build()
+    except Exception as e:
+        print(f'military bases not updated: {e}', file=sys.stderr)
+        return 3
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
