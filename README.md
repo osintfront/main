@@ -82,6 +82,12 @@ Run `supabase/tests/rls_checks.sql` in the SQL editor after seeding. It imperson
 - **Intelligence layers → Airfields & ports** (registered users): civil, military (by name), strips & helipads, closed, and ports for the Middle East without Israel; clustered pins, a popup with codes, runways / harbour details, the nearest town in Hebrew and "Live traffic nearby".
 - **Data:** `public/data/airfields.geojson` (OurAirports) and `public/data/ports.geojson` (NGA World Port Index), built by `tools/infra/build_infra.py` in `.github/workflows/infra-data.yml` (monthly, or Actions → "Airfields and ports data" → Run workflow). Access: `plan_features` key `airfields_ports`.
 
+### Ships upgrade
+- **Coverage:** `ais-collector` listens to six areas (eastern Med, Red Sea + Gulf of Aden, Gulf + Gulf of Oman, Turkish Straits + Marmara, Caspian, Arabian Sea approaches). Redeploy the function after changing `BOXES`.
+- **Chokepoints:** gate lines in `ais_gates` (Hormuz, Bab el-Mandeb, Suez N/S, Tiran, Bosphorus, Dardanelles); `ais_upsert` records crossings in `ais_crossings`; `chokepoint_stats()` compares the last 24 h with our own previous 28 days ("collecting baseline" for the first 7 days). Open to everyone.
+- **Silent ships:** ships stay 72 h after last contact; 24–72 h = silent (may be out of receiver range).
+- **Sanctioned vessels:** `public/data/sanctioned-vessels.json` from OFAC + UK lists by IMO, built weekly by `.github/workflows/sanctions-data.yml`.
+
 ### Phase 1 — foundation (complete)
 | Requirement | Where |
 |---|---|
