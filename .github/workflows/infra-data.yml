@@ -1,0 +1,34 @@
+# Airfields and ports of the Middle East (without Israel) for the map's "Airfields & ports" section.
+# OurAirports + NGA World Port Index → public/data/airfields.geojson and public/data/ports.geojson.
+# Monthly, or by hand (Actions → "Airfields and ports data" → Run workflow).
+name: Airfields and ports data
+on:
+  schedule:
+    - cron: '17 3 2 * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tests
+        run: python -m unittest tools/infra/test_build.py -v
+      - name: Build
+        # Exit 1 = airfields written but ports kept from the last run; commit what changed and fail visibly.
+        run: python tools/infra/build_infra.py || echo "PORTS_FAILED=1" >> "$GITHUB_ENV"
+      - name: Commit
+        run: |
+          git config user.name "infra-data bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/data/airfields.geojson public/data/ports.geojson 2>/dev/null || git add public/data/airfields.geojson
+          git diff --cached --quiet || git commit -m "Data: airfields and ports (OurAirports, NGA WPI)"
+          git push
+      - name: Ports status
+        if: env.PORTS_FAILED == '1'
+        run: echo "::error::World Port Index could not be read; ports.geojson was not updated (see the Build step log)" && exit 1
