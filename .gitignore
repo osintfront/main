@@ -7,3 +7,4 @@ dist
 .DS_Store
 supabase/.temp
 .superpowers/
+__pycache__/
