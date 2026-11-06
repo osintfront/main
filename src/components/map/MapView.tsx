@@ -19,6 +19,7 @@ import { buildHfcPopup } from './hfcPopup';
 import { BASE_STYLES, createBaseLayer, createFiresLayer, loadBaseStyle, loadFiresOn, saveBaseStyle, saveFiresOn, type BaseStyle } from './baseLayer';
 import { createMarkerIcon } from './markerIcon';
 import { MapContextMenu, type ContextTarget } from './MapContextMenu';
+import { WeatherCard, type WeatherAt } from './WeatherCard';
 import { DEFAULT_CATEGORIES } from '@/data/categoryRegistry';
 import { buildPopupContent } from './popupContent';
 import { IconButton } from '@/components/common/IconButton';
@@ -180,6 +181,9 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextTarget | null>(null);
   const closeCtx = useCallback(() => setCtxMenu(null), []);
+  // Right-click → "Weather here": the point whose weather card is open.
+  const [weatherAt, setWeatherAt] = useState<WeatherAt | null>(null);
+  const closeWeather = useCallback(() => setWeatherAt(null), []);
   const ctxRef = useRef(setCtxMenu);
   const hoverTips = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   const mapRef = useRef<L.Map | null>(null);
@@ -1067,7 +1071,12 @@ export function MapView({
     // so they can't cover the top bar, menus or the phone pane switcher.
     <div className="relative isolate h-full w-full">
       <div ref={containerRef} className="ofm-map h-full w-full" role="region" aria-label={t('map.label')} />
-      <MapContextMenu map={leafletMap} target={ctxMenu} onClose={closeCtx} onArea={onAreaDrawn} onFilterCategory={onFilterCategory} />
+      <MapContextMenu map={leafletMap} target={ctxMenu} onClose={closeCtx} onArea={onAreaDrawn} onFilterCategory={onFilterCategory}
+        onWeather={(lat, lng) => {
+          const pt = leafletMap?.latLngToContainerPoint([lat, lng]);
+          setWeatherAt({ lat, lng, x: pt?.x ?? 0, y: pt?.y ?? 0 });
+        }} />
+      {weatherAt ? <WeatherCard key={`${weatherAt.lat},${weatherAt.lng}`} at={weatherAt} onClose={closeWeather} container={leafletMap?.getContainer() ?? null} /> : null}
       {alerts.length > 0 || topSlot ? (
         <div ref={topOverlayRef} className="pointer-events-none absolute inset-x-0 top-3 z-[500] flex flex-col items-center gap-2 px-16">
           {alerts.length > 0 ? (

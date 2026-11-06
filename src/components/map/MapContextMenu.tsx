@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Copy, ExternalLink, Filter, MapPin, Radar } from 'lucide-react';
+import { CloudSun, Copy, ExternalLink, Filter, MapPin, Radar } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { hasFeature } from '@/lib/plans';
+import { openGate } from '@/components/plans/GateDialog';
 import { octagon, type LatLng } from '@/lib/eventFilters';
 import type { PublicEvent } from '@/types/event';
 import { useI18n } from '@/i18n';
@@ -11,14 +14,17 @@ export interface ContextTarget { x: number; y: number; lat: number; lng: number;
  * Right-click on the map (map only — the browser's own menu stays everywhere else):
  * an investigation menu. A right-click on a pin also offers "filter by this type" and "open source".
  */
-export function MapContextMenu({ map, target, onClose, onArea, onFilterCategory }: {
+export function MapContextMenu({ map, target, onClose, onArea, onFilterCategory, onWeather }: {
   map: L.Map | null;
   target: ContextTarget | null;
   onClose: () => void;
   onArea?: (points: LatLng[]) => void;
   onFilterCategory?: (slug: string) => void;
+  /** Weather and sun/moon at the point (registered users; guests get the sign-up gate). */
+  onWeather?: (lat: number, lng: number) => void;
 }) {
   const { lang, categoryLabel } = useI18n();
+  const { profile } = useAuth();
   const he = lang === 'he';
   const ref = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
@@ -60,6 +66,16 @@ export function MapContextMenu({ map, target, onClose, onArea, onFilterCategory 
       <button type="button" role="menuitem" className={item} onClick={() => void navigator.clipboard?.writeText(coords).then(() => setCopied(true))}>
         <Copy className="size-4" aria-hidden />{copied ? (he ? 'הועתק ✓' : 'Copied ✓') : he ? 'העתקת קואורדינטות' : 'Copy coordinates'}
       </button>
+      {onWeather ? (
+        <button type="button" role="menuitem" className={item} data-weather-item onClick={() => {
+          if (!profile) openGate('signup');
+          else if (!hasFeature(undefined, 'weather')) openGate('upgrade');
+          else onWeather(target.lat, target.lng);
+          onClose();
+        }}>
+          <CloudSun className="size-4" aria-hidden />{he ? 'מזג אוויר ושמש/ירח כאן' : 'Weather & sun/moon here'}{!profile ? ' 🔒' : ''}
+        </button>
+      ) : null}
       {onArea ? (
         <button type="button" role="menuitem" className={item} onClick={() => {
           // ~10 km around the point (the existing drawn-area filter).
