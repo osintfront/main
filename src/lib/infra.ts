@@ -29,11 +29,11 @@ const SURFACE: Record<string, [string, string]> = {
   DIRT: ['dirt', 'עפר'], SAND: ['sand', 'חול'], UNK: ['unknown', 'לא ידוע'],
 };
 
-const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+export const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const DASH = '—';
 const m = (ft: number) => Math.round(ft * 0.3048);
 
-function countryName(cc: string, lang: Lang): string {
+export function countryName(cc: string, lang: Lang): string {
   try {
     return new Intl.DisplayNames([lang === 'he' ? 'he' : 'en'], { type: 'region' }).of(cc) ?? cc;
   } catch {
@@ -41,7 +41,8 @@ function countryName(cc: string, lang: Lang): string {
   }
 }
 
-function row(label: string, value: string): string {
+/** One label/value line of a popup; `value` is HTML (escape it first). */
+export function infoRow(label: string, value: string): string {
   return `<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#64748b">${esc(label)}</span><span dir="auto">${value}</span></div>`;
 }
 
@@ -67,7 +68,7 @@ export function airfieldPopup(p: AirfieldProps, lang: Lang, near: string | null)
     }).join('<br>')
     : DASH;
   return shell(lang, p.n, near, T[p.k], [
-    row(T.codes, codes), row(T.country, esc(countryName(p.cc, lang))), row(T.elevation, el), row(T.runways, rws),
+    infoRow(T.codes, codes), infoRow(T.country, esc(countryName(p.cc, lang))), infoRow(T.elevation, el), infoRow(T.runways, rws),
   ], T.aircraft, 'OurAirports');
 }
 
@@ -75,14 +76,15 @@ export function portPopup(p: PortProps, lang: Lang, near: string | null): string
   const T = INFRA_TXT[lang];
   const depth = (v?: number) => (typeof v === 'number' ? `${v} m` : DASH);
   return shell(lang, p.n, near, T.ports, [
-    row(T.country, esc(countryName(p.cc, lang))), row(T.size, p.sz ? esc(T[p.sz]) : DASH), row(T.harbor, p.ty ? esc(p.ty) : DASH),
-    row(T.channel, depth(p.ch)), row(T.anchorage, depth(p.an)), row(T.pier, depth(p.cp)),
+    infoRow(T.country, esc(countryName(p.cc, lang))), infoRow(T.size, p.sz ? esc(T[p.sz]) : DASH), infoRow(T.harbor, p.ty ? esc(p.ty) : DASH),
+    infoRow(T.channel, depth(p.ch)), infoRow(T.anchorage, depth(p.an)), infoRow(T.pier, depth(p.cp)),
   ], T.ships, 'NGA World Port Index');
 }
 
+export type InfraFile = 'airfields' | 'ports' | 'military' | 'military-minor';
 const cache = new Map<string, Promise<GeoJSON.FeatureCollection>>();
 /** /data/<kind>.geojson, fetched once per page; a failed load is forgotten so the next call retries. */
-export function loadInfra(kind: 'airfields' | 'ports', fetcher: typeof fetch = fetch): Promise<GeoJSON.FeatureCollection> {
+export function loadInfra(kind: InfraFile, fetcher: typeof fetch = fetch): Promise<GeoJSON.FeatureCollection> {
   let p = cache.get(kind);
   if (!p) {
     p = (async () => {
@@ -96,6 +98,11 @@ export function loadInfra(kind: 'airfields' | 'ports', fetcher: typeof fetch = f
     p.catch(() => cache.delete(kind));
   }
   return p;
+}
+
+/** The file is not there yet (its data workflow has not run): a 404, not a broken download. */
+export function isNotBuilt(e: unknown): boolean {
+  return e instanceof Error && e.message === 'HTTP 404';
 }
 
 /** The bubble for a cluster of airfields or ports: the count on a circle in the layer's colour. */
