@@ -21,6 +21,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.0",
+    "suncalc": "^1.9.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
@@ -30,6 +31,7 @@
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "@types/suncalc": "^1.9.2",
     "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.4.1",
     "tailwindcss": "^4.1.4",
