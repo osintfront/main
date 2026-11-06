@@ -10,6 +10,9 @@ import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { AreaLayersPanel, useAreaLayers } from './areaLayers';
 import { WeatherLayersPanel, WeatherOverlay, useWeatherLayers } from './WeatherLayers';
 import { InfraLayersPanel, InfraLegend, useInfraLayers } from './InfraLayers';
+import { ChokepointPanel } from './ChokepointPanel';
+import { CHOKEPOINT_TXT, fetchSilentVessels, loadSanctions, sanctionOf, type Sanction } from '@/lib/ships';
+import { supabase } from '@/integrations/supabase/client';
 import {
   EMERGENCY_SQUAWKS, SAT_SOURCES, SHIP_COLORS, SHIP_KINDS, fetchPlanes, fetchVessels, satDays, satKey, satTiles, shipFlag, shipKind,
   type Plane, type SatDay, type SatSource, type ShipKind, type Vessel,
@@ -249,6 +252,14 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [shipErr, setShipErr] = useState('');
   const [tick, setTick] = useState(0);
+  // Ships upgrade: sanctioned vessels (by IMO) and ships silent for 24–72 h.
+  const [sanctionList, setSanctionList] = useState<Map<string, Sanction> | null>(null);
+  const [showSilent, setShowSilent] = useState(false);
+  const [silentShips, setSilentShips] = useState<Vessel[] | null>(null);
+  const SX = CHOKEPOINT_TXT[lang === 'he' ? 'he' : 'en'];
+  useEffect(() => {
+    if (shipsOn && !sanctionList) void loadSanctions().then((m) => m && setSanctionList(m));
+  }, [shipsOn, sanctionList]);
 
   useEffect(() => {
     if (!map || !shipsOn) return;
@@ -287,6 +298,16 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
     };
   }, [map, shipsOn, age, tick, T.error]);
 
+  useEffect(() => {
+    if (!map || !shipsOn || !supabase) return setSilentShips(null);
+    let stop = false;
+    const b = map.getBounds().pad(0.2);
+    fetchSilentVessels(supabase, { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() })
+      .then((list) => !stop && setSilentShips(list))
+      .catch(() => !stop && setSilentShips(null));
+    return () => { stop = true; };
+  }, [map, shipsOn, tick]);
+
   const shownShips = useMemo(() => {
     const q = shipQ.trim().toLowerCase();
     return vessels.filter((v) => {
@@ -297,6 +318,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
       return true;
     });
   }, [vessels, kinds, flag, moving, shipQ]);
+  const sanctionedCount = sanctionList ? shownShips.filter((v) => sanctionOf(v, sanctionList)).length : null;
 
   const flags = useMemo(() => {
     const count = new Map<string, number>();
@@ -330,8 +352,10 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
       const kind = shipKind(v.ship_type);
       const color = SHIP_COLORS[kind];
       const flagCode = shipFlag(v.mmsi);
+      const sanc = sanctionOf(v, sanctionList);
       const popup = `<div dir="${dir}" style="min-width:200px;font-size:12px;line-height:1.5">
         <b style="font-size:13px">${esc(v.name || `MMSI ${v.mmsi}`)}</b><br/>
+        ${sanc ? `<b style="color:#dc2626">${esc(SX.sanctionedLabel)} (${esc(sanc.l.join(', '))})</b><br/>` : ''}
         ${esc(T[kind])}${v.ship_type ? ` (${v.ship_type})` : ''}${flagCode ? ` · ${esc(regionName(flagCode))}` : ''}<br/>
         MMSI ${v.mmsi}${v.imo ? ` · IMO ${v.imo}` : ''}${v.callsign ? ` · ${esc(v.callsign)}` : ''}<br/>
         ${T.speed}: ${v.sog ?? '—'} kn · ${T.course}: ${v.cog ?? '—'}°${v.length_m ? ` · ${T.length}: ${v.length_m} m` : ''}<br/>
@@ -347,11 +371,11 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
               className: '',
               iconSize: [20, 20],
               iconAnchor: [10, 10],
-              html: `<span style="display:grid;place-items:center;width:20px;height:20px;border-radius:9999px;background:${color};border:1.5px solid #fff;font-size:11px;line-height:1;box-shadow:0 0 2px rgba(0,0,0,.4)">${SHIP_EMOJI[kind]}</span>`,
+              html: `<span style="display:grid;place-items:center;width:20px;height:20px;border-radius:9999px;background:${color};border:1.5px solid #fff;font-size:11px;line-height:1;box-shadow:${sanc ? '0 0 0 2px #dc2626' : '0 0 2px rgba(0,0,0,.4)'}">${SHIP_EMOJI[kind]}</span>`,
             }),
           })
         : L.circleMarker([v.lat, v.lng], {
-            renderer: canvasRef.current!, radius: kind === 'military' ? 5 : 3.5, color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.95,
+            renderer: canvasRef.current!, radius: kind === 'military' || sanc ? 5 : 3.5, color: sanc ? '#dc2626' : '#ffffff', weight: sanc ? 2.5 : 1, fillColor: color, fillOpacity: 0.95,
           });
       marker.bindPopup(popup, { maxWidth: 280 });
       if (hoverTips) marker.bindTooltip(`${esc(v.name || `MMSI ${v.mmsi}`)} · ${esc(T[kind])}`, { direction: 'top' });
@@ -365,12 +389,22 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
         L.polyline([[v.lat, v.lng], to], { renderer: canvasRef.current!, color, weight: 1.5, interactive: false }).addTo(group);
       }
     }
+    // Silent ships (24–72 h): grey dots at their last position.
+    if (showSilent) {
+      for (const v of silentShips ?? []) {
+        L.circleMarker([v.lat, v.lng], { renderer: canvasRef.current!, radius: 3.5, color: '#ffffff', weight: 1, fillColor: '#9ca3af', fillOpacity: 0.8 })
+          .bindPopup(`<div dir="${dir}" style="min-width:200px;font-size:12px;line-height:1.5"><b>${esc(v.name || `MMSI ${v.mmsi}`)}</b><br/>`
+            + `${esc(SX.silentSince)} ${new Date(v.updated_at).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })}<br/>`
+            + `<span style="color:#64748b">${esc(SX.silentLabel)}</span><br/>MMSI ${v.mmsi}${v.imo ? ` · IMO ${v.imo}` : ''}</div>`, { maxWidth: 280 })
+          .addTo(group);
+      }
+    }
     group.addTo(map);
     shipLayerRef.current = group;
     return () => {
       group.remove();
     };
-  }, [map, shipsOn, shownShips, dir, lang, T, regionName]);
+  }, [map, shipsOn, shownShips, dir, lang, T, regionName, sanctionList, showSilent, silentShips, SX]);
 
   // ── Aircraft ──
   const [planesOn, setPlanesOn] = useState(false);
@@ -620,6 +654,12 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
             {shipsOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {shipErr ? <p className="text-red-600">{shipErr}</p> : !vessels.length ? <p>{T.noShips}</p> : null}
+                <ChokepointPanel map={map} lang={lang} onMap={shownShips.length} sanctioned={sanctionedCount}
+                  silent={silentShips ? silentShips.length : null} regionName={regionName} onShow={() => setShipsOn(true)} />
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input type="checkbox" className="size-3.5" data-show-silent checked={showSilent} onChange={(e) => setShowSilent(e.target.checked)} />
+                  {SX.showSilent}
+                </label>
                 <div className="grid grid-cols-2 gap-x-2 gap-y-1">
                   {SHIP_KINDS.map((k) => (
                     <label key={k} className="flex cursor-pointer items-center gap-1.5">
