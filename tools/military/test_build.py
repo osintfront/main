@@ -1,12 +1,14 @@
 # Run: python3 -m unittest tools/military/test_build.py -v
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
 from unittest import mock
 
 HERE = os.path.dirname(__file__)
+re_qid = re.compile(r'^Q\d+$')
 sys.path.insert(0, HERE)
 import build_military  # noqa: E402
 from build_military import (  # noqa: E402
@@ -46,6 +48,11 @@ class Classify(unittest.TestCase):
         self.assertEqual(classify({'military': 'danger_zone'}), 'range')
         self.assertEqual(classify({'military': 'shelter'}), 'minor')
 
+    def test_naval_words_inside_other_words_are_not_naval(self):
+        for name in ('قاعدة البحرين', 'Denizli Garnizonu', 'Akdeniz Kışlası', 'Karadeniz Bölge Komutanlığı'):
+            self.assertEqual(classify({'landuse': 'military', 'name': name}), 'base', name)
+        self.assertEqual(classify({'landuse': 'military', 'name': 'القاعدة البحرية'}), 'naval')
+
     def test_skipped(self):
         for tags in ({'military': 'airfield'}, {'military': 'base', 'aeroway': 'aerodrome'}, {'military': 'base', 'disused': 'yes'},
                      {'military': 'base', 'abandoned': 'yes'}, {'military': 'trench'}, {'military': 'obstacle_course'}):
@@ -53,6 +60,11 @@ class Classify(unittest.TestCase):
 
 
 class Operator(unittest.TestCase):
+    def test_french_host_armies_are_not_france(self):
+        self.assertIsNone(operator_cc('Forces Armées Djiboutiennes'))
+        self.assertIsNone(operator_cc('Armée libanaise'))
+        self.assertEqual(operator_cc('Forces françaises stationnées à Djibouti'), 'FR')
+
     def test_keywords(self):
         self.assertEqual(operator_cc('United States Air Force'), 'US')
         self.assertEqual(operator_cc('Royal Navy'), 'GB')
@@ -137,6 +149,15 @@ def site(osm, k, lat, lng, name=None, km2=None):
 
 
 class Dedupe(unittest.TestCase):
+    def test_a_named_point_inside_a_large_area_is_the_same_base(self):
+        area = site('w1', 'base', 25.117, 51.315, 'Al Udeid', 22.0)
+        area['bounds'] = {'minlat': 25.095, 'minlon': 51.29, 'maxlat': 25.14, 'maxlon': 51.34}
+        point = site('n1', 'base', 25.135, 51.335, 'Al Udeid')  # ~2.8 km from the centre, inside the bounds
+        point['tags'].update({'wikidata': 'Q542588', 'operator': 'USAF'})
+        out = dedupe([point, area])
+        self.assertEqual([s['osm'] for s in out], ['w1'])
+        self.assertEqual((out[0]['tags']['wikidata'], out[0]['tags']['operator']), ('Q542588', 'USAF'))
+
     def test_same_name_nearby_keeps_the_larger(self):
         out = dedupe([site('n1', 'base', 25.0, 51.0, 'Camp X'), site('w1', 'base', 25.005, 51.0, 'Camp X', 4.0)])
         self.assertEqual([s['osm'] for s in out], ['w1'])
@@ -244,6 +265,26 @@ class Wikidata(unittest.TestCase):
         nokra = self.by['Q4327132']
         r = site('w7', 'range', nokra['lat'], nokra['lng'])
         self.assertEqual(len(merge([r], [nokra], self.facts, self.ops)), 2)
+
+    def test_items_located_in_israel_are_dropped(self):
+        it = wd_item('Q7', 33.0, 35.8, 'SY', en='Golan outpost')
+        facts = dict(self.facts, Q7={'closed': False, 'ops': [], 'en': 'Golan outpost', 'he': None, 'il': True})
+        self.assertEqual(merge([], [it], facts, self.ops), [])
+
+    def test_hebrew_only_items_in_ps_and_sy_are_dropped(self):
+        it = wd_item('Q8', 31.9, 35.2, 'PS', en=None, he='מוצב')
+        self.assertEqual(merge([], [it], self.facts, self.ops), [])
+
+    def test_p17_israel_is_recorded(self):
+        ents = {'Q9': {'id': 'Q9', 'claims': {'P17': [{'mainsnak': {'snaktype': 'value', 'property': 'P17', 'datavalue': {'value': {'entity-type': 'item', 'id': 'Q801'}, 'type': 'wikibase-entityid'}}, 'type': 'statement', 'rank': 'normal'}]}}}
+        self.assertTrue(site_facts(ents)['Q9']['il'])
+        self.assertFalse(self.facts['Q542588']['il'])
+
+    def test_malformed_wikidata_tag_is_ignored(self):
+        s = site('n3', 'base', 20.0, 40.0, 'Camp')
+        s['tags']['wikidata'] = 'Q1;Q2'
+        out = merge([s], [], self.facts, self.ops)
+        self.assertIsNone(out[0].get('wd'))
 
     def test_israeli_operated_is_dropped(self):
         it = wd_item('Q6', 31.9, 35.2, 'PS')
@@ -362,6 +403,38 @@ class Gate(unittest.TestCase):
         code, _, files = self.run_main(fake_fetch(fail), min_sites=1)
         self.assertEqual(code, 0)
         self.assertEqual(seen[:2], [build_military.OVERPASS, build_military.OVERPASS_MIRROR])
+
+    def test_wikidata_error_answer_is_a_failure(self):
+        f = fake_fetch()
+        def bad(url, data=None):
+            if url.startswith(build_military.ENTITIES):
+                return {'error': {'code': 'no-such-entity', 'info': 'Could not find an entity with the ID "Q1;Q2".'}}
+            return f(url, data)
+        self.assertEqual(self.run_main(bad, min_sites=1)[::2], (3, []))
+
+    def test_malformed_tags_are_not_sent_to_wikidata(self):
+        f = fake_fetch()
+        def strict(url, data=None):
+            if url == build_military.OVERPASS:
+                fx = fixture('overpass_qa.json')
+                fx['elements'][0]['tags']['wikidata'] = 'Q1;Q2'
+                return fx
+            if url.startswith(build_military.ENTITIES):
+                ids = url[len(build_military.ENTITIES):].split('%7C')
+                if any(not re_qid.match(i) for i in ids):
+                    return {'error': {'code': 'no-such-entity'}}
+            return f(url, data)
+        self.assertEqual(self.run_main(strict, min_sites=1)[0], 0)
+
+    def test_a_wikidata_hiccup_is_retried(self):
+        calls = []
+        def once(url, data):
+            if url.startswith(build_military.WIKIDATA) and not calls:
+                calls.append(url)
+                return True
+            return False
+        code, _, files = self.run_main(fake_fetch(once), min_sites=1)
+        self.assertEqual((code, len(files)), (0, 2))
 
     def test_a_country_down_writes_nothing(self):
         code, _, files = self.run_main(fake_fetch(lambda url, data: bool(data) and b'IR' in data), min_sites=1)

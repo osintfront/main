@@ -26,6 +26,7 @@ OUT = os.path.join(os.path.dirname(__file__), '..', '..', 'public', 'data')
 MIN_SITES = 1000
 MAX_BYTES = 8_000_000
 MUST_HAVE = ('TR', 'IR', 'EG', 'SA')
+WD_RETRY = (30, 90)
 PAUSE = 5           # seconds between Overpass countries
 RETRY = (60, 180, 420)  # waits before the 2nd, 3rd and 4th try of a country (the public server is often full)
 
@@ -34,7 +35,8 @@ SKIP_MILITARY = {'airfield', 'trench', 'obstacle_course'}
 MINOR = {'bunker', 'checkpoint', 'shelter'}
 RANGES = {'range', 'training_area', 'danger_area', 'danger_zone', 'nuclear_explosion_site'}
 # Navy / coast guard in English, Arabic, Turkish and Persian.
-NAVAL = re.compile(r'naval|navy|coast ?guard|بحري|خفر السواحل|deniz|donanma|sahil güvenlik|دریایی', re.I)
+# بحري but not البحرين (Bahrain); deniz as a word, not Denizli / Akdeniz / Karadeniz.
+NAVAL = re.compile(r'naval|navy|coast ?guard|بحري(?!ن)|خفر السواحل|\bdeniz\b|donanma|sahil güvenlik|دریایی', re.I)
 HEBREW = re.compile('[֐-׿]')
 
 # Operator text → country code. First match wins, so the narrower patterns come first.
@@ -45,7 +47,7 @@ OPERATORS: list[tuple[str, re.Pattern]] = [(cc, re.compile(p, re.I)) for cc, p i
     ('OM', r'\bof oman\b|\bomani\b'),  # "Royal Air Force of Oman" is not British
     ('GB', r'royal air force|royal navy|british|\bRAF\b'),
     ('US', r'united states|\bu\.s\.|\bus (?:navy|army|air force|marine)|usaf|centcom'),
-    ('FR', r'french|france|armée|marine nationale'),
+    ('FR', r'french|france|français|marine nationale'),  # not "armée": Lebanese and Djiboutian armies write in French
     ('RU', r'russia'),
     ('TR', r'turkish|türk|\btsk\b'),
     ('IR', r'iran|irgc'),
@@ -141,7 +143,7 @@ def parse_overpass(data: dict, cc: str) -> list[dict]:
         else:
             continue
         sites.append({'k': k, 'lat': round(lat, 5), 'lng': round(lng, 5), 'cc': cc, 'tags': tags,
-                      'osm': el['type'][0] + str(el['id']), 'km2': area_km2(b) if b else None})
+                      'osm': el['type'][0] + str(el['id']), 'km2': area_km2(b) if b else None, 'bounds': b})
     return sites
 
 
@@ -151,8 +153,17 @@ def km(a_lat: float, a_lng: float, b_lat: float, b_lng: float) -> float:
     return 2 * 6371.0 * math.asin(math.sqrt(h))
 
 
+def _inside(s: dict, b: dict | None) -> bool:
+    return bool(b) and b['minlat'] <= s['lat'] <= b['maxlat'] and b['minlon'] <= s['lng'] <= b['maxlon']
+
+
+def _same(a: dict, b: dict) -> bool:
+    return km(a['lat'], a['lng'], b['lat'], b['lng']) <= 1.0 or _inside(a, b.get('bounds')) or _inside(b, a.get('bounds'))
+
+
 def dedupe(sites: list[dict]) -> list[dict]:
-    """A base mapped twice (a named point inside its named area): one site of the same kind and name within 1 km, the larger kept."""
+    """A base mapped twice (a named point inside its named area): one site per kind and name when the two are within 1 km
+    or one lies inside the other's bounds; the larger is kept and takes over the other's wikidata / operator tags."""
     keep: list[dict] = []
     groups: dict[tuple[str, str], list[dict]] = {}
     for s in sites:
@@ -162,9 +173,12 @@ def dedupe(sites: list[dict]) -> list[dict]:
             continue
         group = groups.setdefault((s['k'], name), [])
         for i, g in enumerate(group):
-            if km(s['lat'], s['lng'], g['lat'], g['lng']) <= 1.0:
-                if (s['km2'] or 0) > (g['km2'] or 0):
-                    group[i] = s
+            if _same(s, g):
+                win, lose = (s, g) if (s['km2'] or 0) > (g['km2'] or 0) else (g, s)
+                for t in ('wikidata', 'operator'):
+                    if lose['tags'].get(t) and not win['tags'].get(t):
+                        win['tags'] = {**win['tags'], t: lose['tags'][t]}
+                group[i] = win
                 break
         else:
             group.append(s)
@@ -187,11 +201,13 @@ WIKIDATA_QUERY = """SELECT ?item ?itemLabel ?he ?coord ?cc (GROUP_CONCAT(DISTINC
 } GROUP BY ?item ?itemLabel ?he ?coord ?cc""" % ' '.join(f'"{c}"' for c in sorted(COUNTRIES))
 
 ENTITIES = 'https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims%7Clabels&languages=en%7Che&ids='
+ISRAEL = 'Q801'  # an item whose countries include Israel is left out (Golan, West Bank)
 CLOSED_PROPS = ('P576', 'P3999', 'P582')  # dissolved / closed / end time
 DISSOLVED = {'SU', 'YU', 'CS', 'DD'}
 NAVAL_CLASS = re.compile(r'naval', re.I)
 AIR_CLASS = re.compile(r'air ?base|air station|aerodrome|airport', re.I)
 HISTORIC_CLASS = re.compile(r'^(ruins|destroyed building or structure|archaeological site|museum|castle|fortress|palace)$', re.I)
+QID = re.compile(r'^Q\d+$')
 POINT = re.compile(r'Point\(\s*(-?[\d.]+(?:[eE]-?\d+)?)\s+(-?[\d.]+(?:[eE]-?\d+)?)\s*\)')
 
 
@@ -240,7 +256,8 @@ def site_facts(ents: dict) -> dict[str, dict]:
             v = _value(c)
             if isinstance(v, dict) and v.get('id') and 'P582' not in (c.get('qualifiers') or {}):
                 ops.append(v['id'])
-        out[qid] = {'closed': any(_claims(e, p) for p in CLOSED_PROPS), 'ops': ops, 'en': _label(e, 'en'), 'he': _label(e, 'he')}
+        il = any(isinstance(v := _value(c), dict) and v.get('id') == ISRAEL for c in _claims(e, 'P17'))
+        out[qid] = {'closed': any(_claims(e, p) for p in CLOSED_PROPS), 'ops': ops, 'en': _label(e, 'en'), 'he': _label(e, 'he'), 'il': il}
     return out
 
 
@@ -296,13 +313,16 @@ def merge(sites: list[dict], items: list[dict], facts: dict, ops: dict) -> list[
         if o:
             _set_ops(site, o)
 
-    by_tag = {s['tags']['wikidata']: s for s in sites if s['tags'].get('wikidata')}
+    by_tag = {s['tags']['wikidata']: s for s in sites if QID.match(s['tags'].get('wikidata') or '')}
     linked: set[str] = set()
     out = list(sites)
     for it in items:
         qid = it['qid']
-        if (facts.get(qid) or {}).get('closed'):
+        f = facts.get(qid) or {}
+        if f.get('closed') or f.get('il'):
             continue
+        if not it['en'] and it['he'] and it['cc'] in ('PS', 'SY', 'LB'):
+            continue  # a Hebrew-only label on the Israeli side of the line
         match = by_tag.get(qid)
         if not match:
             near = [s for s in sites if s['k'] in ('base', 'naval') and s['tags'].get('wikidata') in (None, qid)
@@ -396,11 +416,27 @@ def _overpass(cc: str) -> list[dict]:
     raise last  # type: ignore[misc]
 
 
+def _wikidata(url: str) -> dict:
+    """Wikidata with two retries (30 s, 90 s): its query service answers 429 / 504 under load."""
+    for wait in (0, *WD_RETRY):
+        if wait:
+            time.sleep(wait)
+        try:
+            return _fetch(url)
+        except Exception as e:
+            last = e
+            print(f'Wikidata: {e}', file=sys.stderr)
+    raise last
+
+
 def _entities(ids) -> dict:
     out: dict = {}
     ids = sorted(set(ids))
     for i in range(0, len(ids), 50):
-        out.update(_fetch(ENTITIES + '%7C'.join(ids[i:i + 50])).get('entities', {}))
+        got = _wikidata(ENTITIES + '%7C'.join(ids[i:i + 50]))
+        if 'error' in got or not isinstance(got.get('entities'), dict):
+            raise ValueError(f'Wikidata entities: {got.get("error") or sorted(got)}')
+        out.update(got['entities'])
     return out
 
 
@@ -426,8 +462,8 @@ def build() -> None:
     if failed:
         check([], failed)
     sites = dedupe(sites)
-    items = parse_wikidata(_fetch(WIKIDATA + '?format=json&query=' + urllib.parse.quote(WIKIDATA_QUERY)))
-    ents = _entities({i['qid'] for i in items} | {s['tags']['wikidata'] for s in sites if s['tags'].get('wikidata')})
+    items = parse_wikidata(_wikidata(WIKIDATA + '?format=json&query=' + urllib.parse.quote(WIKIDATA_QUERY)))
+    ents = _entities({i['qid'] for i in items} | {t for s in sites if QID.match(t := s['tags'].get('wikidata') or '')})
     ents.update(_entities({o for f in site_facts(ents).values() for o in f['ops']} - ents.keys()))
     countries = {v['id'] for e in ents.values() for c in _claims(e, 'P17') if isinstance(v := _value(c), dict)}
     ents.update(_entities(countries - ents.keys()))
