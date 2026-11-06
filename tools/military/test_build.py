@@ -135,6 +135,11 @@ class Parse(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_overpass({}, 'IR')
 
+    def test_empty_answer_is_a_failure(self):
+        # First run: the mirror answered Egypt with no elements and no remark; every country has some.
+        with self.assertRaisesRegex(ValueError, 'EG'):
+            parse_overpass({'elements': []}, 'EG')
+
     def test_israeli_sites_are_dropped(self):
         data = {'elements': [
             {'type': 'node', 'id': 1, 'lat': 31.9, 'lon': 35.2, 'tags': {'military': 'checkpoint'}},
@@ -309,6 +314,32 @@ class Wikidata(unittest.TestCase):
         out = merge([s], [k], self.facts, self.ops)
         self.assertEqual([(o['op'], o['wd']) for o in out], [('RU', 'Q21582584')])
 
+    def test_past_foreign_operators_are_not_shown(self):
+        # Wikidata keeps the RAF on Egypt's canal-zone air bases (left 1956) with no end date.
+        it = wd_item('Q4704083', 30.6, 32.24, 'EG', en='Al Ismailiyah Air Base', air=True)
+        facts = dict(self.facts, Q4704083={'closed': False, 'ops': ['Q165862'], 'en': 'Al Ismailiyah Air Base', 'he': None})
+        self.assertEqual(merge([], [it], facts, self.ops), [])
+        osm = site('w11', 'base', 30.6, 32.24, 'Ismailia')
+        osm['cc'] = 'EG'
+        out = merge([osm], [it], facts, self.ops)[0]
+        self.assertEqual((out.get('wd'), out.get('op'), out.get('f')), ('Q4704083', None, None))
+
+    def test_former_sites_have_no_operator(self):
+        s = site('w12', 'base', 25.19, 51.41, 'Former Camp As-Sayliyah (Main)')
+        s['tags']['operator'] = 'United States Army'
+        out = merge([s], [], self.facts, self.ops)[0]
+        self.assertEqual((out.get('op'), out.get('f'), out.get('opn')), (None, None, None))
+
+    def test_a_navy_operated_base_is_naval(self):
+        s = site('w13', 'base', 34.9, 35.87, 'Material-Technical Support Point')
+        s['cc'] = 'SY'
+        s['tags']['operator'] = 'Russian Navy'
+        self.assertEqual(merge([s], [], self.facts, self.ops)[0]['k'], 'naval')
+        a = site('w14', 'base', 34.9, 35.87, 'Naval air base')
+        a['air'] = True
+        a['tags']['operator'] = 'United States Navy'
+        self.assertEqual(merge([a], [], self.facts, self.ops)[0]['k'], 'base')  # air bases stay air bases
+
     def test_feature_keys(self):
         f = site_feature({'k': 'range', 'lat': 25.0, 'lng': 51.0, 'cc': 'QA', 'tags': {}, 'osm': 'w1', 'km2': None})
         self.assertEqual(f['geometry'], {'type': 'Point', 'coordinates': [51.0, 25.0]})
@@ -361,6 +392,20 @@ class Gate(unittest.TestCase):
         with self.assertRaises(ValueError):
             size_guard([feat('TR')], 10)
 
+    def test_floor_is_set_from_the_first_run(self):
+        self.assertGreaterEqual(build_military.MIN_SITES, 9000)  # first run: 13,950 sites
+
+    @mock.patch.object(build_military, 'MIN_SITES', 1000)
+    def test_must_have_countries_need_openstreetmap_sites(self):
+        ok = [feat(cc) for cc in ('TR', 'IR', 'SA') for _ in range(330)]
+        wd_only = [feat('EG') for _ in range(24)]
+        for f in wd_only:
+            del f['properties']['osm']
+        with self.assertRaisesRegex(ValueError, 'EG'):
+            check(ok + wd_only, [])
+        check(ok + [feat('EG')] + wd_only, [])
+
+    @mock.patch.object(build_military, 'MIN_SITES', 1000)
     def test_check(self):
         ok = [feat(cc) for cc in ('TR', 'IR', 'EG', 'SA') for _ in range(250)]
         check(ok, [])

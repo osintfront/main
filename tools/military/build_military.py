@@ -23,7 +23,7 @@ OVERPASS = 'https://overpass-api.de/api/interpreter'
 OVERPASS_MIRROR = 'https://overpass.private.coffee/api/interpreter'  # tried when the main server is full
 WIKIDATA = 'https://query.wikidata.org/sparql'
 OUT = os.path.join(os.path.dirname(__file__), '..', '..', 'public', 'data')
-MIN_SITES = 1000
+MIN_SITES = 9500  # about 70 % of the first run (13,950 sites, 2026-11-06)
 MAX_BYTES = 8_000_000
 MUST_HAVE = ('TR', 'IR', 'EG', 'SA')
 WD_RETRY = (30, 90)
@@ -127,6 +127,8 @@ def parse_overpass(data: dict, cc: str) -> list[dict]:
     elements = data.get('elements')
     if not isinstance(elements, list):
         raise ValueError(f'Overpass {cc}: no "elements" in the answer (keys: {sorted(data)})')
+    if not elements:  # every one of the 20 countries has some; an empty answer is a server that lost its area index
+        raise ValueError(f'Overpass {cc}: an empty answer')
     sites = []
     for el in elements:
         tags = el.get('tags') or {}
@@ -208,6 +210,10 @@ NAVAL_CLASS = re.compile(r'naval', re.I)
 AIR_CLASS = re.compile(r'air ?base|air station|aerodrome|airport', re.I)
 HISTORIC_CLASS = re.compile(r'^(ruins|destroyed building or structure|archaeological site|museum|castle|fortress|palace)$', re.I)
 QID = re.compile(r'^Q\d+$')
+# Wikidata items whose foreign operator left long ago but has no end date (checked on the first run, 2026-11-06):
+# the RAF on Egypt's canal-zone bases and at Habbaniya and Habilayn, a WWII USAAF landing ground, PFLP's 1970 airstrip.
+PAST_OPERATORS = {'Q4704083', 'Q5266913', 'Q16931978', 'Q3928141', 'Q135004999', 'Q117050943'}
+FORMER = re.compile(r'^\s*(former|ex-)\b', re.I)
 POINT = re.compile(r'Point\(\s*(-?[\d.]+(?:[eE]-?\d+)?)\s+(-?[\d.]+(?:[eE]-?\d+)?)\s*\)')
 
 
@@ -300,7 +306,7 @@ def merge(sites: list[dict], items: list[dict], facts: dict, ops: dict) -> list[
     """Operators and Wikidata links onto the OSM sites; unmatched Wikidata sites added; Israeli-operated sites dropped."""
     def wops(qid: str) -> list[tuple[str | None, str | None]]:
         f = facts.get(qid)
-        if not f or f['closed']:
+        if not f or f['closed'] or qid in PAST_OPERATORS:
             return []
         return [(ops[o]['name'], ops[o]['cc']) for o in f['ops'] if o in ops and not ops[o].get('gone')]
 
@@ -346,6 +352,12 @@ def merge(sites: list[dict], items: list[dict], facts: dict, ops: dict) -> list[
     for s in out:
         if not s.get('op') and s['tags'].get('operator'):
             _set_ops(s, [(s['tags']['operator'], operator_cc(s['tags']['operator']))])
+        name = s['tags'].get('name:en') or s['tags'].get('name') or s.get('en') or ''
+        if FORMER.match(name):  # "Former Camp As-Sayliyah": the operator is the past one
+            for key in ('op', 'opn', 'f', '_ccs'):
+                s.pop(key, None)
+        if s['k'] == 'base' and not s.get('air') and NAVAL.search(s.get('opn') or ''):
+            s['k'] = 'naval'  # Russia's Tartus point, Camp Lemonnier: run by a navy
     return [s for s in out if not israeli(s['tags'], s['cc'], 'IL' if 'IL' in s.get('_ccs', []) else s.get('op'), s['k'])]
 
 
@@ -388,7 +400,7 @@ def check(main: list[dict], failed: list[str]) -> None:
         raise ValueError(f'Overpass failed for {failed}')
     if len(main) < MIN_SITES:
         raise ValueError(f'only {len(main)} sites (floor {MIN_SITES}) — a short or broken download?')
-    have = {f['properties']['cc'] for f in main}
+    have = {f['properties']['cc'] for f in main if f['properties'].get('osm')}  # Wikidata alone is not a download
     missing = [cc for cc in MUST_HAVE if cc not in have]
     if missing:
         raise ValueError(f'no sites for {missing}')
