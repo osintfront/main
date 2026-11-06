@@ -60,3 +60,29 @@ test('time zones only for countries we know', () => {
 test('fmtTime shows the time in the given zone', () => {
   assert.equal(fmtTime(new Date('2026-11-06T10:00:00Z'), 'Asia/Tehran'), '13:30');
 });
+
+test('night window: after midnight it is the current night, until this morning\'s sunrise', async () => {
+  const { nightWindow } = await import('../../src/lib/moon.ts');
+  const now = new Date('2026-11-07T00:00:00Z'); // 02:00 in Tel Aviv
+  const w = nightWindow(now, 32.08, 34.78)!;
+  assert.equal(w.from.getTime(), now.getTime());
+  const sunrise = sunTimes(now, 32.08, 34.78).sunrise!;
+  assert.equal(w.to.getTime(), sunrise.getTime());
+  assert.ok(w.to.getTime() - now.getTime() < 6 * 3600_000, 'ends this morning, not tomorrow');
+});
+
+test('night window: in the afternoon it is the coming night, sunset to tomorrow\'s sunrise', async () => {
+  const { nightWindow } = await import('../../src/lib/moon.ts');
+  const now = new Date('2026-11-06T12:00:00Z'); // 14:00 in Tel Aviv
+  const w = nightWindow(now, 32.08, 34.78)!;
+  assert.equal(w.from.getTime(), sunTimes(now, 32.08, 34.78).sunset!.getTime());
+  assert.ok(w.to > w.from && w.to.getTime() - w.from.getTime() < 16 * 3600_000);
+});
+
+test('night window: in the evening it starts now', async () => {
+  const { nightWindow } = await import('../../src/lib/moon.ts');
+  const now = new Date('2026-11-06T18:00:00Z'); // 20:00 in Tel Aviv
+  const w = nightWindow(now, 32.08, 34.78)!;
+  assert.equal(w.from.getTime(), now.getTime());
+  assert.ok(w.to.getTime() - now.getTime() < 12 * 3600_000);
+});

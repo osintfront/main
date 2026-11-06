@@ -68,3 +68,16 @@ export function fmtTime(d: Date | null, zone?: string): string {
   if (!d) return '—';
   return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, ...(zone ? { timeZone: zone } : {}) }).format(d);
 }
+
+/**
+ * The night to show "hour by hour": before this morning's sunrise → now until that sunrise;
+ * after sunset → now until tomorrow's sunrise; during the day → this evening's sunset until tomorrow's sunrise.
+ */
+export function nightWindow(now: Date, lat: number, lng: number): { from: Date; to: Date } | null {
+  const today = sunTimes(now, lat, lng);
+  const next = sunTimes(new Date(now.getTime() + 86400_000), lat, lng);
+  if (today.sunrise && now < today.sunrise) return { from: now, to: today.sunrise };
+  if (!next.sunrise) return null;
+  if (today.sunset && now >= today.sunset) return { from: now, to: next.sunrise };
+  return today.sunset ? { from: today.sunset, to: next.sunrise } : null;
+}

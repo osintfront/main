@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchPoint, type Hour, type PointForecast } from '@/lib/weather';
 import '@/lib/weatherLayers'; // wires the member key to the session
 import { STALE, latestOnly } from '@/lib/latestOnly';
-import { effectiveLight, fmtTime, moonPhase, moonTimes, moonUp, sunTimes, tonightHours, zoneForCountry, type MoonState } from '@/lib/moon';
+import { effectiveLight, fmtTime, moonPhase, moonTimes, moonUp, nightWindow, sunTimes, tonightHours, zoneForCountry, type MoonState } from '@/lib/moon';
 
 export interface WeatherAt { lat: number; lng: number; x: number; y: number }
 
@@ -95,11 +95,10 @@ export function WeatherCard({ at, onClose, container }: { at: WeatherAt; onClose
   const sky = useMemo(() => {
     const now = new Date();
     const sun = sunTimes(now, at.lat, at.lng);
-    const tomorrow = sunTimes(new Date(now.getTime() + 86400_000), at.lat, at.lng);
     const moon = moonPhase(now);
     const times = moonTimes(now, at.lat, at.lng);
-    const nightStart = sun.sunset && now > sun.sunset ? now : sun.sunset;
-    const hours = nightStart && tomorrow.sunrise ? tonightHours(nightStart, tomorrow.sunrise) : [];
+    const night = nightWindow(now, at.lat, at.lng);
+    const hours = night ? tonightHours(night.from, night.to) : [];
     return { now, sun, moon, times, hours, up: moonUp(now, at.lat, at.lng) };
   }, [at.lat, at.lng]);
   const cloudAt = (d: Date): number | null => {
