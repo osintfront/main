@@ -1,0 +1,4 @@
+eccodes>=2.38
+numpy>=1.26
+Pillow>=10
+requests>=2.31
