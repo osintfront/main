@@ -33,6 +33,17 @@ async () => {
   await wait(1500);
   out.labelAfter = label();
   document.querySelector('[data-weather-play]')?.click();
+  // Dragging on the timeline must not pan the map.
+  const pane = () => document.querySelector('.leaflet-map-pane')?.style.transform ?? '';
+  const bar = document.querySelector('[data-weather-timeline] input[type=range]');
+  if (bar) {
+    const before = pane(); const b = bar.getBoundingClientRect();
+    bar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: b.left + 10, clientY: b.top + 5 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: b.left + 120, clientY: b.top + 5 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: b.left + 120, clientY: b.top + 5 }));
+    await wait(300);
+    out.mapPannedBySlider = pane() !== before;
+  }
   out.frameLayers = document.querySelectorAll('.leaflet-pane[class*="ofmWx"] .leaflet-layer, .leaflet-pane[class*="ofmWx"] img.leaflet-image-layer').length;
   return out;
 };

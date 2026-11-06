@@ -202,9 +202,15 @@ export function WeatherOverlay({ s }: { s: WxState }) {
     ? `${new Intl.DateTimeFormat(s.lang === 'he' ? 'he-IL' : 'en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(f.time))} (${f.offsetH === 0 ? T.now : `${f.offsetH > 0 ? '+' : '−'}${Math.abs(f.offsetH)} ${T.h}`})`
     : '—';
   const nowIdx = frames.findIndex((x) => x.offsetH === 0);
+  // These boxes sit inside the Leaflet container: without this, dragging the slider pans the map and the wheel zooms it.
+  const isolate = (el: HTMLDivElement | null) => {
+    if (!el) return;
+    L.DomEvent.disableClickPropagation(el);
+    L.DomEvent.disableScrollPropagation(el);
+  };
   return createPortal(
     <div dir={s.dir} className="pointer-events-none absolute inset-x-2 bottom-8 z-[650] flex flex-col items-center gap-1.5">
-      <div className="pointer-events-auto rounded-lg bg-white/95 px-2.5 py-1.5 text-[11px] text-slate-700 shadow-lg ring-1 ring-slate-900/10 dark:bg-slate-900/95 dark:text-slate-200 dark:ring-white/10">
+      <div ref={isolate} className="pointer-events-auto rounded-lg bg-white/95 px-2.5 py-1.5 text-[11px] text-slate-700 shadow-lg ring-1 ring-slate-900/10 dark:bg-slate-900/95 dark:text-slate-200 dark:ring-white/10">
         {s.on.rain ? (
           <div className="flex items-center gap-1.5" dir="ltr">
             {RAIN_LEGEND.map(([c, v]) => <span key={c} className="inline-flex items-center gap-0.5"><span className="h-2.5 w-4 rounded-sm" style={{ background: c }} />{v}</span>)}
@@ -216,7 +222,7 @@ export function WeatherOverlay({ s }: { s: WxState }) {
         <p className="mt-0.5 text-[10px] text-slate-400">{T.credits}</p>
       </div>
       {s.timeline ? (
-        <div className="pointer-events-auto flex w-full max-w-xl items-center gap-2 rounded-xl bg-white/95 px-3 py-2 shadow-lg ring-1 ring-slate-900/10 dark:bg-slate-900/95 dark:text-slate-100 dark:ring-white/10">
+        <div ref={isolate} data-weather-timeline className="pointer-events-auto flex w-full max-w-xl items-center gap-2 rounded-xl bg-white/95 px-3 py-2 shadow-lg ring-1 ring-slate-900/10 dark:bg-slate-900/95 dark:text-slate-100 dark:ring-white/10">
           <button type="button" data-weather-play aria-label={s.playing ? T.pause : T.play} onClick={() => s.setPlaying(!s.playing)}
             className="grid size-8 shrink-0 place-items-center rounded-full bg-sky-600 text-white hover:bg-sky-700">
             {s.playing ? <Pause className="size-4" aria-hidden /> : <Play className="size-4" aria-hidden />}
