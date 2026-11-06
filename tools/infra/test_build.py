@@ -4,8 +4,9 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
+import build_infra  # noqa: E402
 from build_infra import (  # noqa: E402
-    COUNTRIES, airfield_feature, classify, feature_collection, port_columns, port_feature, runways_for,
+    COUNTRIES, airfield_feature, check_airfields, classify, feature_collection, missing_coastal, port_columns, port_feature, runways_for,
 )
 
 
@@ -102,6 +103,67 @@ class Ports(unittest.TestCase):
     def test_israeli_port_is_dropped(self):
         cols = port_columns(['Main Port Name', 'Country Code', 'Latitude', 'Longitude'])
         self.assertIsNone(port_feature({'Main Port Name': 'Haifa', 'Country Code': 'Israel', 'Latitude': '32.8', 'Longitude': '35'}, cols))
+
+
+
+class MilitaryNames(unittest.TestCase):
+    # Review findings I1/I2: scheduled airports with an "Air Base" keyword stay civil; AB only in capitals; more military words.
+    def test_scheduled_airport_with_air_base_keyword_stays_civil(self):
+        self.assertEqual(classify(row(type='large_airport', name='Beirut Rafic Hariri International Airport', keywords='Beirut Air Base',
+                                      icao_code='OLBA', scheduled_service='yes')), 'civil')
+
+    def test_lowercase_ab_is_not_air_base(self):
+        self.assertEqual(classify(row(name='Ab Pakhsh Airport', iso_country='IR')), 'strip')
+
+    def test_more_military_words(self):
+        for n in ('King Faisal Naval Base', 'RAF Troodos', 'H3 Northwest AFB', 'Korean Village Forward Operating Base', 'Ahvaz Air Defense Base'):
+            self.assertEqual(classify(row(type='small_airport', name=n, iso_country='SA')), 'military', n)
+
+    def test_raf_inside_a_word_is_not_military(self):
+        self.assertEqual(classify(row(type='medium_airport', name='Rafsanjan Airport', iso_country='IR')), 'civil')
+
+    def test_museum_and_medical_are_not_military(self):
+        self.assertEqual(classify(row(type='heliport', name='El Alamein Heliport', keywords='Military Museum', iso_country='EG')), 'strip')
+        self.assertEqual(classify(row(type='heliport', name='Military Medical City Heliport', iso_country='SA')), 'strip')
+
+
+class PortsRobust(unittest.TestCase):
+    # Review finding I4: decimal coordinates first, country spellings, coastal countries without ports.
+    def test_decimal_coordinates_preferred(self):
+        c = port_columns(['Main Port Name', 'Country Code', 'Latitude', 'Longitude', 'ycoord', 'xcoord'])
+        self.assertEqual((c['lat'], c['lng']), ('ycoord', 'xcoord'))
+
+    def test_country_spellings(self):
+        cols = port_columns(['portName', 'countryName', 'ycoord', 'xcoord'])
+        for name, iso in (('Iran (Islamic Republic of)', 'IR'), ('Turkey (Türkiye)', 'TR'), ('U.A.E.', 'AE'),
+                          ('Palestinian Territory, Occupied', 'PS'), ('Saudi Arabia', 'SA')):
+            f = port_feature({'portName': 'P', 'countryName': name, 'ycoord': '27', 'xcoord': '50'}, cols)
+            self.assertIsNotNone(f, name)
+            self.assertEqual(f['properties']['cc'], iso, name)
+
+    def test_coastal_countries_without_ports(self):
+        feats = [{'properties': {'cc': cc}} for cc in ('LB', 'SY', 'TR', 'CY', 'EG', 'SA', 'YE', 'OM', 'AE', 'QA', 'BH', 'KW', 'IQ', 'IR', 'SD', 'ER', 'DJ', 'SO')]
+        self.assertEqual(missing_coastal(feats), ['PS'])
+        self.assertIn('IR', missing_coastal(feats[:13]))
+
+
+class BuildSafety(unittest.TestCase):
+    # Review finding I5: a short airfields download is not written; exit codes tell airfields and ports apart.
+    def test_airfields_floor(self):
+        with self.assertRaises(ValueError):
+            check_airfields(1200)
+        check_airfields(2100)
+
+    def test_exit_codes(self):
+        orig = (build_infra.build_airfields, build_infra.build_ports)
+        try:
+            build_infra.build_airfields = lambda: None
+            build_infra.build_ports = lambda: (_ for _ in ()).throw(ValueError('ports broke'))
+            self.assertEqual(build_infra.main([]), 2)
+            build_infra.build_airfields = lambda: (_ for _ in ()).throw(ValueError('airfields broke'))
+            self.assertEqual(build_infra.main([]), 3)
+        finally:
+            build_infra.build_airfields, build_infra.build_ports = orig
 
 
 if __name__ == '__main__':

@@ -58,3 +58,11 @@ test('a missing file rejects and the next call tries again', async () => {
   await assert.rejects(loadInfra('ports', fake));
   assert.equal(calls, 2);
 });
+
+test('cluster bubbles are styled with the class colour and the count', async () => {
+  const { clusterIconHtml } = await import('../../src/lib/infra.ts');
+  const h = clusterIconHtml(128, '#0284c7');
+  assert.ok(h.includes('128') && h.includes('#0284c7'), h);
+  assert.ok(clusterIconHtml(5, '#0f766e').includes('width:28px'));
+  assert.ok(clusterIconHtml(1500, '#0f766e').includes('width:40px'));
+});

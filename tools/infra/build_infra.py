@@ -25,16 +25,22 @@ OUT = os.path.join(os.path.dirname(__file__), '..', '..', 'public', 'data')
 # elsewhere (FIPS vs ISO) can never pull in a port outside the region.
 REGION = (0.0, 45.0, 24.0, 65.0)
 
-MILITARY = re.compile(r'\b(air ?base|airbase|AB|air force|military|naval air|army|قاعدة)\b', re.I)
+# "AB", "AFB" and "RAF" only in capitals ("Ab Pakhsh", "Rafsanjan" are not bases).
+MILITARY = re.compile(r'\b(air ?base|airbase|air force|military|naval|navy|army|air defen[cs]e|forward operating base|قاعدة)\b'
+                      r'|(?-i:\b(AB|AFB|RAF)\b)', re.I)
+NOT_MILITARY = re.compile(r'hospital|medical|museum', re.I)
+MIN_AIRFIELDS = 1500  # ~2,100 today; fewer means a short or broken download
+COASTAL = ('LB', 'SY', 'TR', 'CY', 'EG', 'SA', 'YE', 'OM', 'AE', 'QA', 'BH', 'KW', 'IQ', 'IR', 'SD', 'ER', 'DJ', 'SO', 'PS')
 CIVIL_TYPES = {'large_airport', 'medium_airport'}
 
 # Country names, ISO 3166 alpha-2 and FIPS 10-4 codes → ISO alpha-2 (the WPI has used each over the years).
 COUNTRY_KEYS = {
     'LB': ['lebanon', 'LE'], 'SY': ['syria', 'syrian arab republic'], 'JO': ['jordan'], 'IQ': ['iraq', 'IZ'],
-    'IR': ['iran', 'iran, islamic republic of'], 'SA': ['saudi arabia'], 'YE': ['yemen', 'YM'], 'OM': ['oman', 'MU'],
-    'AE': ['united arab emirates'], 'QA': ['qatar'], 'BH': ['bahrain', 'BA'], 'KW': ['kuwait', 'KU'],
-    'EG': ['egypt'], 'TR': ['turkey', 'turkiye', 'türkiye', 'TU'], 'CY': ['cyprus'],
-    'PS': ['palestine', 'gaza strip', 'west bank', 'palestinian territory', 'GZ', 'WE'],
+    'IR': ['iran', 'iran, islamic republic of', 'iran (islamic republic of)', 'islamic republic of iran'], 'SA': ['saudi arabia'], 'YE': ['yemen', 'YM'], 'OM': ['oman', 'MU'],
+    'AE': ['united arab emirates', 'uae', 'u.a.e.'], 'QA': ['qatar'], 'BH': ['bahrain', 'BA'], 'KW': ['kuwait', 'KU'],
+    'EG': ['egypt'], 'TR': ['turkey', 'turkiye', 'türkiye', 'turkey (türkiye)', 'türkiye (turkey)', 'TU'], 'CY': ['cyprus'],
+    'PS': ['palestine', 'state of palestine', 'gaza strip', 'gaza', 'west bank', 'palestinian territory', 'palestinian territory, occupied',
+           'occupied palestinian territory', 'GZ', 'WE'],
     'SD': ['sudan', 'SU'], 'ER': ['eritrea'], 'DJ': ['djibouti'], 'SO': ['somalia'],
     'IL': ['israel', 'IS'],
 }
@@ -47,8 +53,9 @@ for iso, keys in COUNTRY_KEYS.items():
 PORT_COLUMNS = {
     'name': ['mainportname', 'portname', 'name'],
     'country': ['countrycode', 'countryname', 'country'],
-    'lat': ['latitude', 'ycoord', 'lat'],
-    'lng': ['longitude', 'xcoord', 'lon', 'lng'],
+    # Decimal ycoord/xcoord first: some exports also carry degree-minute "Latitude"/"Longitude" text.
+    'lat': ['ycoord', 'latitude', 'lat'],
+    'lng': ['xcoord', 'longitude', 'lon', 'lng'],
     'size': ['harborsize', 'harboursize'],
     'type': ['harbortype', 'harbourtype'],
     'ch': ['channeldepthm', 'chdepth', 'channeldepth'],
@@ -79,7 +86,9 @@ def classify(row: dict) -> str | None:
     if t == 'closed':
         return 'closed'
     name = row.get('name', '')
-    if MILITARY.search(f"{name} {row.get('keywords', '')}") and 'hospital' not in name.lower():
+    # Keywords count only for fields without scheduled flights ("Beirut Air Base" is a keyword of Beirut airport).
+    text = name if row.get('scheduled_service') == 'yes' else f"{name} {row.get('keywords', '')}"
+    if MILITARY.search(text) and not NOT_MILITARY.search(f"{name} {row.get('keywords', '')}"):
         return 'military'
     if t in CIVIL_TYPES or (t == 'small_airport' and (row.get('icao_code') or row.get('iata_code'))):
         return 'civil'
@@ -134,8 +143,26 @@ def port_columns(headers: list[str]) -> dict[str, str]:
     return cols
 
 
+def country_iso(value: str) -> str | None:
+    v = str(value or '').strip().lower()
+    if v in COUNTRY_LOOKUP:
+        return COUNTRY_LOOKUP[v]
+    bare = re.sub(r'\s*\(.*?\)\s*', ' ', v).strip()  # "Iran (Islamic Republic of)" → "iran"
+    return COUNTRY_LOOKUP.get(bare)
+
+
+def missing_coastal(features: list[dict]) -> list[str]:
+    have = {f['properties']['cc'] for f in features}
+    return [cc for cc in COASTAL if cc not in have]
+
+
+def check_airfields(n: int):
+    if n < MIN_AIRFIELDS:
+        raise ValueError(f'only {n} airfields (expected at least {MIN_AIRFIELDS}) — download short or format changed')
+
+
 def port_feature(row: dict, cols: dict[str, str]) -> dict | None:
-    iso = COUNTRY_LOOKUP.get(str(row.get(cols['country'], '')).strip().lower())
+    iso = country_iso(row.get(cols['country'], ''))
     lat, lng = _num(row.get(cols['lat'], '')), _num(row.get(cols['lng'], ''))
     if iso is None or iso == 'IL' or iso not in COUNTRIES or lat is None or lng is None:
         return None
@@ -174,6 +201,7 @@ def build_airfields():
     airports = list(csv.DictReader(io.StringIO(_get(OURAIRPORTS + 'airports.csv'))))
     runways = runways_for(list(csv.DictReader(io.StringIO(_get(OURAIRPORTS + 'runways.csv')))))
     feats = [airfield_feature(r, runways.get(r['ident'], [])) for r in airports if classify(r)]
+    check_airfields(len(feats))
     feats.sort(key=lambda f: (f['properties']['cc'], f['properties']['n']))
     _write('airfields.geojson', feature_collection(feats))
 
@@ -184,21 +212,35 @@ def build_ports():
         raise ValueError('World Port Index: empty download')
     cols = port_columns(list(rows[0].keys()))
     feats = [f for f in (port_feature(r, cols) for r in rows) if f]
-    if not feats:
-        raise ValueError('World Port Index: no ports in the region — country column format changed?')
+    # Country values we did not recognise (with counts), to spot a new spelling.
+    unknown: dict[str, int] = {}
+    for r in rows:
+        v = str(r.get(cols['country'], '')).strip()
+        if v and country_iso(v) is None:
+            unknown[v] = unknown.get(v, 0) + 1
+    print('ports per country:', {cc: sum(f['properties']['cc'] == cc for f in feats) for cc in COASTAL})
+    print('unrecognised country values (top 30):', sorted(unknown.items(), key=lambda kv: -kv[1])[:30])
+    gaps = [cc for cc in missing_coastal(feats) if cc != 'PS']  # Gaza may have no listed port
+    if gaps:
+        raise ValueError(f'World Port Index: no ports for {gaps} — country spelling changed?')
     feats.sort(key=lambda f: (f['properties']['cc'], f['properties']['n']))
     _write('ports.geojson', feature_collection(feats))
 
 
 def main(argv: list[str]) -> int:
-    build_airfields()
+    """0 = both written · 2 = airfields written, ports kept from the last run · 3 = nothing written (airfields failed)."""
+    try:
+        build_airfields()
+    except Exception as e:
+        print(f'airfields not updated: {e}', file=sys.stderr)
+        return 3
     if '--airfields-only' in argv:
         return 0
     try:
         build_ports()
     except Exception as e:  # keep the previous ports file
         print(f'ports not updated: {e}', file=sys.stderr)
-        return 1
+        return 2
     return 0
 
 
