@@ -70,7 +70,8 @@ export function EventGeolocation({ eventId }: { eventId: string }) {
     if (path) proofUrl(path).then(setBoard).catch(() => setBoard(null));
   }, [job?.proofFull, job?.proofTarget]);
 
-  if (!hasMedia) return null;
+  // Withdrawn from production until accuracy improves: staff only (testing). No teaser for others.
+  if (!hasMedia || !staff) return null;
 
   if (!allowed) {
     return (
