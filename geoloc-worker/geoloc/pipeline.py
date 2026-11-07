@@ -26,13 +26,13 @@ class Config:
     min_coverage: float = 0.4
     min_relief: float = 0.015
     min_area_relief_m: float = 150.0
-    min_width_px: int = 480
 
 
 def precheck(img) -> str | None:
     """Reasons a photo can't be geolocated by terrain, found without any API call."""
     H, W = img.shape[:2]
-    if W < 480 or H < 270:
+    # Phone photos are often portrait (e.g. 450x800): judge by the short side and total pixels.
+    if min(W, H) < 300 or W * H < 200_000:
         return f"image too small ({W}x{H})"
     top = img[: max(4, H // 6)]
     hsv = cv2.cvtColor(top, cv2.COLOR_BGR2HSV)

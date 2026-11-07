@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import time
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, asdict
 
@@ -110,21 +111,56 @@ def _score_position(xy):
     return best
 
 
+def _run(ex, pts, label):
+    """Score positions, logging progress about every 10 % (a job can take minutes)."""
+    out, n, nxt, t0 = [], len(pts), 0.1, time.time()
+    it = ex.map(_score_position, pts, chunksize=16) if ex else map(_score_position, pts)
+    for i, r in enumerate(it, 1):
+        out.append(r)
+        if i / n >= nxt and n > 50:
+            el = time.time() - t0
+            log.info("%s: %d/%d positions (%.0f%%), ~%.0fs left", label, i, n, 100 * i / n, el / i * (n - i))
+            nxt += 0.1
+    return out
+
+
 def coarse_search(dem: LocalDEM, W, H, u, v, center_xy, radius_m, step_m=None, workers=None):
+    """Two passes: a grid at twice the step over the whole area, then the full step
+    around the most promising spots. About 3x fewer positions than one fine grid."""
     step_m = step_m or max(200.0, radius_m / 40.0)
-    g = np.arange(-radius_m, radius_m + 1, step_m)
-    gx, gy = np.meshgrid(g + center_xy[0], g + center_xy[1])
-    keep = (np.hypot(gx - center_xy[0], gy - center_xy[1]) <= radius_m) & dem.inside(gx, gy, 2000)
+    cx, cy = center_xy
+    g = np.arange(-radius_m, radius_m + 1, 2 * step_m)
+    gx, gy = np.meshgrid(g + cx, g + cy)
+    keep = (np.hypot(gx - cx, gy - cy) <= radius_m) & dem.inside(gx, gy, 2000)
     pts = list(zip(gx[keep].tolist(), gy[keep].tolist()))
-    log.info("coarse search: %d positions, step %.0f m", len(pts), step_m)
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
-    if workers == 1:
-        _init(dem, W, H, u, v, COARSE_RES, 1.5 * step_m)
-        results = [_score_position(p) for p in pts]
+    log.info("terrain search: %d positions (%.0f m grid), %d CPU processes", len(pts), 2 * step_m, workers)
+    args = (dem, W, H, u, v, COARSE_RES, 1.5 * step_m)
+    ex = None
+    if workers > 1:
+        ex = ProcessPoolExecutor(workers, initializer=_init, initargs=args)
     else:
-        with ProcessPoolExecutor(workers, initializer=_init, initargs=(dem, W, H, u, v, COARSE_RES, 1.5 * step_m)) as ex:
-            results = list(ex.map(_score_position, pts, chunksize=16))
-    out = [(px, p) for px, p in results if p is not None]
+        _init(*args)
+    try:
+        first = [(px, p) for px, p in _run(ex, pts, "pass 1") if p is not None]
+        first.sort(key=lambda r: r[0])
+        seen = {(round(x), round(y)) for x, y in pts}
+        extra = []
+        for _, (x, y, *_r) in first[:40]:
+            for dx in (-step_m, 0.0, step_m):
+                for dy in (-step_m, 0.0, step_m):
+                    q = (x + dx, y + dy)
+                    key = (round(q[0]), round(q[1]))
+                    if key in seen or math.hypot(q[0] - cx, q[1] - cy) > radius_m or not dem.inside(q[0], q[1], 2000):
+                        continue
+                    seen.add(key)
+                    extra.append(q)
+        log.info("terrain search pass 2: %d positions (%.0f m grid) around the best spots", len(extra), step_m)
+        second = [(px, p) for px, p in _run(ex, extra, "pass 2") if p is not None]
+    finally:
+        if ex:
+            ex.shutdown()
+    out = first + second
     out.sort(key=lambda r: r[0])
     return out, step_m
 
