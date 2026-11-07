@@ -22,6 +22,8 @@ export interface OfiCard {
   next_update: string | null;
   probability: number | null;
   previous_probability: number | null;
+  /** How often this happens on an ordinary day (shown to everyone who sees the estimate). */
+  base_rate?: number | null;
   /** [iso time, probability][] — Pro and above. */
   spark: [string, number][] | null;
 }

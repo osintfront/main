@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { listInsights, type OfiCard } from '@/services/ofiService';
 import { formatDateTime } from '@/utils/time';
 import { cn } from '@/utils/cn';
-import { BetaBadge, Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimer, OfiDisclaimerShort, Sparkline } from '@/components/ofi/OfiParts';
+import { BetaBadge, Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimer, OfiDisclaimerShort, OfiHorizons, Sparkline, TimesUsual } from '@/components/ofi/OfiParts';
 
 /** Frame shared by the OFI pages: site header, back link, OFI title, intro and the disclaimer on top. */
 export function OfiFrame({ children, back, mood = 'calm' }: { children: ReactNode; back?: { to: string; label: string }; mood?: ReturnType<typeof moodOf> }) {
@@ -128,6 +128,9 @@ function InsightCard({ card }: { card: OfiCard }) {
               {t(card.min_tier >= 3 ? 'ofi.lockedMax' : 'ofi.lockedPro')}
             </p>
           ) : (
+            <>
+            <TimesUsual p={card.probability} base={card.base_rate} className="mt-2" />
+            <OfiHorizons p={card.probability} compact className="mt-2" />
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <Trend p={card.probability} prev={card.previous_probability} />
               {card.spark && card.spark.length > 1 ? (
@@ -136,6 +139,7 @@ function InsightCard({ card }: { card: OfiCard }) {
                 </span>
               ) : null}
             </div>
+            </>
           )}
           <div className="mt-2">
             <UpdateTimes last={card.last_update} next={card.next_update} />

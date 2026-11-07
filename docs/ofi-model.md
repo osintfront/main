@@ -71,3 +71,11 @@ Mean estimate 2.6% on strike days vs 2.0% on other days: the financial signals c
 signal, so their weights stay modest (0.3–0.5). The windows were chosen around escalations, so the
 event rate in them (10.6%) is far above the base rate — the Brier score here mostly measures that;
 calibration on live data (resolved windows) is what will tune the weights. Re-run from the admin panel.
+
+## 7. How the number is shown (display only — the estimate is never changed)
+- **Levels** for the 24 h chance, against the ~2% base rate: up to 2% routine, 2–5% elevated, 5–15% high,
+  above 15% critical (colour of the gauge and OFI's face; legend under the gauge).
+- **"x times the usual"** = probability / base rate.
+- **Longer windows** from the same estimate, assuming the daily risk stays the same:
+  P(n days) = 1 − (1 − p₂₄)ⁿ — 7 days, and until the end of the month (next month in the last week).
+  Labelled as derived, not a separate forecast.

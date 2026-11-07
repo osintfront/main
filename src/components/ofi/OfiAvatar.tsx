@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { OfiMood } from './OfiParts';
 
-const MOOD_COLOR: Record<OfiMood, string> = { calm: '#0e9f8b', alert: '#d98a06', high: '#d6342c' };
+const MOOD_COLOR: Record<OfiMood, string> = { calm: '#0e9f8b', alert: '#d98a06', high: '#e0592a', critical: '#b4161b' };
 
 function useReducedMotion(): boolean {
   const [reduce, setReduce] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
@@ -128,7 +128,7 @@ export function OfiAvatar({ mood = 'calm', size = 44, className }: { mood?: OfiM
           <g className="ofi-eye r"><circle cx="28.5" cy="27.8" r="1.2" fill="#1e2a10" /></g>
         </g>
       </g>
-      {mood === 'high' ? (
+      {mood === 'high' || mood === 'critical' ? (
         <>
           <path d="M16.5 23.6 L21.5 25" stroke="#4a3a20" strokeWidth="1.3" strokeLinecap="round" />
           <path d="M31.5 23.6 L26.5 25" stroke="#4a3a20" strokeWidth="1.3" strokeLinecap="round" />

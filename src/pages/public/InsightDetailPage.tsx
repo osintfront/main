@@ -9,7 +9,7 @@ import { openGate } from '@/components/plans/GateDialog';
 import { getInsight, getTrackRecord, type OfiContribution, type OfiDetail, type OfiSignal, type OfiTrackRecord } from '@/services/ofiService';
 import { formatDateTime } from '@/utils/time';
 import { cn } from '@/utils/cn';
-import { Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimerShort, pct, Sparkline } from '@/components/ofi/OfiParts';
+import { Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimerShort, OfiHorizons, OfiLegend, pct, Sparkline, TimesUsual } from '@/components/ofi/OfiParts';
 import { OfiAdminPanel } from '@/components/ofi/OfiAdminPanel';
 import { OfiAlerts, ofiTrack, PrintBrief, SawItFirstShare, ScenarioExplorer } from '@/components/ofi/OfiExtras';
 import { GuestGate, OfiFrame, Trend, UpdateTimes } from './InsightsPage';
@@ -217,6 +217,7 @@ export function InsightDetailPage() {
                 </button>
               ) : (
                 <>
+                  <TimesUsual p={d.probability} base={d.base_rate} />
                   <Trend p={d.probability} prev={d.previous_probability} />
                   <Bubble d={d} />
                 </>
@@ -225,6 +226,12 @@ export function InsightDetailPage() {
               {d.tier >= 3 && !d.locked ? <PrintBrief /> : null}
             </div>
           </div>
+          {!d.locked && d.probability != null ? (
+            <>
+              <OfiHorizons p={d.probability} className="mt-5" />
+              <OfiLegend value={d.probability} className="mt-4" />
+            </>
+          ) : null}
           <OfiDisclaimerShort className="mt-4" />
           <details className="mt-3 text-sm text-slate-600 dark:text-slate-300">
             <summary className="cursor-pointer font-medium text-slate-800 dark:text-slate-100">{t('ofi.criteria')}</summary>
