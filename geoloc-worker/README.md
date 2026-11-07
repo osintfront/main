@@ -5,9 +5,11 @@ locates the event's subject (smoke, impact, building) on the ground. Runs on
 your own computer and works through the site's queue by itself.
 
 **How a job flows**
-1. A new photo or video thumbnail lands on an event that has a place → a job is
-   queued (setting `geoloc_auto`). A Max user can also request one
-   (`request_geolocation`).
+1. A job is queued only when someone asks: a Max / Intel subscriber presses
+   "Geolocate" in the event window (`request_geolocation`, 20 per day on Max,
+   50 on Intel), or staff press "Run again". Only events pinned to a town or an
+   exact spot qualify. (Automatic queuing of every new photo exists but is
+   off: setting `geoloc_auto`.)
 2. The worker downloads the media (for videos: also 6 frames, keeps the one
    with the best skyline), asks Claude Haiku whether there is terrain to match,
    and extracts the sky/terrain line.
@@ -49,7 +51,7 @@ Auto-start with Windows: Win+R → `shell:startup` → shortcut to `start.bat`.
   (streets, smoke-filled frames, night, close-ups) are skipped, not guessed.
 - To compare models, set `SCENE_MODEL` and re-run jobs for events whose
   locations you already verified, then compare target distance errors.
-- Turn auto-queuing off/on: `update app_settings set value = 'false' where key = 'geoloc_auto';`
+- Automatic queuing of new photos is off; to turn it on: `update app_settings set value = 'true' where key = 'geoloc_auto';`
 
 ## Tests (no network needed)
 ```
