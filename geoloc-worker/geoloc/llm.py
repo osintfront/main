@@ -20,7 +20,7 @@ log = logging.getLogger("geoloc.llm")
 MAX_SIDE = 1568
 
 TRIAGE_PROMPT = """You check photos before an automated terrain-matching geolocation step.
-Answer with JSON only: {"usable": true|false, "reason": "<short>"}.
+Answer with one line of JSON only, nothing else: {"usable": true|false, "reason": "<at most 12 words>"}.
 usable = the frame shows open sky meeting terrain (hills, ridges, mountains) across a good part of its width,
 taken outdoors, not a map, screenshot of text, close-up, interior, night shot or a scene with only buildings/smoke at the top."""
 
@@ -56,7 +56,10 @@ def _json(text: str) -> dict:
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
         raise ValueError("model returned no JSON")
-    return json.loads(m.group(0))
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"model returned bad JSON: {e}") from None
 
 
 class Vision:
@@ -72,15 +75,26 @@ class Vision:
         return _json("".join(b.text for b in r.content if getattr(b, "type", "") == "text"))
 
     def triage(self, img_bgr) -> dict:
+        """Never raises on a malformed answer: anything unclear counts as not usable."""
         if not self.triage_model:
             return {"usable": True, "reason": "triage off"}
         blk, *_ = _img_block(img_bgr)
-        return self._ask(self.triage_model, blk, TRIAGE_PROMPT, 150)
+        r = self.client.messages.create(model=self.triage_model, max_tokens=400,
+                                        messages=[{"role": "user", "content": [blk, {"type": "text", "text": TRIAGE_PROMPT}]}])
+        text = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
+        try:
+            out = _json(text)
+            return {"usable": out.get("usable") is True, "reason": str(out.get("reason", ""))[:200]}
+        except ValueError:
+            m = re.search(r'"usable"\s*:\s*(true|false)', text)
+            reason = re.search(r'"reason"\s*:\s*"([^"]*)', text)
+            return {"usable": bool(m and m.group(1) == "true"),
+                    "reason": (reason.group(1) if reason else "unclear triage answer")[:200]}
 
     def scene(self, img_bgr, text: str, places: list[str]) -> dict:
         blk, s, w, h = _img_block(img_bgr)
         out = self._ask(self.scene_model, blk, SCENE_PROMPT.format(w=w, h=h, text=text[:2500] or "(none)",
-                                                                   places=", ".join(places) or "(none)"))
+                                                                   places=", ".join(places) or "(none)"), 1200)
         # back to full-resolution pixels
         t = out.get("target")
         if isinstance(t, dict) and "x" in t and "y" in t:
