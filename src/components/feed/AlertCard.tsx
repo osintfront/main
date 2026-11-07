@@ -77,7 +77,7 @@ function AlertCardImpl({ alert, now, onLocate }: AlertCardProps) {
         </p>
       ) : null}
 
-      <footer className="mt-3 flex items-center gap-2 border-t border-red-200/70 pt-2.5 text-xs text-slate-600 dark:border-red-500/20 dark:text-slate-400">
+      <footer className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-red-200/70 pt-2.5 text-xs text-slate-600 dark:border-red-500/20 dark:text-slate-400">
         <span>
           {t('hfc.areasCount', { count: areas.length })} · {t('hfc.lastAlert')}{' '}
           <bdi>{formatEventTime(alert.lastAlertAt, locale)}</bdi>
@@ -86,7 +86,7 @@ function AlertCardImpl({ alert, now, onLocate }: AlertCardProps) {
           type="button"
           onClick={() => onLocate(alert.id)}
           aria-label={t('hfc.locateLabel')}
-          className="ms-auto inline-flex h-7 items-center gap-1 rounded-md bg-white px-2 text-xs font-semibold text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-sky-500 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700 dark:hover:bg-slate-700"
+          className="ms-auto inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-white px-2 text-xs font-semibold text-slate-800 ring-1 ring-slate-200 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-sky-500 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700 dark:hover:bg-slate-700"
         >
           <Crosshair className="size-3.5" aria-hidden />
           {t('feed.locate')}

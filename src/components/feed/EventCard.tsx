@@ -104,7 +104,9 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
         </p>
       ) : null}
 
-      <footer className="mt-3 flex items-center gap-3 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+      {/* Two groups that wrap as units: info (badge, source, sources) and actions (details, map). */}
+      <footer className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+        <div className="flex min-w-0 max-w-full items-center gap-3">
         <VerifiedBadge verified={event.isVerified} />
         {sourceLabel ? (
           event.sourceUrl ? (
@@ -135,21 +137,20 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
             {t('details.moreSources', { count: event.sources.length })}
           </button>
         ) : null}
+        </div>
+        <div className="ms-auto flex shrink-0 items-center gap-2">
         {onOpenDetails ? (
           <button
             type="button"
             onClick={() => onOpenDetails(event.id)}
-            className={cn(
-              'inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 sm:h-7 sm:rounded-md dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800',
-              'ms-auto',
-            )}
+            className="inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 sm:h-7 sm:rounded-md dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <FileText className="size-3.5" aria-hidden />
             {t('details.open')}
           </button>
         ) : null}
         {!onMap ? (
-          <span className={cn(onOpenDetails ? '' : 'ms-auto', 'inline-flex shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400')}>
+          <span className={cn('inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400')}>
             <MapPinOff className="size-3.5" aria-hidden />
             {t('feed.notOnMap')}
           </span>
@@ -158,12 +159,13 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
           type="button"
           onClick={() => onLocate(event.id)}
           aria-label={t('feed.locateLabel', { title })}
-          className={cn(onOpenDetails ? '' : 'ms-auto', 'inline-flex h-9 shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-3 text-xs sm:h-7 sm:rounded-md sm:px-2.5 font-semibold text-white transition-colors hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200')}
+          className={cn('inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-slate-900 px-3 text-xs sm:h-7 sm:rounded-md sm:px-2.5 font-semibold text-white transition-colors hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200')}
         >
           <Crosshair className="size-3.5" aria-hidden />
           {t('feed.locate')}
         </button>
         )}
+        </div>
       </footer>
     </article>
   );

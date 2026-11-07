@@ -47,10 +47,10 @@ export function BreakingBadge() {
 export function VerifiedBadge({ verified }: { verified: boolean }) {
   const { t } = useI18n();
   if (!verified) {
-    return <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feed.unverified')}</span>;
+    return <span className="whitespace-nowrap text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feed.unverified')}</span>;
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+    <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-sky-700 dark:text-sky-300">
       <BadgeCheck className="size-3.5" aria-hidden />
       {t('feed.verified')}
     </span>
