@@ -10,6 +10,7 @@ import { EventMedia } from './EventMedia';
 import { EventText, eventTexts } from './EventText';
 import { whereLabel } from '@/utils/places';
 import { EventStaffEdit } from './EventStaffEdit';
+import { EventGeolocation } from './EventGeolocation';
 
 interface EventDetailsDialogProps {
   event: PublicEvent;
@@ -141,6 +142,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
           ) : null}
           <EventStaffEdit event={event} onChanged={onChanged} onMovePin={onMovePin} />
           <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
+          <EventGeolocation eventId={event.id} />
           {event.sources && event.sources.length ? (
             <section aria-labelledby="event-sources-title" className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
               <h3 id="event-sources-title" className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
