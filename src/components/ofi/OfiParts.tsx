@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/i18n';
 import { OFI_TEXT } from '@/content/ofi';
 import { cn } from '@/utils/cn';
@@ -60,55 +60,97 @@ export function Gauge({
   size = 220,
   blurred = false,
   label,
+  tone,
+  caption,
 }: {
   value: number | null;
   band?: [number, number] | null;
   size?: number;
   blurred?: boolean;
   label?: string;
+  /** The probability that sets the colour and level (default: value). */
+  tone?: number | null;
+  /** Shown under the number instead of the level pill (e.g. "7 days"). */
+  caption?: string;
 }) {
   const reduce = usePrefersReducedMotion();
-  const [shown, setShown] = useState(reduce ? value ?? 0 : 0);
+  const target = value ?? 0;
+  const [shown, setShown] = useState(reduce ? target : 0);
+  const cur = useRef(shown);
+  // Tachometer feel: the needle revs past the value and settles back (ease-out-back), the number counts.
   useEffect(() => {
-    if (reduce) return setShown(value ?? 0);
-    const id = requestAnimationFrame(() => setShown(value ?? 0));
-    return () => cancelAnimationFrame(id);
-  }, [value, reduce]);
-  const mood = moodOf(value);
+    if (reduce) {
+      cur.current = target;
+      setShown(target);
+      return;
+    }
+    const from = cur.current;
+    const t0 = performance.now();
+    const dur = 1100;
+    let raf = 0;
+    const back = (k: number) => 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur);
+      const x = k < 1 ? from + (target - from) * back(k) : target;
+      cur.current = x;
+      setShown(x);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, reduce]);
+  const mood = moodOf(tone ?? value);
   const c = MOOD_COLOR[mood];
   const r = 80;
   const len = Math.PI * r;
+  const clamp = (p: number) => Math.min(1, Math.max(0, p));
   // Position along the arc: the gauge reads 0% at the start edge and 100% at the end edge.
-  const at = (p: number) => len * Math.min(1, Math.max(0, p));
-  const angle = Math.PI * (1 - Math.min(1, Math.max(0, shown)));
+  const at = (p: number) => len * clamp(p);
+  const angle = Math.PI * (1 - clamp(shown));
   const nx = 100 + (r - 12) * Math.cos(angle);
   const ny = 100 - (r - 12) * Math.sin(angle);
   const arc = 'M20 100 A80 80 0 0 1 180 100';
+  const ticks = Array.from({ length: 21 }, (_, i) => {
+    const a = Math.PI * (1 - i / 20);
+    const major = i % 2 === 0;
+    const r1 = major ? 60 : 64;
+    return { x1: 100 + r1 * Math.cos(a), y1: 100 - r1 * Math.sin(a), x2: 100 + 69 * Math.cos(a), y2: 100 - 69 * Math.sin(a), major };
+  });
+  const done = Math.abs(shown - target) < 1e-4;
+  const num = blurred || value == null ? '??%' : pct(Math.max(0, done ? target : shown), target >= 0.1 ? 0 : 1);
   return (
     <figure className="m-0 inline-flex flex-col items-center" style={{ width: size }} dir="ltr">
-      <svg viewBox="0 0 200 116" width={size} height={size * 0.58} role="img" aria-label={label ?? (value == null ? 'OFI' : pct(value))}>
+      <svg viewBox="0 0 200 116" width={size} height={size * 0.58} role="img" aria-label={label ?? (value == null ? 'OFI' : pct(target))}>
         <path d={arc} fill="none" className="stroke-slate-200 dark:stroke-slate-800" strokeWidth="14" strokeLinecap="round" />
+        {ticks.map((k, i) => (
+          <line key={i} x1={k.x1} y1={k.y1} x2={k.x2} y2={k.y2} strokeWidth={k.major ? 1.4 : 0.8}
+            className={k.major ? 'stroke-slate-400 dark:stroke-slate-500' : 'stroke-slate-300 dark:stroke-slate-600'} />
+        ))}
         {!blurred && band ? (
           <path d={arc} fill="none" stroke={c} strokeOpacity="0.22" strokeWidth="14"
             strokeDasharray={`${at(band[1]) - at(band[0])} ${len}`} strokeDashoffset={-at(band[0])} />
         ) : null}
         {!blurred && value != null ? (
-          <path d={arc} fill="none" stroke={c} strokeWidth="14" strokeLinecap="round"
-            strokeDasharray={`${Math.max(at(shown), 0.01)} ${len}`}
-            style={{ transition: reduce ? undefined : 'stroke-dasharray 900ms cubic-bezier(.2,.8,.2,1)' }} />
+          <path d={arc} fill="none" stroke={c} strokeWidth="14" strokeLinecap="round" strokeDasharray={`${Math.max(at(shown), 0.01)} ${len}`} />
         ) : null}
         {!blurred && value != null ? (
-          <line x1="100" y1="100" x2={nx} y2={ny} stroke="currentColor" strokeWidth="3" strokeLinecap="round"
-            className="text-slate-700 dark:text-slate-200" style={{ transition: reduce ? undefined : 'all 900ms cubic-bezier(.2,.8,.2,1)' }} />
+          <line x1="100" y1="100" x2={nx} y2={ny} stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="text-slate-700 dark:text-slate-200" />
         ) : null}
         <circle cx="100" cy="100" r="5" className="fill-slate-700 dark:fill-slate-200" />
         <text x="22" y="114" fontSize="9" textAnchor="middle" className="fill-slate-400">0</text>
+        <text x="100" y="50" fontSize="8" textAnchor="middle" className="fill-slate-400">50</text>
         <text x="178" y="114" fontSize="9" textAnchor="middle" className="fill-slate-400">100</text>
       </svg>
-      <figcaption className={cn('-mt-1 text-4xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-white', blurred && 'select-none blur-sm')}>
-        {blurred || value == null ? '??%' : pct(value)}
+      <figcaption aria-live="polite" className={cn('-mt-1 text-4xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-white', blurred && 'select-none blur-sm')}>
+        {num}
       </figcaption>
-      {!blurred && value != null ? <LevelPill mood={mood} /> : null}
+      {!blurred && value != null ? (
+        caption ? (
+          <span dir="auto" className="mt-1 inline-flex rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-bold text-white dark:bg-slate-200 dark:text-slate-900">{caption}</span>
+        ) : (
+          <LevelPill mood={mood} />
+        )
+      ) : null}
     </figure>
   );
 }
@@ -206,28 +248,60 @@ export function TimesUsual({ p, base, className }: { p: number | null; base: num
   );
 }
 
-/** The same estimate over 24 h, 7 days and until the end of the month. */
-export function OfiHorizons({ p, compact = false, className }: { p: number | null; compact?: boolean; className?: string }) {
+export interface OfiHorizon { i: number; label: string; value: number }
+
+/** The 24 h estimate and the same estimate over 7 days and until the end of the month. */
+export function useHorizons(p: number | null): OfiHorizon[] {
   const { t, lang } = useI18n();
-  if (p == null) return null;
+  if (p == null) return [];
   const m = monthWindow();
   const month = m.end.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-GB', { month: 'long' });
-  const cells: [string, number][] = [
-    [t('ofi.h24'), p],
-    [t('ofi.h7'), overDays(p, 7)],
-    [t('ofi.hMonth', { month }), overDays(p, m.days)],
+  return [
+    { i: 0, label: t('ofi.h24'), value: p },
+    { i: 1, label: t('ofi.h7'), value: overDays(p, 7) },
+    { i: 2, label: t('ofi.hMonth', { month }), value: overDays(p, m.days) },
   ];
+}
+
+/**
+ * The three windows as buttons: picking one sends the gauge's needle there (`onSelect`).
+ * Without `onSelect` they are plain figures.
+ */
+export function OfiHorizons({ p, compact = false, selected = 0, onSelect, className }: {
+  p: number | null; compact?: boolean; selected?: number; onSelect?: (h: OfiHorizon) => void; className?: string;
+}) {
+  const { t } = useI18n();
+  const items = useHorizons(p);
+  if (!items.length) return null;
+  const c = MOOD_COLOR[moodOf(p)];
   return (
     <div className={className}>
-      <dl className="grid grid-cols-3 gap-2">
-        {cells.map(([k, v], i) => (
-          <div key={k} className={cn('rounded-xl px-2 py-2 text-center ring-1 ring-slate-200 dark:ring-slate-700', i === 0 && 'bg-slate-50 dark:bg-slate-800/60')}>
-            <dt className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{k}</dt>
-            <dd className={cn('font-bold tabular-nums text-slate-900 dark:text-white', compact ? 'text-lg' : 'text-2xl')}>{pct(v, v >= 0.1 ? 0 : 1)}</dd>
-          </div>
-        ))}
-      </dl>
-      {compact ? null : <p className="mt-1.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">{t('ofi.horizonNote')}</p>}
+      <div role={onSelect ? 'group' : undefined} aria-label={onSelect ? t('ofi.horizonPick') : undefined} className="grid grid-cols-3 gap-2">
+        {items.map((h) => {
+          const on = onSelect && selected === h.i;
+          const body = (
+            <>
+              <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">{h.label}</span>
+              <span className={cn('block font-bold tabular-nums text-slate-900 dark:text-white', compact ? 'text-lg' : 'text-2xl')}>{pct(h.value, h.value >= 0.1 ? 0 : 1)}</span>
+            </>
+          );
+          const cls = cn('rounded-xl px-2 py-2 text-center ring-1 transition', on ? 'ring-2' : 'ring-slate-200 dark:ring-slate-700',
+            onSelect && 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 motion-reduce:hover:translate-y-0');
+          return onSelect ? (
+            <button key={h.i} type="button" aria-pressed={on} onClick={() => onSelect(h)} className={cls}
+              style={on ? { boxShadow: `0 0 0 2px ${c}`, background: `${c}14` } : undefined}>
+              {body}
+            </button>
+          ) : (
+            <div key={h.i} className={cn(cls, h.i === 0 && 'bg-slate-50 dark:bg-slate-800/60')}>{body}</div>
+          );
+        })}
+      </div>
+      {compact ? null : (
+        <p className="mt-1.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+          {onSelect ? `${t('ofi.horizonTap')} ` : ''}{t('ofi.horizonNote')}
+        </p>
+      )}
     </div>
   );
 }

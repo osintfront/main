@@ -9,7 +9,7 @@ import { openGate } from '@/components/plans/GateDialog';
 import { getInsight, getTrackRecord, type OfiContribution, type OfiDetail, type OfiSignal, type OfiTrackRecord } from '@/services/ofiService';
 import { formatDateTime } from '@/utils/time';
 import { cn } from '@/utils/cn';
-import { Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimerShort, OfiHorizons, OfiLegend, pct, Sparkline, TimesUsual } from '@/components/ofi/OfiParts';
+import { Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimerShort, OfiHorizons, OfiLegend, pct, Sparkline, TimesUsual, type OfiHorizon } from '@/components/ofi/OfiParts';
 import { OfiAdminPanel } from '@/components/ofi/OfiAdminPanel';
 import { OfiAlerts, ofiTrack, PrintBrief, SawItFirstShare, ScenarioExplorer } from '@/components/ofi/OfiExtras';
 import { GuestGate, OfiFrame, Trend, UpdateTimes } from './InsightsPage';
@@ -162,6 +162,7 @@ export function InsightDetailPage() {
   const { status, profile } = useAuth();
   const [d, setD] = useState<OfiDetail | null | undefined>(undefined);
   const [tr, setTr] = useState<OfiTrackRecord | null>(null);
+  const [sel, setSel] = useState<OfiHorizon | null>(null);
   const signedIn = status === 'signed_in';
   const back = { to: '/insights', label: t('ofi.allInsights') };
 
@@ -207,8 +208,9 @@ export function InsightDetailPage() {
           <h2 className="text-xl font-bold leading-snug text-slate-900 dark:text-white">{title}</h2>
           <div className="mt-4 flex flex-col items-center gap-5 sm:flex-row sm:items-center">
             <div className="shrink-0">
-              <Gauge value={d.probability} band={band} blurred={d.locked} size={230} />
-              {band ? <p className="mt-1 text-center text-xs tabular-nums text-slate-500 dark:text-slate-400">{t('ofi.band', { lo: pct(band[0]), hi: pct(band[1]) })}</p> : null}
+              <Gauge value={sel && sel.i > 0 ? sel.value : d.probability} tone={d.probability} caption={sel && sel.i > 0 ? sel.label : undefined}
+                band={sel && sel.i > 0 ? null : band} blurred={d.locked} size={230} />
+              {band && !(sel && sel.i > 0) ? <p className="mt-1 text-center text-xs tabular-nums text-slate-500 dark:text-slate-400">{t('ofi.band', { lo: pct(band[0]), hi: pct(band[1]) })}</p> : null}
             </div>
             <div className="min-w-0 flex-1 space-y-3">
               {d.locked ? (
@@ -228,7 +230,7 @@ export function InsightDetailPage() {
           </div>
           {!d.locked && d.probability != null ? (
             <>
-              <OfiHorizons p={d.probability} className="mt-5" />
+              <OfiHorizons p={d.probability} selected={sel?.i ?? 0} onSelect={setSel} className="mt-5" />
               <OfiLegend value={d.probability} className="mt-4" />
             </>
           ) : null}

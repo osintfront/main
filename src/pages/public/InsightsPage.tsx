@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { listInsights, type OfiCard } from '@/services/ofiService';
 import { formatDateTime } from '@/utils/time';
 import { cn } from '@/utils/cn';
-import { BetaBadge, Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimer, OfiDisclaimerShort, OfiHorizons, Sparkline, TimesUsual } from '@/components/ofi/OfiParts';
+import { BetaBadge, Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimer, OfiDisclaimerShort, OfiHorizons, Sparkline, TimesUsual, type OfiHorizon } from '@/components/ofi/OfiParts';
 
 /** Frame shared by the OFI pages: site header, back link, OFI title, intro and the disclaimer on top. */
 export function OfiFrame({ children, back, mood = 'calm' }: { children: ReactNode; back?: { to: string; label: string }; mood?: ReturnType<typeof moodOf> }) {
@@ -113,15 +113,20 @@ export function GuestGate() {
 
 function InsightCard({ card }: { card: OfiCard }) {
   const { t, lang } = useI18n();
+  const [sel, setSel] = useState<OfiHorizon | null>(null);
   const title = lang === 'he' ? card.title_he : card.title_en;
+  const to = `/insights/${card.slug}`;
+  const far = sel && sel.i > 0;
   return (
     <li className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10">
-      <Link to={`/insights/${card.slug}`} className="group flex flex-col gap-4 focus-visible:outline-none sm:flex-row sm:items-center">
-        <div className="shrink-0 self-center">
-          <Gauge value={card.probability} blurred={card.locked} size={170} />
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <Link to={to} className="shrink-0 self-center rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500" tabIndex={-1} aria-hidden>
+          <Gauge value={far ? sel.value : card.probability} tone={card.probability} caption={far ? sel.label : undefined} blurred={card.locked} size={170} />
+        </Link>
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold leading-snug text-slate-900 group-hover:underline group-focus-visible:underline dark:text-white">{title}</h2>
+          <h2 className="text-lg font-semibold leading-snug text-slate-900 dark:text-white">
+            <Link to={to} className="hover:underline focus-visible:underline focus-visible:outline-none">{title}</Link>
+          </h2>
           {card.locked ? (
             <p className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 dark:text-slate-300">
               <Lock className="size-4" aria-hidden />
@@ -129,24 +134,25 @@ function InsightCard({ card }: { card: OfiCard }) {
             </p>
           ) : (
             <>
-            <TimesUsual p={card.probability} base={card.base_rate} className="mt-2" />
-            <OfiHorizons p={card.probability} compact className="mt-2" />
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <Trend p={card.probability} prev={card.previous_probability} />
-              {card.spark && card.spark.length > 1 ? (
-                <span style={{ color: MOOD_COLOR[moodOf(card.probability)] }}>
-                  <Sparkline points={card.spark} />
-                </span>
-              ) : null}
-            </div>
+              <TimesUsual p={card.probability} base={card.base_rate} className="mt-2" />
+              <OfiHorizons p={card.probability} compact selected={sel?.i ?? 0} onSelect={setSel} className="mt-2" />
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Trend p={card.probability} prev={card.previous_probability} />
+                {card.spark && card.spark.length > 1 ? (
+                  <span style={{ color: MOOD_COLOR[moodOf(card.probability)] }}>
+                    <Sparkline points={card.spark} />
+                  </span>
+                ) : null}
+              </div>
             </>
           )}
           <div className="mt-2">
             <UpdateTimes last={card.last_update} next={card.next_update} />
           </div>
+          <Link to={to} className="mt-2 inline-block text-sm font-semibold text-sky-700 hover:underline dark:text-sky-400">{t('ofi.details')}</Link>
           <OfiDisclaimerShort className="mt-3" />
         </div>
-      </Link>
+      </div>
     </li>
   );
 }

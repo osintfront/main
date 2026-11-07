@@ -34,9 +34,11 @@ const CSS = `
 /**
  * OFI — a cute little soldier. Alive: blinks, glances left and right, follows the pointer with his eyes
  * and waves when hovered (inside an element with the `group` class) or tapped. The mood sets the ring
- * and star colour and the face. Original artwork.
+ * and star colour and the face — fixed to the calm look by choice (the `mood` prop is ignored). Original artwork.
  */
-export function OfiAvatar({ mood = 'calm', size = 44, className }: { mood?: OfiMood; size?: number; className?: string }) {
+export function OfiAvatar({ size = 44, className }: { mood?: OfiMood; size?: number; className?: string }) {
+  // Always the same friendly face and colour (the owner's choice); the risk level lives on the gauge.
+  const mood = 'calm' as OfiMood;
   const c = MOOD_COLOR[mood];
   const reduce = useReducedMotion();
   const id = useId();
