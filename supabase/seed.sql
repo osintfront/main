@@ -87,4 +87,5 @@ on conflict do nothing;
 -- call production Edge Function URLs. A local stack or branch must never do
 -- that, so every job starts disabled here. This file never runs on production.
 -- Re-enable a job for testing with: select cron.alter_job(<jobid>, active := true);
-update cron.job set active = false;
+-- cron.alter_job works for the jobs this role owns; a direct update of cron.job is not permitted.
+select cron.alter_job(jobid, active := false) from cron.job;
