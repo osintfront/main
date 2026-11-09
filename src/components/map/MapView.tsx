@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { ROTATE_OPTIONS, enableDragRotate, setCompassLabel } from './mapRotate';
+import { markerLabel } from '@/lib/localizedTitle';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import { BookOpen, Check, Globe2, Layers, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
 import { octagon, pointInPolygon, type LatLng } from '@/lib/eventFilters';
@@ -462,13 +463,13 @@ export function MapView({
       if (markersRef.current.has(event.id)) continue; // unchanged: keep its pins
       const selected = event.id === selectedRef.current;
       const places = [
-        { lat: event.latitude, lng: event.longitude, label: event.title, place: null as number | null, categorySlug: null as string | null },
+        { lat: event.latitude, lng: event.longitude, label: markerLabel(event, lang), place: null as number | null, categorySlug: null as string | null },
         ...(event.places ?? []).map((p) => ({
           categorySlug: p.categorySlug ?? null,
           place: p.index as number | null,
           lat: p.latitude,
           lng: p.longitude,
-          label: `${event.title} — ${placeNameIn(p, lang)}`,
+          label: markerLabel(event, lang, placeNameIn(p, lang)),
         })),
       ];
       const markers: L.Marker[] = [];
