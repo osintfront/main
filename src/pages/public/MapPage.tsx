@@ -21,6 +21,7 @@ import { EventDetailsDialog } from '@/components/feed/EventDetailsDialog';
 import { MobileEventSheet } from '@/components/map/MobileEventSheet';
 import { FilterPanel } from '@/components/filters/FilterPanel';
 import type { DrawMode, MoveTarget } from '@/components/map/MapView';
+import { pinTarget, type PinRef } from '@/lib/pinTarget';
 import { useArchiveRange } from '@/hooks/useArchiveRange';
 import { EMPTY_FILTERS, activeFilterCount, loadFilters, saveFilters, isOnMap, matchesFilters, needsArchive, pointInPolygon, type EventFilters, type LatLng } from '@/lib/eventFilters';
 import type { HfcAlert } from '@/types/hfcAlert';
@@ -282,8 +283,13 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     [select, allEvents],
   );
 
-  // Marker → card: highlight and scroll the card into view.
-  const handleMarkerSelect = useCallback((id: string) => select(id, 'map'), [select]);
+  // Marker → card: highlight and scroll the card into view. The tapped pin is remembered: on
+  // phones (no pin popups) the card's "Move" must edit that pin, not the event's main pin.
+  const [tappedPin, setTappedPin] = useState<PinRef | null>(null);
+  const handleMarkerSelect = useCallback((id: string, place: number | null) => {
+    setTappedPin({ id, place });
+    select(id, 'map');
+  }, [select]);
 
   // Popup "View event": show the full card (switches to the feed on phones).
   // Popup "Event details" / card "Read more": open the full event window.
@@ -585,7 +591,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             event={sheetEvent}
             onClose={clearSelection}
             onOpenDetails={openDetailsFromSheet}
-            onMove={canMove ? startMoveMain : undefined}
+            onMove={canMove ? (id) => startMove(pinTarget(id, tappedPin)) : undefined}
           />
         </div>
       ) : null}

@@ -31,7 +31,8 @@ interface MapViewProps {
   events: PublicEvent[];
   selectedId: string | null;
   focusRequest: FocusRequest | null;
-  onMarkerSelect: (id: string) => void;
+  /** A pin was tapped: the event, and which of its pins (null = main pin, else its place index). */
+  onMarkerSelect: (id: string, place: number | null) => void;
   onViewEvent: (id: string) => void;
   /** Active Home Front Command alerts, drawn as polygons under the event pins. */
   alerts?: HfcAlert[];
@@ -548,7 +549,7 @@ export function MapView({
             drawClickRef.current([place.lat, place.lng]);
             return;
           }
-          onMarkerSelectRef.current(event.id);
+          onMarkerSelectRef.current(event.id, place.place);
         });
         marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
           L.DomEvent.stop(e);
