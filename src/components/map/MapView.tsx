@@ -1,9 +1,10 @@
 import { placeNameIn } from '@/utils/places';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import 'leaflet.markercluster';
 import { ROTATE_OPTIONS, enableDragRotate, setCompassLabel } from './mapRotate';
 import { markerLabel } from '@/lib/localizedTitle';
+import { groupLookalikes } from '@/lib/lookalikes';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import { BookOpen, Check, Globe2, Layers, LocateFixed, Map as MapIcon, Maximize2, Octagon, PenLine, Siren, Undo2, X } from 'lucide-react';
 import { octagon, pointInPolygon, type LatLng } from '@/lib/eventFilters';
@@ -117,6 +118,8 @@ interface MarkerEntry {
   /** Main pin first, then one pin per further place the report names. */
   markers: L.Marker[];
   event: PublicEvent;
+  /** How many look-alike reports this pin stands for (see lib/lookalikes). */
+  reports?: number;
 }
 
 /** All points of an event: the main pin and its further places. */
@@ -206,6 +209,12 @@ export function MapView({
   const baseLayerRef = useRef<L.Layer | null>(null);
   const zoomControlRef = useRef<L.Control.Zoom | null>(null);
   const markersRef = useRef(new Map<string, MarkerEntry>());
+  // Close look-alike reports of one incident share a pin; every event stays in the feed.
+  const lookalikes = useMemo(() => groupLookalikes(events), [events]);
+  const lookalikesRef = useRef(lookalikes);
+  lookalikesRef.current = lookalikes;
+  /** The event whose pins stand for this one (itself unless it is a hidden look-alike). */
+  const pinOf = (id: string | null | undefined) => (id ? lookalikesRef.current.pinOf(id) : id);
   const handledFocusRef = useRef<number | null>(null);
   const [markersVersion, setMarkersVersion] = useState(0);
   /** The selected event whose focus (faded others, link lines) was ended by the visitor. */
@@ -450,7 +459,8 @@ export function MapView({
       markersRef.current.clear();
     } else {
       markersRef.current.forEach((entry, id) => {
-        if (wanted.get(id) !== entry.event) {
+        // Changed, now a hidden look-alike, or standing for a different number of reports: rebuild.
+        if (wanted.get(id) !== entry.event || lookalikes.hidden.has(id) || (entry.reports ?? 1) !== lookalikes.reports(id)) {
           gone.push(...entry.markers);
           markersRef.current.delete(id);
         }
@@ -460,8 +470,10 @@ export function MapView({
     const all: L.Marker[] = [];
 
     for (const event of events) {
+      if (lookalikes.hidden.has(event.id)) continue; // shares the pin of an earlier look-alike
       if (markersRef.current.has(event.id)) continue; // unchanged: keep its pins
-      const selected = event.id === selectedRef.current;
+      const reports = lookalikes.reports(event.id);
+      const selected = event.id === pinOf(selectedRef.current);
       const places = [
         { lat: event.latitude, lng: event.longitude, label: markerLabel(event, lang), place: null as number | null, categorySlug: null as string | null },
         ...(event.places ?? []).map((p) => ({
@@ -550,12 +562,18 @@ export function MapView({
           const b = document.createElement('b');
           b.textContent = categoryLabel(own?.slug ?? event.category.slug, own?.name ?? event.category.name);
           tip.append(b, document.createTextNode(` · ${place.label.length > 70 ? `${place.label.slice(0, 68)}…` : place.label}`));
+          if (reports > 1) {
+            const more = document.createElement('span');
+            more.className = 'ofm-tip-reports';
+            more.textContent = ` · ${t('map.reports', { count: reports })}`;
+            tip.append(more);
+          }
           marker.bindTooltip(tip, { direction: 'top', offset: [0, -20], opacity: 0.95 });
         }
         all.push(marker);
         markers.push(marker);
       });
-      markersRef.current.set(event.id, { markers, event });
+      markersRef.current.set(event.id, { markers, event, reports });
     }
     if (all.length) layer.addLayers(all);
     // Several reports on the very same spot (the same village, two channels): their pins
@@ -582,7 +600,7 @@ export function MapView({
               iconName: o.ofmIcon ?? event.category.icon,
               color: o.ofmColor ?? event.category.markerColor,
               severity: event.severity,
-              selected: event.id === selectedRef.current,
+              selected: event.id === pinOf(selectedRef.current),
               breaking: event.isBreaking,
               compact: false, // all places of an event are equal
               shift,
@@ -593,7 +611,7 @@ export function MapView({
       });
     }
     if (all.length || gone.length || !sameDeps || held) setMarkersVersion((v) => v + 1);
-  }, [events, t, dir, locale, lang, categoryLabel, compact, canMove]);
+  }, [events, lookalikes, t, dir, locale, lang, categoryLabel, compact, canMove]);
 
   // 4c. Staff: move a pin. Drag the pin or tap the map; ✓ saves, ✗ cancels.
   const movingId = moving?.id ?? null;
@@ -799,13 +817,16 @@ export function MapView({
   //    with the right one already).
   const lastSelectedRef = useRef<string | null>(null);
   useEffect(() => {
-    const touched = new Set([lastSelectedRef.current, selectedId].filter(Boolean) as string[]);
-    lastSelectedRef.current = selectedId ?? null;
+    // A hidden look-alike is shown by the pin it shares.
+    const selectedPin = pinOf(selectedId) ?? null;
+    const focusPin = pinOf(focusId) ?? null;
+    const touched = new Set([lastSelectedRef.current, selectedPin].filter(Boolean) as string[]);
+    lastSelectedRef.current = selectedPin;
     touched.forEach((id) => {
       const entry = markersRef.current.get(id);
       if (!entry) return;
       const { markers, event } = entry;
-      const selected = id === selectedId;
+      const selected = id === selectedPin;
       markers.forEach((marker) => {
         marker.setIcon(
           createMarkerIcon({
@@ -824,7 +845,7 @@ export function MapView({
     });
     const links = linkLayerRef.current;
     links?.clearLayers();
-    const entry = focusId ? markersRef.current.get(focusId) : undefined;
+    const entry = focusPin ? markersRef.current.get(focusPin) : undefined;
     if (links && entry && entry.markers.length > 1) {
       const [main, ...rest] = eventPoints(entry.event);
       for (const point of rest) {
@@ -862,12 +883,13 @@ export function MapView({
     const group = markerLayerRef.current;
     const holder = focusLayerRef.current;
     if (!group || !holder) return;
-    const entry = focusId ? markersRef.current.get(focusId) : undefined;
+    const focusPin = pinOf(focusId) ?? null;
+    const entry = focusPin ? markersRef.current.get(focusPin) : undefined;
     const cur = focusedRef.current;
     // The pin just clicked has its window open. Note it before the held pins go back: one of
     // them may stand on the same spot, the two merge into a cluster and the window closes.
     const open = entry?.markers.find((m) => m.isPopupOpen());
-    if (cur && (cur.id !== focusId || entry?.markers !== cur.markers)) {
+    if (cur && (cur.id !== focusPin || entry?.markers !== cur.markers)) {
       // Moving pins in and out of the clusters closes windows: that is not the reader closing
       // one, so it must not end the focus.
       relayeringRef.current = true;
@@ -876,12 +898,12 @@ export function MapView({
       relayeringRef.current = false;
       focusedRef.current = null;
     }
-    if (entry && focusId && !focusedRef.current) {
+    if (entry && focusPin && !focusedRef.current) {
       relayeringRef.current = true;
       group.removeLayers(entry.markers);
       entry.markers.forEach((m) => holder.addLayer(m));
       relayeringRef.current = false;
-      focusedRef.current = { id: focusId, markers: entry.markers };
+      focusedRef.current = { id: focusPin, markers: entry.markers };
       if (open && !compact) open.openPopup();
     }
   }, [focusId, markersVersion, compact]);
@@ -891,14 +913,15 @@ export function MapView({
   // the area fade (the event is shown because another of its places is inside).
   useEffect(() => {
     const container = containerRef.current;
-    const focus = focusId ? markersRef.current.get(focusId) : undefined;
+    const focusPin = pinOf(focusId) ?? null;
+    const focus = focusPin ? markersRef.current.get(focusPin) : undefined;
     const focusOn = !!focus && focus.markers.length > 1;
     const areaOn = !!area && area.length >= 3 && !drawMode;
     container?.classList.toggle('ofm-dim-clusters', focusOn);
     markersRef.current.forEach(({ markers }, id) => {
       markers.forEach((marker) => {
         let o = 1;
-        if (focusOn && id !== focusId) o = 0.25;
+        if (focusOn && id !== focusPin) o = 0.25;
         else if (areaOn) {
           const ll = marker.getLatLng();
           if (!pointInPolygon([ll.lat, ll.lng], area!)) o = 0.35;
@@ -977,7 +1000,7 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focusRequest || handledFocusRef.current === focusRequest.nonce) return;
-    const entry = markersRef.current.get(focusRequest.id);
+    const entry = markersRef.current.get(pinOf(focusRequest.id)!);
     if (!entry) return; // not loaded yet — re-runs when markers change
     handledFocusRef.current = focusRequest.nonce;
 

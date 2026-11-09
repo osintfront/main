@@ -1226,6 +1226,7 @@ export const he: Record<TranslationKey, string> = {
   'planCard.activate': 'הפעלת רישיון',
 
   'map.northUp': 'צפון למעלה',
+  'map.reports': '{count} דיווחים',
 
   'legal.terms': 'תנאי שימוש',
   'legal.refund': 'מדיניות ביטולים והחזרים',

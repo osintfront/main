@@ -1224,6 +1224,7 @@ export const en = {
   'planCard.activate': 'Activate license',
 
   'map.northUp': 'North up',
+  'map.reports': '{count} reports',
 
   'legal.terms': 'Terms of use',
   'legal.refund': 'Cancellation and refund policy',
