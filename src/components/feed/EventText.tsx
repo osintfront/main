@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { refreshFeatureUsage, useFeatureUsage } from '@/lib/featureUse';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { previewText } from '@/utils/text';
+import { localizedTitle } from '@/lib/localizedTitle';
 
 const SITE = 'https://osintfront.com';
 
@@ -32,7 +33,7 @@ function WhatsAppIcon() {
 /** Headline + short summary in the site language (falls back to the stored text). */
 export function eventTexts(event: PublicEvent, lang: string) {
   const tr = event.translations[lang] ?? {};
-  const title = tr.title || event.title;
+  const title = localizedTitle(event, lang);
   const summary = tr.summary || tr.description || (lang === 'he' ? event.description : '') || event.translations.he?.summary || event.description;
   return { title, summary: previewText(summary ?? '') };
 }
