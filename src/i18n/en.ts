@@ -1193,6 +1193,47 @@ export const en = {
   'geoloc.release': 'Release camera point',
   'geoloc.reject': 'Reject',
   'geoloc.rerun': 'Run again',
+
+  'install.button': 'Install the app',
+  'install.title': 'Install OSINTFront',
+  'install.iosShare': '1. In Safari, tap the Share button (at the bottom of the screen).',
+  'install.iosAdd': '2. Scroll down and choose “Add to Home Screen”.',
+  'install.iosAddBadge': 'Add',
+  'install.iosConfirm': '3. Tap “Add” in the top corner.',
+  'install.iosOpen': 'Open the app from the new icon on your Home Screen. You can turn on notifications from there too.',
+  'install.unsupported': 'This browser can’t install the app directly. Open the site in Chrome or Edge (on a computer or Android), or in Safari on iPhone, and tap “Install the app” again. If you’ve already installed it, open the app from its icon.',
+
+  'gates.newPasswordTitle': 'Choose a new password',
+  'gates.newPasswordBody': 'This is your first sign-in. Replace the temporary password with your own.',
+  'gates.termsTitle': 'Accept the terms of use',
+  'gates.termsBody': 'To keep using the site, read and accept the {terms}, the {privacy} and the {refund} (they open in a new tab).',
+  'gates.termsLink': 'Terms of Use',
+  'gates.privacyLink': 'Privacy Policy',
+  'gates.refundLink': 'Cancellation Policy',
+  'gates.agree': 'I have read and agree to the Terms of Use and the Privacy Policy, and I confirm that I am 18 or older.',
+  'gates.saveError': 'Couldn’t save your acceptance. Please try again.',
+  'gates.saving': 'Saving…',
+  'gates.accept': 'Accept and continue',
+  'gates.decline': 'I don’t accept — sign out',
+
+  'planCard.validUntil': 'Valid until {date}',
+  'planCard.activated': 'License activated: {plan} until {date}',
+  'planCard.rateLimited': 'Too many attempts. Try again in 15 minutes.',
+  'planCard.invalid': 'This key is invalid or has already been used.',
+  'planCard.failed': 'Activation failed. Please try again.',
+  'planCard.activate': 'Activate license',
+
+  'map.northUp': 'North up',
+
+  'legal.terms': 'Terms of use',
+  'legal.refund': 'Cancellation and refund policy',
+  'legal.cancel': 'Cancel subscription',
+  'legal.cancelContact': 'To cancel your subscription, write to us at {email} with your account details.',
+  'legal.cancelRights': 'Cancellation rights, prorated billing and cancellation fees are set out in the {policy}.',
+  'legal.cancelPolicyLink': 'cancellation and refund policy',
+  'legal.comingSoon': 'This text will be added soon.',
+  'legal.navRefund': 'Cancellations and refunds',
+  'legal.navHome': 'Back to the site',
 } as const;
 
 export type TranslationKey = keyof typeof en;

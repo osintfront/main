@@ -23,11 +23,22 @@ import 'leaflet-rotate'; // pinned 0.2.8 (2023, stable): rotation, two-finger ro
   };
 }
 
+function labelCompass(a: HTMLAnchorElement, label: string) {
+  a.title = label;
+  a.setAttribute('aria-label', label);
+}
+
+/** Re-labels the compass button (built once with the map) after the language changes. */
+export function setCompassLabel(container: HTMLElement, label: string) {
+  const a = container.querySelector<HTMLAnchorElement>('.ofm-compass a');
+  if (a) labelCompass(a, label);
+}
+
 /**
  * Rotate by dragging with the right mouse button or Ctrl + left button (desktop).
  * A right-click without dragging still opens our investigation menu.
  */
-export function enableDragRotate(map: L.Map) {
+export function enableDragRotate(map: L.Map, northUpLabel: string) {
   // Two modes only: north-up, or turned by hand. Never follow the phone's compass.
   const m = map as L.Map & { compassBearing?: L.Handler; getBearing: () => number; setBearing: (b: number) => void };
   m.compassBearing?.disable();
@@ -37,9 +48,8 @@ export function enableDragRotate(map: L.Map) {
       const box = L.DomUtil.create('div', 'leaflet-bar ofm-compass');
       const a = L.DomUtil.create('a', '', box) as HTMLAnchorElement;
       a.href = '#';
-      a.title = 'צפון למעלה';
       a.setAttribute('role', 'button');
-      a.setAttribute('aria-label', 'צפון למעלה');
+      labelCompass(a, northUpLabel);
       a.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2l4 10h-8z" fill="#dc2626"/><path d="M12 22l-4-10h8z" fill="#94a3b8"/></svg>';
       const restyle = () => { (a.firstChild as SVGElement).style.transform = `rotate(${-m.getBearing()}deg)`; };
       L.DomEvent.on(a, 'click', (e) => { L.DomEvent.preventDefault(e); L.DomEvent.stopPropagation(e); m.compassBearing?.disable(); m.setBearing(0); });
