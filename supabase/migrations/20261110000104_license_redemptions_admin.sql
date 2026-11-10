@@ -33,3 +33,6 @@ grant execute on function public.admin_license_redemptions() to authenticated;
 
 -- 10 Nov: copying event text is open to every plan (the limit was dropped).
 update public.plan_features set enabled = true, note = 'copy event text (open to all)' where feature_key = 'copy_text';
+
+-- 10 Nov: sharing open to every plan, no daily limit (guest shares preview as a blurred card).
+update public.plan_features set enabled = true, limit_value = null, note = 'sharing open to all (guest: blurred preview)' where feature_key = 'share_daily';

@@ -1246,7 +1246,7 @@ export const en = {
   "lock.moreMedia": "More photos in Pro",
   "lock.moreMediaVideo": "More photos and video in Pro",
   "media.download": "Download image",
-  "feed.delayed": "Events appear {n} min late on your plan",
+  "feed.delayed": "{n}-min delay on your plan",
   "feed.delayedCta": "Live with Pro",
   "pk.f.delay": "Events {n} minutes behind live",
   "pk.f.realtime": "Events in real time",
@@ -1316,6 +1316,8 @@ export const en = {
   "pk.c.withAds": "With ads",
   "pk.c.noAds": "No ads",
   "pk.f.expandOne": "1 AI expansion a day",
+  "pk.c.shareBlur": "Blurred preview",
+  "pk.c.shareMark": "With photo + our mark",
 } as const;
 
 export type TranslationKey = keyof typeof en;

@@ -121,7 +121,7 @@ export function PackagesPage() {
     { label: t('pk.c.media'), cell: (p) => (!on(p, 'media') ? t('pk.c.blurred') : lim(p, 'media') != null ? t('pk.c.firstPic') : on(p, 'media_download') ? t('pk.c.allDownload') : t('pk.c.all')) },
     { label: t('pk.c.sourceLink'), cell: (p) => on(p, 'source_link') },
     { label: t('pk.c.sources'), cell: (p) => (!on(p, 'sources_detail') ? t('pk.c.countOnly') : lim(p, 'sources_detail') === 1 ? t('pk.c.names') : t('pk.c.namesLinks')) },
-    { label: t('pk.c.share'), cell: perDay('share_daily') },
+    { label: t('pk.c.share'), cell: (p) => (p === 'guest' ? t('pk.c.shareBlur') : p === 'free' ? t('pk.c.shareMark') : t('pk.c.unlimited')) },
     { label: t('pk.c.search'), cell: (p) => (on(p, 'feed_search') ? true : p === 'guest' ? false : t('pk.c.categories')) },
     { label: t('pk.c.archive'), cell: (p) => { const f = planFeature(p, 'archive_days'); if (!f?.enabled || f.limit === 0) return false; return f.limit == null ? t('pk.c.unlimited') : f.limit === 1 ? t('pk.c.oneDay') : t('pk.c.days', { n: f.limit }); } },
     { label: t('pk.c.push'), cell: (p) => (!on(p, 'push') ? false : lim(p, 'push') === 4 ? t('pk.c.criticalOnly') : lim(p, 'push') === 3 ? t('pk.c.highUp') : t('pk.c.allLevels')) },

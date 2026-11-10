@@ -1248,8 +1248,8 @@ export const he: Record<TranslationKey, string> = {
   "lock.moreMedia": "תמונות נוספות ב-Pro",
   "lock.moreMediaVideo": "תמונות ווידאו נוספים ב-Pro",
   "media.download": "הורדת התמונה",
-  "feed.delayed": "בחבילה שלך האירועים מוצגים בעיכוב של {n} דק'",
-  "feed.delayedCta": "בזמן אמת ב-Pro",
+  "feed.delayed": "עיכוב של {n} דק׳ בחבילה שלך",
+  "feed.delayedCta": "זמן אמת ב-Pro",
   "pk.f.delay": "אירועים בעיכוב של {n} דקות",
   "pk.f.realtime": "אירועים בזמן אמת",
   "pk.f.opens": "פירוט של {n} אירועים ביום",
@@ -1318,4 +1318,6 @@ export const he: Record<TranslationKey, string> = {
   "pk.c.withAds": "עם פרסומות",
   "pk.c.noAds": "בלי פרסומות",
   "pk.f.expandOne": "הרחבת AI אחת ביום",
+  "pk.c.shareBlur": "עם תצוגה מטושטשת",
+  "pk.c.shareMark": "עם תמונה + סימן האתר",
 };

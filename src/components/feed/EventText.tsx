@@ -6,21 +6,26 @@ import { LinkifiedText } from '@/components/common/LinkifiedText';
 import { cachedExpansion, expandEvent, fetchSourceText, type ExpandedByLang } from '@/services/eventTextService';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
-import { refreshFeatureUsage, spendFeature, useFeatureUsage } from '@/lib/featureUse';
-import { featureLimit, hasFeature, usePlanVersion } from '@/lib/plans';
+import { refreshFeatureUsage, useFeatureUsage } from '@/lib/featureUse';
+import { hasFeature, myPlan, usePlanVersion } from '@/lib/plans';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { previewText } from '@/utils/text';
 import { localizedTitle } from '@/lib/localizedTitle';
 
 const SITE = 'https://osintfront.com';
 
-/** "Share on WhatsApp": headline (+ the expansion if there is one) and the event's link.
- *  mark = the free plan's line: the site's name and a free sign-up link. */
-export function whatsappShareUrl(event: PublicEvent, lang: string, expanded: ExpandedByLang | null, mark?: string): string {
+/**
+ * "Share on WhatsApp": headline (+ summary or expansion) and the event's share link /e/<id>.
+ * The link draws its own preview (api/share.ts): the event's first photo, or — for a guest's
+ * share (?g=1) — a blurred card that asks to sign up. mark = the site's line + a free sign-up link
+ * (guest and Free shares).
+ */
+export function whatsappShareUrl(event: PublicEvent, lang: string, expanded: ExpandedByLang | null, opts: { mark?: string; guest?: boolean } = {}): string {
   const { title, summary } = eventTexts(event, lang);
   const x = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
-  const body = x?.details ? x.details : summary;
-  const text = [`*${title}*`, body, `${SITE}/?event=${event.id}`, mark].filter(Boolean).join('\n\n');
+  const body = opts.guest ? '' : x?.details ? x.details : summary;
+  const link = `${SITE}/e/${event.id}${opts.guest ? '?g=1' : ''}`;
+  const text = [`*${title}*`, body, link, opts.mark].filter(Boolean).join('\n\n');
   return `https://wa.me/?text=${encodeURIComponent(text.slice(0, 3500))}`;
 }
 
@@ -96,22 +101,13 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
     }
   };
 
-  // Share: guests sign up first; free shares are counted and carry the site's mark.
-  const share = async () => {
-    if (!hasFeature(undefined, 'share_daily')) return void openGate(profile ? 'upgrade' : 'signup', 'share_daily');
-    const limited = featureLimit('share_daily') != null;
-    const win = window.open('', '_blank'); // opened now: a window opened after a request is blocked
-    if (win) win.opener = null;
-    if (limited) {
-      const r = await spendFeature('share_daily');
-      if (!r.ok && r.reason !== 'error') {
-        win?.close();
-        return void openGateFor(r.reason, 'share_daily');
-      }
-    }
-    const url = whatsappShareUrl(event, lang, expanded ?? cachedExpansion(event), limited ? t('share.mark') : undefined);
-    if (win) win.location.href = url;
-    else window.open(url, '_blank', 'noopener');
+  // Share: open to everyone. Guest and Free shares carry the site's line and a sign-up link;
+  // a guest's link previews as a blurred card (no photo, no summary).
+  const share = () => {
+    const plan = myPlan();
+    const guest = plan === 'guest';
+    const mark = guest || plan === 'free' ? t('share.mark') : undefined;
+    window.open(whatsappShareUrl(event, lang, expanded ?? cachedExpansion(event), { mark, guest }), '_blank', 'noopener');
   };
   // No copying the text on plans without it.
   const onCopy = (e: ClipboardEvent) => {
@@ -188,7 +184,7 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
         </button>
         <button
           type="button"
-          onClick={() => void share()}
+          onClick={share}
           className={btn + ' text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10'}
           aria-label={t('text.shareWhatsapp')}
           title={t('text.shareWhatsapp')}

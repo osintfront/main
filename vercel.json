@@ -5,7 +5,11 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!assets/|api/|data/|favicon\\.svg).*)",
+      "source": "/e/:id",
+      "destination": "/api/share?id=:id"
+    },
+    {
+      "source": "/((?!assets/|api/|data/|share/|e/|favicon\\.svg).*)",
       "destination": "/index.html"
     }
   ],
