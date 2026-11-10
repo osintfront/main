@@ -1,6 +1,7 @@
 import { PlanCell } from '@/components/admin/PlanCell';
 import { WelcomePanel } from '@/components/admin/WelcomePanel';
-import { latestSessions, type SessionRow } from '@/services/planService';
+import { LicenseCell } from '@/components/admin/LicenseCell';
+import { latestByUser, latestSessions, listLicenseRedemptions, type RedemptionRow, type SessionRow } from '@/services/planService';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Copy, KeyRound, Plus, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -52,6 +53,8 @@ export function UsersPage() {
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
   const [welcome, setWelcome] = useState<{ name: string; email: string; password: string; plan: string } | null>(null);
   const [sessions, setSessions] = useState<Map<string, SessionRow>>(new Map());
+  // Which licence key each user redeemed (super admin only; the RPC refuses anyone else).
+  const [licenses, setLicenses] = useState<Map<string, RedemptionRow>>(new Map());
   const superAdmin = me?.role === 'super_admin';
   const [removing, setRemoving] = useState<Profile | null>(null);
 
@@ -60,6 +63,7 @@ export function UsersPage() {
       setUsers(await listProfiles());
       setError(null);
       void latestSessions().then(setSessions).catch(() => {});
+      void listLicenseRedemptions().then((rows) => setLicenses(latestByUser(rows))).catch(() => {});
     } catch (err) {
       setError(friendlyError(err, t));
     } finally {
@@ -201,6 +205,7 @@ export function UsersPage() {
               <th className="px-3 py-2.5 text-start">{t('users.status')}</th>
               <th className="px-3 py-2.5 text-start">{t('users.lastLogin')}</th>
               <th className="px-3 py-2.5 text-start normal-case">חבילה</th>
+              <th className="px-3 py-2.5 text-start normal-case">רישיון</th>
               <th className="px-3 py-2.5 text-start normal-case">מכשיר אחרון</th>
               <th className="px-3 py-2.5" />
             </tr>
@@ -226,6 +231,7 @@ export function UsersPage() {
                   {uniq(users.map(loginDay)).reverse().map((v) => <option key={v} value={v}>{v === 'never' ? t('common.never') : v.split('-').reverse().join('/')}</option>)}
                 </select>
               </th>
+              <th />
               <th />
               <th />
               <th className="px-3 pb-2.5" />
@@ -286,6 +292,7 @@ export function UsersPage() {
                   </td>
                   <td className="px-3 py-3 text-xs text-slate-500">{u.lastLoginAt ? formatDateTime(u.lastLoginAt, locale) : '—'}</td>
                   <td className="px-3 py-3 text-xs"><PlanCell u={u} canEdit={superAdmin && u.id !== me?.id} onChanged={load} /></td>
+                  <td className="px-3 py-3 align-top"><LicenseCell u={u} license={licenses.get(u.id)} /></td>
                   <td className="px-3 py-3 text-xs text-slate-500">{(() => { const ss = sessions.get(u.id); return ss ? `${ss.device_type ?? ''} · ${ss.browser ?? ''}${ss.ended_at ? ' (נותק)' : ''} · ${formatDateTime(ss.last_seen, locale)}` : '—'; })()}</td>
                   <td className="px-3 py-3">
                     {can_ ? (

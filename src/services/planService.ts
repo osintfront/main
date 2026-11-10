@@ -28,6 +28,44 @@ export async function listLicenses(): Promise<LicenseRow[]> {
   return (data ?? []) as LicenseRow[];
 }
 
+/** One redemption of a licence key: which key, by whom, and where that user's plan stands now. */
+export interface RedemptionRow {
+  key: string;
+  plan: string;
+  duration_days: number;
+  note: string | null;
+  revoked: boolean;
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  redeemed_at: string;
+  user_plan: string | null;
+  user_plan_expires_at: string | null;
+  user_status: string | null;
+}
+
+/** Every licence redemption (super admin only; empty for anyone else). */
+export async function listLicenseRedemptions(): Promise<RedemptionRow[]> {
+  const { data, error } = await db().rpc('admin_license_redemptions');
+  if (error) throw error;
+  return (data ?? []) as RedemptionRow[];
+}
+
+/** The newest redemption per user, for the Users page. */
+export function latestByUser(rows: RedemptionRow[]): Map<string, RedemptionRow> {
+  const out = new Map<string, RedemptionRow>();
+  // The RPC returns newest first, so the first row per user is the latest one.
+  for (const r of rows) if (!out.has(r.user_id)) out.set(r.user_id, r);
+  return out;
+}
+
+/** The redemptions of each key, newest first. */
+export function byKey(rows: RedemptionRow[]): Map<string, RedemptionRow[]> {
+  const out = new Map<string, RedemptionRow[]>();
+  for (const r of rows) out.set(r.key, [...(out.get(r.key) ?? []), r]);
+  return out;
+}
+
 export interface SessionRow { user_id: string; device_type: string | null; browser: string | null; last_seen: string; ended_at: string | null }
 /** The latest session per user (Users page). */
 export async function latestSessions(): Promise<Map<string, SessionRow>> {
