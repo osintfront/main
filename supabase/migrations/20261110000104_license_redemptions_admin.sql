@@ -30,3 +30,6 @@ begin
 end $$;
 revoke all on function public.admin_license_redemptions() from public, anon;
 grant execute on function public.admin_license_redemptions() to authenticated;
+
+-- 10 Nov: copying event text is open to every plan (the limit was dropped).
+update public.plan_features set enabled = true, note = 'copy event text (open to all)' where feature_key = 'copy_text';
