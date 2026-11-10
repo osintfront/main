@@ -5,7 +5,9 @@ import { useI18n } from '@/i18n';
 import { usePublicEvents } from '@/hooks/useEvents';
 import { PAGE_RELOADED, useMapSelection } from '@/hooks/useMapSelection';
 import { HOME_EVENT } from '@/components/common/Logo';
-import { openGate } from '@/components/plans/GateDialog';
+import { openGate, openGateFor } from '@/components/plans/GateDialog';
+import { openEventAllowed } from '@/lib/featureUse';
+import { featureLimit, usePlanVersion } from '@/lib/plans';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -391,7 +393,24 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
       setDetailsId(ev.id);
     });
   }, [status, allEvents, select, isGuest]);
-  const detailsEvent = detailsId ? allEvents.find((e) => e.id === detailsId) ?? (linkedEvent?.id === detailsId ? linkedEvent : null) : null;
+  // Event windows per day (plan): the window opens only once the plan allows it.
+  usePlanVersion();
+  const [allowedId, setAllowedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!detailsId || detailsId === allowedId || authStatus === 'loading') return;
+    let alive = true;
+    void openEventAllowed(detailsId, featureLimit('event_open'), authStatus === 'signed_in').then((why) => {
+      if (!alive) return;
+      if (why) {
+        setDetailsId(null);
+        openGateFor(why, 'event_open');
+      } else setAllowedId(detailsId);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [detailsId, allowedId, authStatus]);
+  const detailsEvent = detailsId && detailsId === allowedId ? allEvents.find((e) => e.id === detailsId) ?? (linkedEvent?.id === detailsId ? linkedEvent : null) : null;
   const closeDetails = useCallback(() => setDetailsId(null), []);
   // Phones: the selected event shows as a card along the bottom of the map.
   const sheetEvent =

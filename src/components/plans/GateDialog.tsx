@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react';
 import { track } from '@vercel/analytics';
 import { useI18n } from '@/i18n';
 import type { UseReason } from '@/lib/featureUse';
+import { minPlanFor, PLAN_LABEL, type FeatureKey } from '@/lib/plans';
 
 /**
  * One window for every locked feature: guests are invited to sign up; signed-in users whose
@@ -11,18 +12,23 @@ import type { UseReason } from '@/lib/featureUse';
  * Open it from anywhere with openGate(); <GateHost /> is mounted once in App.
  */
 export type GateKind = 'signup' | 'upgrade';
-let current: GateKind | null = null;
+/** quota = today's uses ran out; plan = the feature is not in the plan (names the plan that has it). */
+interface Gate { kind: GateKind; feature?: FeatureKey; why: 'quota' | 'plan' }
+let current: Gate | null = null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-export function openGate(kind: GateKind) {
-  current = kind;
+/** Open the window. Pass the feature so it can say which plan has it. */
+export function openGate(kind: GateKind, feature?: FeatureKey, why: 'quota' | 'plan' = feature ? 'plan' : 'quota') {
+  current = { kind, feature, why };
+  try { track(kind === 'signup' ? 'gate_signup_shown' : 'gate_upgrade_shown', { feature: feature ?? '', why }); } catch { /* blocked */ }
   emit();
 }
 /** The window for a refused use; false when the reason is not a plan matter (e.g. a network error). */
-export function openGateFor(reason: UseReason | string | undefined): boolean {
-  if (reason === 'signup_required') return openGate('signup'), true;
-  if (reason === 'quota_exceeded' || reason === 'not_in_plan' || reason === 'quota' || reason === 'upgrade') return openGate('upgrade'), true;
+export function openGateFor(reason: UseReason | string | undefined, feature?: FeatureKey): boolean {
+  if (reason === 'signup_required') return openGate('signup', feature), true;
+  if (reason === 'quota_exceeded' || reason === 'quota') return openGate('upgrade', feature, 'quota'), true;
+  if (reason === 'not_in_plan' || reason === 'upgrade') return openGate('upgrade', feature, 'plan'), true;
   return false;
 }
 const close = () => {
@@ -31,8 +37,13 @@ const close = () => {
 };
 
 export function GateHost() {
-  const kind = useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => current, () => null);
+  const gate = useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => current, () => null);
+  const kind = gate?.kind ?? null;
   const { t } = useI18n();
+  const need = gate?.feature ? minPlanFor(gate.feature) : null;
+  const planName = need && need !== 'guest' && need !== 'free' ? PLAN_LABEL[need] : 'Pro';
+  const body = kind === 'signup' ? t('gate.signupBody') : gate?.why === 'plan' ? t('gate.planBody', { plan: planName }) : t('gate.upgradeBody');
+  const title = kind === 'signup' ? t('gate.signupTitle') : gate?.why === 'plan' ? t('gate.planTitle', { plan: planName }) : t('gate.upgradeTitle');
   useEffect(() => {
     if (!kind) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
@@ -49,13 +60,14 @@ export function GateHost() {
         <span className="mx-auto mb-3 grid size-11 place-items-center rounded-full bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400">
           <Lock className="size-5" aria-hidden />
         </span>
-        <h2 id="gate-title" className="text-lg font-bold text-slate-900 dark:text-white">{t(kind === 'signup' ? 'gate.signupTitle' : 'gate.upgradeTitle')}</h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{t(kind === 'signup' ? 'gate.signupBody' : 'gate.upgradeBody')}</p>
+        <h2 id="gate-title" className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{body}</p>
         <div className="mt-5 flex flex-col gap-2">
           {kind === 'signup' ? (
             <>
               <Link to="/login?mode=signup" onClick={close} className={primary}>{t('gate.signup')}</Link>
               <Link to="/login" onClick={close} className={secondary}>{t('gate.login')}</Link>
+              <Link to="/packages" onClick={close} className="text-xs font-semibold text-sky-700 hover:underline dark:text-sky-400">{t('gate.seePlans')}</Link>
             </>
           ) : (
             <>

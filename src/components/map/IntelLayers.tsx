@@ -89,14 +89,14 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
   const [satSpendErr, setSatSpendErr] = useState(false);
   const toggleSat = async (v: boolean) => {
     if (!v) return setSatOn(false);
-    if (!profile) return openGate('signup');
+    if (!profile) return openGate('signup', 'satellite');
     if (satSpending.current) return;
     satSpending.current = true;
     setSatSpendErr(false);
     try {
       const r = await spendFeature('satellite');
       if (r.ok) setSatOn(true);
-      else if (!openGateFor(r.reason)) setSatSpendErr(true); // network/server error: say so, try again
+      else if (!openGateFor(r.reason, 'satellite')) setSatSpendErr(true); // network/server error: say so, try again
     } finally {
       satSpending.current = false;
     }
@@ -652,7 +652,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Ships */}
           <section className="space-y-2 border-b border-slate-100 py-3 dark:border-slate-800">
-            {sectionHead(Ship, T.ships, shipsOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft')) && setShipsOn(v), shipsOn ? `${shownShips.length} ${T.shown}` : undefined)}
+            {sectionHead(Ship, T.ships, shipsOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setShipsOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), shipsOn ? `${shownShips.length} ${T.shown}` : undefined)}
             {shipsOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {shipErr ? <p className="text-red-600">{shipErr}</p> : !vessels.length ? <p>{T.noShips}</p> : null}
@@ -707,7 +707,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Aircraft */}
           <section className="space-y-2 pt-3">
-            {sectionHead(PlaneIcon, T.planes, planesOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft')) && setPlanesOn(v), planesOn ? `${shownPlanes.length} ${T.shown}` : undefined)}
+            {sectionHead(PlaneIcon, T.planes, planesOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setPlanesOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), planesOn ? `${shownPlanes.length} ${T.shown}` : undefined)}
             {planesOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {planeErr ? <p className="text-red-600">{planeErr}</p> : null}

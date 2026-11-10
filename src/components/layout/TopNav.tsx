@@ -8,6 +8,8 @@ import { UserMenu } from './UserMenu';
 import { useToast } from '@/components/common/Toast';
 import { consumeSearchQuota } from '@/services/searchQuotaService';
 import { cn } from '@/utils/cn';
+import { hasFeature } from '@/lib/plans';
+import { openGate } from '@/components/plans/GateDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useI18n } from '@/i18n';
@@ -47,6 +49,8 @@ export function TopNav({ query, onQueryChange, mode = 'live', filterCount = 0, f
     const q = draft.trim();
     if (!q) return onQueryChange('');
     if (q === query.trim()) return;
+    // Keyword search is a paid feature (free: category filters only).
+    if (!hasFeature(undefined, 'feed_search')) return void openGate(profile ? 'upgrade' : 'signup', 'feed_search');
     setChecking(true);
     try {
       const r = await consumeSearchQuota(q);

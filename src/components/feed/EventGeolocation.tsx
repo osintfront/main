@@ -77,7 +77,7 @@ export function EventGeolocation({ eventId }: { eventId: string }) {
     return (
       <button
         type="button"
-        onClick={() => openGate(profile ? 'upgrade' : 'signup')}
+        onClick={() => openGate(profile ? 'upgrade' : 'signup', 'geolocation')}
         className="mt-4 flex w-full items-center gap-2 rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-start text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/50"
       >
         <Lock className="size-4 shrink-0" aria-hidden />
@@ -95,7 +95,7 @@ export function EventGeolocation({ eventId }: { eventId: string }) {
       await load();
     } catch (err) {
       const r = err instanceof GeolocRequestError ? err.reason : 'other';
-      if (r === 'plan') openGate('upgrade');
+      if (r === 'plan') openGate('upgrade', 'geolocation');
       else toast.error(t(r === 'limit' ? 'geoloc.limit' : r === 'no_media' ? 'geoloc.noMedia' : 'geoloc.error'));
     } finally {
       setBusy(false);

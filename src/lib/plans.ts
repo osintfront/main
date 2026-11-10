@@ -8,7 +8,9 @@ import type { PlanId, Profile } from '@/types/user';
  */
 export type FeatureKey =
   | 'live_map' | 'feed' | 'hfc_alerts' | 'translation_he' | 'push' | 'archive_days'
-  | 'ships_aircraft' | 'satellite' | 'ai_expand_ask' | 'insights' | 'data_export' | 'expand_daily' | 'weather' | 'airfields_ports' | 'geolocation';
+  | 'ships_aircraft' | 'satellite' | 'ai_expand_ask' | 'insights' | 'data_export' | 'expand_daily' | 'weather' | 'airfields_ports' | 'geolocation'
+  | 'feed_delay_min' | 'event_open' | 'event_summary' | 'source_link' | 'sources_detail' | 'media' | 'media_download'
+  | 'share_daily' | 'copy_text' | 'feed_search' | 'devices' | 'idle_logout_min' | 'military_assets';
 
 /** The plan whose limits apply: 'guest' when nobody is signed in (never stored on a profile). */
 export type EffectivePlan = PlanId | 'guest';
@@ -57,7 +59,21 @@ export function hasFeature(user: Pick<Profile, 'plan' | 'planExpiresAt' | 'role'
 }
 
 export function featureLimit(key: FeatureKey, user = me): number | null {
+  if (!enforce || (user && user.role !== 'viewer')) return null; // not enforced / staff: no limit
   return features.find((r) => r.feature_key === key && r.plan_id === effectivePlan(user))?.limit_value ?? null;
+}
+
+const PLAN_ORDER: EffectivePlan[] = ['guest', 'free', 'pro', 'max'];
+/** The cheapest plan that has the feature (for "available in Pro and up"); null when none does. */
+export function minPlanFor(key: FeatureKey): EffectivePlan | null {
+  return PLAN_ORDER.find((p) => features.some((r) => r.feature_key === key && r.plan_id === p && r.enabled)) ?? null;
+}
+/** The signed-in viewer's plan (or guest), for UI decisions. Staff count as max. */
+export function myPlan(): EffectivePlan {
+  return effectivePlan(me);
+}
+export function plansEnforced(): boolean {
+  return enforce;
 }
 
 /** A plan's row for a feature, as configured in the database (for the packages page). */

@@ -1,6 +1,9 @@
 import { placeNameIn } from '@/utils/places';
 import { useEffect, useRef } from 'react';
-import { Crosshair, ExternalLink, MapPin, X } from 'lucide-react';
+import { Crosshair, ExternalLink, Lock, MapPin, X } from 'lucide-react';
+import { hasFeature, usePlanVersion } from '@/lib/plans';
+import { openGate } from '@/components/plans/GateDialog';
+import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/i18n';
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { formatDateTime, formatEventTime, formatRelative } from '@/utils/time';
@@ -35,6 +38,12 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
   const { title } = eventTexts(event, lang);
   const where = whereLabel(event, lang);
   const sourceLabel = event.sourceName || (event.sourceUrl ? hostnameOf(event.sourceUrl) : '');
+  const { profile } = useAuth();
+  usePlanVersion();
+  const canLink = hasFeature(undefined, 'source_link');
+  const hiddenSources = !event.sources?.length && (event.sourceCount ?? 0) > 0;
+  const lockBtn =
+    'inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700';
 
   // Focus the close button, close on Escape, give focus back on close, and keep the page from scrolling.
   useEffect(() => {
@@ -141,8 +150,24 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
             </section>
           ) : null}
           <EventStaffEdit event={event} onChanged={onChanged} onMovePin={onMovePin} />
-          <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
+          <EventMedia eventId={event.id} occurredAt={event.occurredAt} kinds={event.mediaKinds} />
           <EventGeolocation eventId={event.id} />
+          {hiddenSources || (!canLink && sourceLabel) ? (
+            <section className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+              {hiddenSources ? (
+                <button type="button" onClick={() => openGate(profile ? 'upgrade' : 'signup', 'sources_detail')} className={lockBtn}>
+                  <Lock className="size-3.5" aria-hidden />
+                  {t('lock.sources', { count: event.sourceCount ?? 0 })}
+                </button>
+              ) : null}
+              {!canLink && sourceLabel ? (
+                <button type="button" onClick={() => openGate(profile ? 'upgrade' : 'signup', 'source_link')} className={lockBtn}>
+                  <Lock className="size-3.5" aria-hidden />
+                  {t('lock.sourceLink')}
+                </button>
+              ) : null}
+            </section>
+          ) : null}
           {event.sources && event.sources.length ? (
             <section aria-labelledby="event-sources-title" className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
               <h3 id="event-sources-title" className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">

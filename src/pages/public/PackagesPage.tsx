@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Check, Mail, Tag } from 'lucide-react';
+import { ArrowLeft, Check, Mail, Minus, Tag } from 'lucide-react';
 import { Logo } from '@/components/common/Logo';
 import { LanguageToggle, ThemeToggle } from '@/components/common/Toggles';
 import { UserMenu } from '@/components/layout/UserMenu';
@@ -8,7 +8,7 @@ import { SiteLinks } from '@/components/layout/SiteLinks';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/i18n';
 import type { TranslationKey } from '@/i18n/en';
-import { effectivePlan, loadPlanConfig, planFeature, usePlanVersion, type EffectivePlan, type FeatureKey } from '@/lib/plans';
+import { effectivePlan, loadPlanConfig, PLAN_LABEL, planFeature, usePlanVersion, type EffectivePlan, type FeatureKey } from '@/lib/plans';
 import { INTRO_PRICES, shekels } from '@/content/packages';
 import { SITE_EMAIL } from '@/content/sitePages';
 import { cn } from '@/utils/cn';
@@ -38,7 +38,7 @@ export function PackagesPage() {
   const mine: EffectivePlan | null = status === 'signed_in' && profile?.role === 'viewer' ? effectivePlan(profile) : null;
 
   /** "{n} a day" / "unlimited" lines from the database limits (null limit = unlimited). */
-  const daily = (plan: Sold, key: FeatureKey, some: TranslationKey, all: TranslationKey): string | null => {
+  const daily = (plan: EffectivePlan, key: FeatureKey, some: TranslationKey, all: TranslationKey): string | null => {
     const f = planFeature(plan, key);
     if (!f?.enabled) return null;
     return f.limit == null ? t(all) : t(some, { n: f.limit });
@@ -56,24 +56,86 @@ export function PackagesPage() {
   };
   const list = (...items: (string | null)[]) => items.filter((x): x is string => !!x);
 
+  const on = (plan: EffectivePlan, key: FeatureKey) => !!planFeature(plan, key)?.enabled;
+  const lim = (plan: EffectivePlan, key: FeatureKey) => planFeature(plan, key)?.limit ?? null;
+  const delayLine = (plan: Sold) => {
+    const n = lim(plan, 'feed_delay_min');
+    return n ? t('pk.f.delay', { n }) : t('pk.f.realtime');
+  };
+  const opensLine = (plan: Sold) => {
+    const n = lim(plan, 'event_open');
+    return n == null ? t('pk.f.opensAll') : t('pk.f.opens', { n });
+  };
+
   const freeItems = list(
     t('pk.f.map'),
+    delayLine('free'),
+    opensLine('free'),
+    on('free', 'event_summary') ? t('pk.f.summary') : null,
     t('pk.f.hfc'),
-    t('pk.f.shipsAir'),
+    on('free', 'push') ? (lim('free', 'push') === 4 ? t('pk.f.pushCritical') : t('pk.f.push')) : null,
     daily('free', 'expand_daily', 'pk.f.expand', 'pk.f.expandAll'),
     daily('free', 'satellite', 'pk.f.sat', 'pk.f.satAll'),
     archive('free'),
-    planFeature('free', 'push')?.enabled ? t('pk.f.push') : null,
+    daily('free', 'share_daily', 'pk.f.shares', 'pk.f.sharesAll'),
     t('pk.f.ads'),
   );
   const proItems = list(
     t('pk.f.noAds'),
+    delayLine('pro'),
+    opensLine('pro'),
+    on('pro', 'source_link') ? t('pk.f.sourceLinks') : null,
+    on('pro', 'media') && lim('pro', 'media') == null ? t('pk.f.mediaAll') : null,
+    on('pro', 'feed_search') ? t('pk.f.search') : null,
+    on('pro', 'copy_text') ? t('pk.f.copy') : null,
+    daily('pro', 'share_daily', 'pk.f.shares', 'pk.f.sharesAll'),
     daily('pro', 'expand_daily', 'pk.f.expand', 'pk.f.expandAll'),
     daily('pro', 'satellite', 'pk.f.sat', 'pk.f.satAll'),
     archive('pro'),
     ask('pro'),
+    lim('pro', 'devices') ? t('pk.f.devices', { n: lim('pro', 'devices') ?? 1 }) : null,
   );
-  const maxItems = list(archive('max'), ask('max'));
+  const maxItems = list(
+    daily('max', 'expand_daily', 'pk.f.expand', 'pk.f.expandAll'),
+    archive('max'),
+    ask('max'),
+    lim('max', 'sources_detail') == null && on('max', 'sources_detail') ? t('pk.f.sourcesLinks') : null,
+    on('max', 'media_download') ? t('pk.f.download') : null,
+    on('max', 'military_assets') ? t('pk.f.military') : null,
+    lim('max', 'devices') ? t('pk.f.devices', { n: lim('max', 'devices') ?? 1 }) : null,
+    on('max', 'idle_logout_min') && lim('max', 'idle_logout_min') == null ? t('pk.f.noIdle') : null,
+  );
+
+  // The full comparison, read from plan_features (what the server enforces).
+  const COLS: EffectivePlan[] = ['guest', 'free', 'pro', 'max'];
+  type Cell = string | boolean;
+  const perDay = (key: FeatureKey) => (p: EffectivePlan): Cell => {
+    if (!on(p, key)) return false;
+    const n = lim(p, key);
+    return n == null ? t('pk.c.unlimited') : t('pk.c.perDay', { n });
+  };
+  const rows: { label: string; cell: (p: EffectivePlan) => Cell }[] = [
+    { label: t('pk.c.delay'), cell: (p) => { const n = lim(p, 'feed_delay_min'); return n ? t('pk.c.minutes', { n }) : t('pk.c.live'); } },
+    { label: t('pk.c.opens'), cell: perDay('event_open') },
+    { label: t('pk.c.detail'), cell: (p) => (on(p, 'source_link') ? t('pk.c.full') : on(p, 'event_summary') ? t('pk.c.summary') : t('pk.c.headline')) },
+    { label: t('pk.c.media'), cell: (p) => (!on(p, 'media') ? t('pk.c.blurred') : lim(p, 'media') != null ? t('pk.c.firstPic') : on(p, 'media_download') ? t('pk.c.allDownload') : t('pk.c.all')) },
+    { label: t('pk.c.sourceLink'), cell: (p) => on(p, 'source_link') },
+    { label: t('pk.c.sources'), cell: (p) => (!on(p, 'sources_detail') ? t('pk.c.countOnly') : lim(p, 'sources_detail') === 1 ? t('pk.c.names') : t('pk.c.namesLinks')) },
+    { label: t('pk.c.share'), cell: perDay('share_daily') },
+    { label: t('pk.c.copy'), cell: (p) => on(p, 'copy_text') },
+    { label: t('pk.c.search'), cell: (p) => (on(p, 'feed_search') ? true : p === 'guest' ? false : t('pk.c.categories')) },
+    { label: t('pk.c.archive'), cell: (p) => { const f = planFeature(p, 'archive_days'); if (!f?.enabled || f.limit === 0) return false; return f.limit == null ? t('pk.c.unlimited') : t('pk.c.days', { n: f.limit }); } },
+    { label: t('pk.c.push'), cell: (p) => (!on(p, 'push') ? false : lim(p, 'push') === 4 ? t('pk.c.criticalOnly') : lim(p, 'push') === 3 ? t('pk.c.highUp') : t('pk.c.allLevels')) },
+    { label: t('pk.c.ships'), cell: (p) => on(p, 'ships_aircraft') },
+    { label: t('pk.c.weather'), cell: (p) => on(p, 'weather') },
+    { label: t('pk.c.satellite'), cell: perDay('satellite') },
+    { label: t('pk.c.military'), cell: (p) => on(p, 'military_assets') },
+    { label: t('pk.c.expand'), cell: perDay('expand_daily') },
+    { label: t('pk.c.ask'), cell: perDay('ai_expand_ask') },
+    { label: t('pk.c.devices'), cell: (p) => (p === 'guest' ? '—' : String(lim(p, 'devices') ?? 1)) },
+    { label: t('pk.c.idle'), cell: (p) => { if (p === 'guest') return '—'; const n = lim(p, 'idle_logout_min'); return n == null ? t('pk.c.never') : n >= 60 ? t('pk.c.hours', { n: Math.round(n / 60) }) : t('pk.c.minutes', { n }); } },
+    { label: t('pk.c.ads'), cell: (p) => p === 'guest' || p === 'free' },
+  ];
 
   const price = (plan: 'pro' | 'max') => {
     const p = INTRO_PRICES[plan];
@@ -164,6 +226,46 @@ export function PackagesPage() {
           />
         </section>
         <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">{t('pk.introNote')}</p>
+
+        <section className="mt-12" aria-labelledby="pk-compare">
+          <h2 id="pk-compare" className="text-center text-2xl font-bold text-slate-900 dark:text-white">{t('pk.c.title')}</h2>
+          <div className="mt-5 overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800">
+                  <th scope="col" className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('pk.c.feature')}</th>
+                  {COLS.map((c) => (
+                    <th key={c} scope="col" className={cn('px-3 py-3 text-center font-bold text-slate-900 dark:text-white', c === 'pro' && 'bg-sky-50 dark:bg-sky-500/10', mine === c && 'text-emerald-700 dark:text-emerald-400')} translate="no">
+                      {c === 'guest' ? t('pk.c.guest') : c === 'free' ? t('pk.freeName') : PLAN_LABEL[c]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.label} className="border-b border-slate-100 last:border-0 dark:border-slate-800/70">
+                    <th scope="row" className="px-4 py-2.5 text-start font-medium text-slate-700 dark:text-slate-200">{r.label}</th>
+                    {COLS.map((c) => {
+                      const v = r.cell(c);
+                      return (
+                        <td key={c} className={cn('px-3 py-2.5 text-center text-slate-700 dark:text-slate-300', c === 'pro' && 'bg-sky-50/60 dark:bg-sky-500/5')}>
+                          {v === true ? (
+                            <Check className="mx-auto size-4 text-sky-600 dark:text-sky-400" aria-label={t('pk.c.yes')} />
+                          ) : v === false ? (
+                            <Minus className="mx-auto size-4 text-slate-300 dark:text-slate-600" aria-label={t('pk.c.no')} />
+                          ) : (
+                            v
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-center text-xs text-slate-500 dark:text-slate-400">{t('pk.c.note')}</p>
+        </section>
 
         <section className="mt-12">
           <div className="text-center">

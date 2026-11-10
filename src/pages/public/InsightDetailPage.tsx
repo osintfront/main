@@ -178,7 +178,7 @@ export function InsightDetailPage() {
         sessionStorage.setItem(key, '1');
       } catch { /* storage blocked: still show once now */ }
       ofiTrack('upgrade_modal_shown', { slug: d.slug });
-      openGate('upgrade');
+      openGate('upgrade', 'insights');
     }
   }, [d]);
 
@@ -214,7 +214,7 @@ export function InsightDetailPage() {
             </div>
             <div className="min-w-0 flex-1 space-y-3">
               {d.locked ? (
-                <button type="button" onClick={() => openGate('upgrade')} className="inline-flex items-center gap-1.5 text-sm font-semibold text-sky-700 hover:underline dark:text-sky-400">
+                <button type="button" onClick={() => openGate('upgrade', 'insights')} className="inline-flex items-center gap-1.5 text-sm font-semibold text-sky-700 hover:underline dark:text-sky-400">
                   <Lock className="size-4" aria-hidden /> {t(d.min_tier >= 3 ? 'ofi.lockedMax' : 'ofi.lockedPro')}
                 </button>
               ) : (
@@ -254,7 +254,7 @@ export function InsightDetailPage() {
                   </p>
                 ))}
                 {locked > 0 ? (
-                  <button type="button" onClick={() => { ofiTrack('click_locked_signal', { slug: d.slug }); openGate('upgrade'); }}
+                  <button type="button" onClick={() => { ofiTrack('click_locked_signal', { slug: d.slug }); openGate('upgrade', 'insights'); }}
                     className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700">
                     <Lock className="size-4" aria-hidden /> {t('ofi.unlock', { n: locked })}
                   </button>

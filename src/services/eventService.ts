@@ -43,6 +43,7 @@ const PUBLIC_EVENT_COLUMNS = [
   'category_marker_color',
   'media_kinds',
   'report_group',
+  'source_count',
 ].join(',');
 
 interface PublishedEventRow {
@@ -77,6 +78,7 @@ interface PublishedEventRow {
   category_marker_color: string | null;
   media_kinds?: string[] | null;
   report_group?: string | null;
+  source_count?: number | null;
 }
 
 function toNumber(value: number | string | null): number | null {
@@ -217,6 +219,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     // Never pass an unvalidated URL to the UI.
     sourceUrl: safeExternalUrl(row.source_url),
     sources: toSources(row.sources),
+    sourceCount: typeof row.source_count === 'number' ? row.source_count : 0,
     places,
     sourceType: asSourceType(row.source_type),
     occurredAt: row.occurred_at,

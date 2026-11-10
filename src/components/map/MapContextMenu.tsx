@@ -68,8 +68,8 @@ export function MapContextMenu({ map, target, onClose, onArea, onFilterCategory,
       </button>
       {onWeather ? (
         <button type="button" role="menuitem" className={item} data-weather-item onClick={() => {
-          if (!profile) openGate('signup');
-          else if (!hasFeature(undefined, 'weather')) openGate('upgrade');
+          if (!profile) openGate('signup', 'weather');
+          else if (!hasFeature(undefined, 'weather')) openGate('upgrade', 'weather');
           else onWeather(target.lat, target.lng);
           onClose();
         }}>

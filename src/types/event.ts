@@ -95,8 +95,10 @@ export interface PublicEvent {
   city: string;
   sourceName: string | null;
   sourceUrl: string | null;
-  /** Additional sources for the same event. */
+  /** Additional sources for the same event (empty when the plan shows the count only). */
   sources?: EventSource[];
+  /** How many additional sources there are (shown when the plan hides their names). */
+  sourceCount?: number;
   /** Further places named in the report (not the main pin); one extra pin each. */
   places?: EventPlace[];
   sourceType: SourceType;

@@ -35,8 +35,8 @@ export function useInfraLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rt
   liveRef.current = live;
 
   const toggle = useCallback((k: Toggle, v: boolean) => {
-    if (v && !profile) return openGate('signup');
-    if (v && !hasFeature(undefined, 'airfields_ports')) return openGate('upgrade');
+    if (v && !profile) return openGate('signup', 'airfields_ports');
+    if (v && !hasFeature(undefined, 'airfields_ports')) return openGate('upgrade', 'airfields_ports');
     setOn((cur) => ({ ...cur, [k]: v }));
   }, [profile]);
 

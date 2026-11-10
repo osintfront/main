@@ -61,8 +61,8 @@ export function useMilitaryLayers(map: L.Map | null, lang: string, dir: 'ltr' | 
   }, [map]);
 
   const allowed = useCallback((v: boolean) => {
-    if (v && !profile) { openGate('signup'); return false; }
-    if (v && !hasFeature(undefined, 'airfields_ports')) { openGate('upgrade'); return false; }
+    if (v && !profile) { openGate('signup', 'military_assets'); return false; }
+    if (v && !hasFeature(undefined, 'military_assets')) { openGate('upgrade', 'military_assets'); return false; }
     return true;
   }, [profile]);
   const toggle = useCallback((k: MilKind, v: boolean) => { if (allowed(v)) setOn((cur) => ({ ...cur, [k]: v })); }, [allowed]);

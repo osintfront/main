@@ -12,6 +12,7 @@ import { RequireAuth } from '@/components/auth/RequireAuth';
 import { GateHost } from '@/components/plans/GateDialog';
 import { OpenAccess } from '@/components/auth/OpenAccess';
 import { SessionTimeout } from '@/components/auth/SessionTimeout';
+import { IdleSignOut } from '@/components/auth/IdleSignOut';
 import { UpdateBanner } from '@/components/layout/UpdateBanner';
 import { CookieNotice } from '@/components/layout/CookieNotice';
 import { AdminLayout } from '@/components/admin/AdminLayout';
@@ -130,6 +131,7 @@ export function App() {
             </Routes>
             <GateHost />
             <SessionTimeout />
+            <IdleSignOut />
             <UpdateBanner />
             <CookieNotice />
           </BrowserRouter>

@@ -43,8 +43,8 @@ export function useWeatherLayers(map: L.Map | null, lang: string, dir: 'ltr' | '
   const timeline = on.clouds || on.rain;
 
   const toggle = useCallback((k: Toggle, v: boolean) => {
-    if (v && !profile) return openGate('signup');
-    if (v && !hasFeature(undefined, 'weather')) return openGate('upgrade');
+    if (v && !profile) return openGate('signup', 'weather');
+    if (v && !hasFeature(undefined, 'weather')) return openGate('upgrade', 'weather');
     setBad((b) => ({ ...b, [k]: false }));
     setOn((cur) => ({ ...cur, [k]: v }));
   }, [profile]);

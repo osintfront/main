@@ -14,6 +14,7 @@ import { playChime, unlockAudio } from '@/lib/notifySound';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
 import { openGate } from '@/components/plans/GateDialog';
+import { featureLimit } from '@/lib/plans';
 import { disablePush, enablePush, getMinSeverity, setMinSeverity, usePushState, type MinSeverity } from '@/lib/push';
 
 const SLUGS = DEFAULT_CATEGORIES.map((c) => c.slug);
@@ -159,6 +160,8 @@ export function SoundMenu({ onOpen }: { onOpen?: () => void } = {}) {
                       name="push-min-severity"
                       checked={minSev === id}
                       onChange={() => {
+                        // Free: critical alerts only (the server refuses the others too).
+                        if (id !== 'critical' && featureLimit('push') === 4) return void openGate('upgrade', 'push');
                         setMinSev(id);
                         setSevSaved(false);
                         void setMinSeverity(id).then(setSevSaved);

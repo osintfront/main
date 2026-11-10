@@ -1,24 +1,26 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronUp, FileText, Languages, Loader2 } from 'lucide-react';
+import { useState, type ClipboardEvent } from 'react';
+import { ChevronDown, ChevronUp, FileText, Languages, Loader2, Lock } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import type { PublicEvent } from '@/types/event';
 import { LinkifiedText } from '@/components/common/LinkifiedText';
 import { cachedExpansion, expandEvent, fetchSourceText, type ExpandedByLang } from '@/services/eventTextService';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
-import { refreshFeatureUsage, useFeatureUsage } from '@/lib/featureUse';
+import { refreshFeatureUsage, spendFeature, useFeatureUsage } from '@/lib/featureUse';
+import { featureLimit, hasFeature, usePlanVersion } from '@/lib/plans';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { previewText } from '@/utils/text';
 import { localizedTitle } from '@/lib/localizedTitle';
 
 const SITE = 'https://osintfront.com';
 
-/** "Share on WhatsApp": headline (+ the expansion if there is one) and the event's link. */
-export function whatsappShareUrl(event: PublicEvent, lang: string, expanded: ExpandedByLang | null): string {
+/** "Share on WhatsApp": headline (+ the expansion if there is one) and the event's link.
+ *  mark = the free plan's line: the site's name and a free sign-up link. */
+export function whatsappShareUrl(event: PublicEvent, lang: string, expanded: ExpandedByLang | null, mark?: string): string {
   const { title, summary } = eventTexts(event, lang);
   const x = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
   const body = x?.details ? x.details : summary;
-  const text = [`*${title}*`, body, `${SITE}/?event=${event.id}`].filter(Boolean).join('\n\n');
+  const text = [`*${title}*`, body, `${SITE}/?event=${event.id}`, mark].filter(Boolean).join('\n\n');
   return `https://wa.me/?text=${encodeURIComponent(text.slice(0, 3500))}`;
 }
 
@@ -46,7 +48,10 @@ export function eventTexts(event: PublicEvent, lang: string) {
 export function EventText({ event, compact = false }: { event: PublicEvent; compact?: boolean }) {
   const { t, lang } = useI18n();
   const { profile } = useAuth();
+  usePlanVersion();
   const usage = useFeatureUsage().expand_daily;
+  const canCopy = hasFeature(undefined, 'copy_text');
+  const hasSummary = hasFeature(undefined, 'event_summary');
   const { summary } = eventTexts(event, lang);
   const [view, setView] = useState<'summary' | 'source'>('summary');
   const [source, setSource] = useState<string | null>(null);
@@ -57,6 +62,7 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
 
   const showSource = async () => {
     if (view === 'source') return setView('summary');
+    if (!hasFeature(undefined, 'source_link')) return void openGate(profile ? 'upgrade' : 'signup', 'source_link');
     if (source === null) {
       setBusy('source');
       try {
@@ -75,19 +81,43 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
     setFailed(false);
     // Re-opening in the same card is free; every new expand is counted by the server.
     if (expanded) return setOpen(true);
-    if (!profile) return void openGate('signup');
+    if (!profile) return void openGate('signup', 'expand_daily');
     setBusy('expand');
     try {
       setExpanded(await expandEvent(event.id));
       setOpen(true);
     } catch (err) {
       const m = (err as Error)?.message;
-      if (openGateFor(m)) return;
+      if (openGateFor(m, 'expand_daily')) return;
       setFailed(m === 'budget' ? m : 'failed');
     } finally {
       setBusy(null);
       void refreshFeatureUsage(true);
     }
+  };
+
+  // Share: guests sign up first; free shares are counted and carry the site's mark.
+  const share = async () => {
+    if (!hasFeature(undefined, 'share_daily')) return void openGate(profile ? 'upgrade' : 'signup', 'share_daily');
+    const limited = featureLimit('share_daily') != null;
+    const win = window.open('', '_blank'); // opened now: a window opened after a request is blocked
+    if (win) win.opener = null;
+    if (limited) {
+      const r = await spendFeature('share_daily');
+      if (!r.ok && r.reason !== 'error') {
+        win?.close();
+        return void openGateFor(r.reason, 'share_daily');
+      }
+    }
+    const url = whatsappShareUrl(event, lang, expanded ?? cachedExpansion(event), limited ? t('share.mark') : undefined);
+    if (win) win.location.href = url;
+    else window.open(url, '_blank', 'noopener');
+  };
+  // No copying the text on plans without it.
+  const onCopy = (e: ClipboardEvent) => {
+    if (canCopy) return;
+    e.preventDefault();
+    openGate(profile ? 'upgrade' : 'signup', 'copy_text');
   };
 
   const raw = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
@@ -98,7 +128,7 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
     'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-500 disabled:opacity-60 dark:text-sky-400 dark:hover:bg-sky-500/10';
 
   return (
-    <div className="mt-1">
+    <div className={cn('mt-1', !canCopy && 'select-none')} onCopy={onCopy} onCut={onCopy}>
       {view === 'source' ? (
         <p
           className={cn(
@@ -113,6 +143,15 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
         <p className={cn('text-slate-600 dark:text-slate-300', compact ? 'text-[13px] leading-relaxed' : 'text-[15px] leading-relaxed text-slate-800 dark:text-slate-200')} dir="auto">
           {summary}
         </p>
+      ) : !hasSummary ? (
+        <button
+          type="button"
+          onClick={() => openGate(profile ? 'upgrade' : 'signup', 'event_summary')}
+          className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+        >
+          <Lock className="size-3.5" aria-hidden />
+          {t('lock.summary')}
+        </button>
       ) : null}
 
       {open && x && view === 'summary' ? (
@@ -147,17 +186,16 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
           {busy === 'source' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : view === 'source' ? <Languages className="size-3.5" aria-hidden /> : <FileText className="size-3.5" aria-hidden />}
           {view === 'source' ? t('text.backToSummary') : t('text.source')}
         </button>
-        <a
-          href={whatsappShareUrl(event, lang, expanded ?? cachedExpansion(event))}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
+          onClick={() => void share()}
           className={btn + ' text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10'}
           aria-label={t('text.shareWhatsapp')}
           title={t('text.shareWhatsapp')}
         >
           <WhatsAppIcon />
           {t('text.share')}
-        </a>
+        </button>
         {failed ? <span className="text-xs text-red-600 dark:text-red-400">{t(failed === 'quota' ? 'ai.quota' : failed === 'budget' ? 'ai.budget' : 'text.expandFailed')}</span> : null}
       </div>
     </div>

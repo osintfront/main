@@ -78,7 +78,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
       </h3>
       <EventText event={event} compact />
 
-      <EventMedia eventId={event.id} occurredAt={event.occurredAt} />
+      <EventMedia eventId={event.id} occurredAt={event.occurredAt} kinds={event.mediaKinds} />
 
       {where ? (
         <p className="mt-2 flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">

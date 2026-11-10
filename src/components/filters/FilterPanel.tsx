@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Crosshair, Loader2, Octagon, Plus, X } from 'lucide-react';
 import { compileEei, matchesEei, type Eei } from '@/lib/eei';
+import { hasFeature, myPlan } from '@/lib/plans';
+import { openGate } from '@/components/plans/GateDialog';
 import { useI18n } from '@/i18n';
 import { DEFAULT_CATEGORIES, getCategoryIcon } from '@/data/categoryRegistry';
 import { SEVERITIES, type PublicEvent, type Severity } from '@/types/event';
@@ -131,6 +133,8 @@ function EeiSection({
   const submit = (ev: FormEvent) => {
     ev.preventDefault();
     if (!compileEei(query)) return;
+    // Saved keyword queries are part of keyword search (Pro and up).
+    if (!hasFeature(undefined, 'feed_search')) return void openGate(myPlan() === 'guest' ? 'signup' : 'upgrade', 'feed_search');
     const id = onAdd(name, query);
     set({ eeis: [...filters.eeis, id] });
     setName('');

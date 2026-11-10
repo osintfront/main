@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Download, Loader2, Lock } from 'lucide-react';
+import { featureLimit, hasFeature, usePlanVersion } from '@/lib/plans';
+import { openGate } from '@/components/plans/GateDialog';
+import { useAuth } from '@/hooks/useAuth';
+import type { MediaKind } from '@/types/event';
 import { useI18n } from '@/i18n';
 import { openLightbox } from '@/lib/lightbox';
 import { loadEventMedia, requestVideo, toMediaView, type EventMediaView } from '@/services/eventMediaService';
@@ -90,9 +94,15 @@ function VideoStill({ still }: { still: Still }) {
   );
 }
 
-export function EventMedia({ eventId, occurredAt }: { eventId: string; occurredAt: string }) {
+export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; occurredAt: string; kinds?: MediaKind[] }) {
   const { t } = useI18n();
+  const { profile } = useAuth();
+  usePlanVersion();
   const [view, setView] = useState<EventMediaView | null>(null);
+  const allowed = hasFeature(undefined, 'media');
+  const firstOnly = featureLimit('media') != null; // free: the first picture only
+  const canDownload = hasFeature(undefined, 'media_download');
+  const hasMedia = !!kinds?.some((k) => k === 'image' || k === 'video');
 
   useEffect(() => {
     let alive = true;
@@ -110,7 +120,28 @@ export function EventMedia({ eventId, occurredAt }: { eventId: string; occurredA
     };
   }, [eventId, occurredAt]);
 
+  // No pictures in the plan (guests): a blurred box that asks to sign up.
+  if (!allowed) {
+    if (!hasMedia) return null;
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          openGate(profile ? 'upgrade' : 'signup', 'media');
+        }}
+        className="relative mt-2 grid h-32 w-full place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-slate-300 to-slate-500 text-white dark:from-slate-700 dark:to-slate-900"
+      >
+        <span className="absolute inset-0 backdrop-blur-md" aria-hidden />
+        <span className="relative inline-flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs font-semibold">
+          <Lock className="size-3.5" aria-hidden />
+          {t('lock.media')}
+        </span>
+      </button>
+    );
+  }
   if (!view) return null;
+  const more = firstOnly && !!kinds?.includes('video');
 
   return (
     <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
@@ -132,24 +163,47 @@ export function EventMedia({ eventId, occurredAt }: { eventId: string; occurredA
       {view.images.length ? (
         <div className={view.images.length > 1 ? 'grid grid-cols-2 gap-1.5' : 'grid grid-cols-1'}>
           {view.images.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => openLightbox(m.url)}
-              aria-label={t('media.enlarge')}
-              className="relative block cursor-zoom-in overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800"
-            >
-              <img
-                src={m.url}
-                alt=""
-                loading="lazy"
-                width={m.width ?? undefined}
-                height={m.height ?? undefined}
-                className="block h-auto max-h-60 w-full object-cover"
-              />
-            </button>
+            <div key={m.id} className="relative">
+              <button
+                type="button"
+                onClick={() => openLightbox(m.url)}
+                aria-label={t('media.enlarge')}
+                className="relative block w-full cursor-zoom-in overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800"
+              >
+                <img
+                  src={m.url}
+                  alt=""
+                  loading="lazy"
+                  width={m.width ?? undefined}
+                  height={m.height ?? undefined}
+                  className="block h-auto max-h-60 w-full object-cover"
+                />
+              </button>
+              {canDownload ? (
+                <a
+                  href={m.url}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={t('media.download')}
+                  className="absolute end-1.5 top-1.5 grid size-8 place-items-center rounded-full bg-black/55 text-white hover:bg-black/75"
+                >
+                  <Download className="size-4" aria-hidden />
+                </a>
+              ) : null}
+            </div>
           ))}
         </div>
+      ) : null}
+      {firstOnly ? (
+        <button
+          type="button"
+          onClick={() => openGate('upgrade', 'media')}
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 hover:underline dark:text-sky-400"
+        >
+          <Lock className="size-3" aria-hidden />
+          {t(more ? 'lock.moreMediaVideo' : 'lock.moreMedia')}
+        </button>
       ) : null}
       <p className="text-[10px] leading-snug text-slate-400 dark:text-slate-500">
         {t('media.copyright')}{' '}
