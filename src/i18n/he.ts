@@ -1314,4 +1314,8 @@ export const he: Record<TranslationKey, string> = {
   "pk.c.never": "אף פעם",
   "pk.c.hours": "{n} שע'",
   "pk.c.ads": "פרסומות",
+  "pk.c.oneDay": "יום אחד",
+  "pk.c.withAds": "עם פרסומות",
+  "pk.c.noAds": "בלי פרסומות",
+  "pk.f.expandOne": "הרחבת AI אחת ביום",
 };

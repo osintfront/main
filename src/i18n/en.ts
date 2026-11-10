@@ -1312,6 +1312,10 @@ export const en = {
   "pk.c.never": "Never",
   "pk.c.hours": "{n} h",
   "pk.c.ads": "Ads",
+  "pk.c.oneDay": "1 day",
+  "pk.c.withAds": "With ads",
+  "pk.c.noAds": "No ads",
+  "pk.f.expandOne": "1 AI expansion a day",
 } as const;
 
 export type TranslationKey = keyof typeof en;

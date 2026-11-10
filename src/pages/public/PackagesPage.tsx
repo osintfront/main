@@ -41,6 +41,7 @@ export function PackagesPage() {
   const daily = (plan: EffectivePlan, key: FeatureKey, some: TranslationKey, all: TranslationKey): string | null => {
     const f = planFeature(plan, key);
     if (!f?.enabled) return null;
+    if (key === 'expand_daily' && f.limit === 1) return t('pk.f.expandOne');
     return f.limit == null ? t(all) : t(some, { n: f.limit });
   };
   const archive = (plan: Sold): string | null => {
@@ -124,7 +125,7 @@ export function PackagesPage() {
     { label: t('pk.c.share'), cell: perDay('share_daily') },
     { label: t('pk.c.copy'), cell: (p) => on(p, 'copy_text') },
     { label: t('pk.c.search'), cell: (p) => (on(p, 'feed_search') ? true : p === 'guest' ? false : t('pk.c.categories')) },
-    { label: t('pk.c.archive'), cell: (p) => { const f = planFeature(p, 'archive_days'); if (!f?.enabled || f.limit === 0) return false; return f.limit == null ? t('pk.c.unlimited') : t('pk.c.days', { n: f.limit }); } },
+    { label: t('pk.c.archive'), cell: (p) => { const f = planFeature(p, 'archive_days'); if (!f?.enabled || f.limit === 0) return false; return f.limit == null ? t('pk.c.unlimited') : f.limit === 1 ? t('pk.c.oneDay') : t('pk.c.days', { n: f.limit }); } },
     { label: t('pk.c.push'), cell: (p) => (!on(p, 'push') ? false : lim(p, 'push') === 4 ? t('pk.c.criticalOnly') : lim(p, 'push') === 3 ? t('pk.c.highUp') : t('pk.c.allLevels')) },
     { label: t('pk.c.ships'), cell: (p) => on(p, 'ships_aircraft') },
     { label: t('pk.c.weather'), cell: (p) => on(p, 'weather') },
@@ -134,7 +135,7 @@ export function PackagesPage() {
     { label: t('pk.c.ask'), cell: perDay('ai_expand_ask') },
     { label: t('pk.c.devices'), cell: (p) => (p === 'guest' ? '—' : String(lim(p, 'devices') ?? 1)) },
     { label: t('pk.c.idle'), cell: (p) => { if (p === 'guest') return '—'; const n = lim(p, 'idle_logout_min'); return n == null ? t('pk.c.never') : n >= 60 ? t('pk.c.hours', { n: Math.round(n / 60) }) : t('pk.c.minutes', { n }); } },
-    { label: t('pk.c.ads'), cell: (p) => p === 'guest' || p === 'free' },
+    { label: t('pk.c.ads'), cell: (p) => (p === 'guest' || p === 'free' ? t('pk.c.withAds') : t('pk.c.noAds')) },
   ];
 
   const price = (plan: 'pro' | 'max') => {

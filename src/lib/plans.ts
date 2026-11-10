@@ -95,3 +95,15 @@ export function usePlanVersion(): number {
 }
 
 export const PLAN_LABEL: Record<EffectivePlan, string> = { guest: 'Guest', free: 'Free', pro: 'Pro', max: 'Max', intel: 'Intel' };
+
+// Guests need the plan limits too (they are never passed to setPlanUser): load them at start,
+// and forget the user's plan when they sign out.
+if (supabase) {
+  void loadPlanConfig();
+  supabase.auth.onAuthStateChange((_event, session) => {
+    if (!session && me) {
+      me = null;
+      listeners.forEach((l) => l());
+    }
+  });
+}
