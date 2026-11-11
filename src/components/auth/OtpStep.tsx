@@ -23,15 +23,16 @@ export function OtpStep() {
   }, [wait]);
 
   const send = async () => {
+    // Mark before sending, so a second mount (or a double click) never fires another email.
+    try { sessionStorage.setItem(SENT_KEY, String(Date.now())); } catch { /* ignore */ }
+    setWait(COOLDOWN);
     setBusy(true);
     setMsg(null);
     const { error } = await sendOtp();
     setBusy(false);
-    if (error === 'rate_limited') setMsg({ tone: 'error', text: 'נשלחו יותר מדי קודים. נסו שוב בעוד דקה.' });
+    if (error === 'rate_limited') setMsg({ tone: 'error', text: 'מכסת המיילים לשעה הסתיימה. נסו שוב מאוחר יותר.' });
     else if (error) setMsg({ tone: 'error', text: 'שליחת הקוד נכשלה. נסו שוב.' });
     else setMsg({ tone: 'info', text: 'שלחנו קוד בן 6 ספרות לאימייל שלכם.' });
-    try { sessionStorage.setItem(SENT_KEY, String(Date.now())); } catch { /* ignore */ }
-    setWait(COOLDOWN);
   };
 
   // Send once on arrival (skipped when a code went out in the last minute, e.g. after a reload).
