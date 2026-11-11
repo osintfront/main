@@ -147,3 +147,40 @@ export async function signInWithGoogle(): Promise<{ error: string | null }> {
   const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/` } });
   return { error: error?.message ?? null };
 }
+
+// ── Email one-time code (2FA for chosen accounts) ──────────────────
+export interface OtpStatus {
+  /** This account must confirm an emailed code after the password. */
+  required: boolean;
+  /** This session has already done so (always true when not required). */
+  verified: boolean;
+}
+
+export async function getOtpStatus(): Promise<OtpStatus> {
+  if (!supabase) return { required: false, verified: true };
+  const { data, error } = await supabase.rpc('otp_status');
+  // On failure assume nothing is required: the database still enforces its own rules.
+  if (error || !data) return { required: false, verified: true };
+  return data as OtpStatus;
+}
+
+/** Remember the password session, then email a 6-digit code to the (existing) account. */
+export async function sendEmailOtp(email: string): Promise<{ error: 'rate_limited' | 'network' | 'other' | null }> {
+  if (!supabase) return { error: 'other' };
+  const begin = await supabase.rpc('otp_begin');
+  if (begin.error) return { error: 'other' };
+  const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: false } });
+  if (!error) return { error: null };
+  if (error.status === 429 || /rate|seconds/i.test(error.message)) return { error: 'rate_limited' };
+  if (error.name === 'AuthRetryableFetchError' || error.status === 0) return { error: 'network' };
+  return { error: 'other' };
+}
+
+/** Check the code (this swaps in a new session), then tie it to the password session it followed. */
+export async function verifyEmailOtp(email: string, token: string, prevSessionId: string | null): Promise<boolean> {
+  if (!supabase || !prevSessionId) return false;
+  const { error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: token.trim(), type: 'email' });
+  if (error) return false;
+  const { error: confirmError } = await supabase.rpc('otp_confirm', { p_prev: prevSessionId });
+  return !confirmError;
+}

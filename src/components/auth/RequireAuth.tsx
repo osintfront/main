@@ -23,7 +23,7 @@ interface RequireAuthProps {
  * are enforced in the database.
  */
 export function RequireAuth({ anyOf, embedded = false, children }: RequireAuthProps) {
-  const { status, profile, profileError, sessionExpired, mfa } = useAuth();
+  const { status, profile, profileError, sessionExpired, mfa, otp } = useAuth();
   const { canAny } = usePermissions();
   const location = useLocation();
   const { t } = useI18n();
@@ -39,6 +39,12 @@ export function RequireAuth({ anyOf, embedded = false, children }: RequireAuthPr
       />
     );
   }
+
+  // Back office: the emailed code must be confirmed first, otherwise back to /login.
+  if (anyOf?.includes('admin.access') && otp === 'pending') {
+    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
+  }
+  if (anyOf?.includes('admin.access') && otp === 'unknown') return <FullScreenLoader label={t('auth.verifying')} />;
 
   if (profileError) return <AccessDenied reason="profile_error" embedded={embedded} />;
   if (!profile) return <AccessDenied reason="no_profile" embedded={embedded} />;

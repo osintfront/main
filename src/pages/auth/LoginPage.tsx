@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Lock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { wasKickedOut } from '@/lib/session';
 import { useI18n } from '@/i18n';
 import { loginLockRemaining, signInWithGoogle, type SignInFailure } from '@/services/authService';
+import { OtpStep } from '@/components/auth/OtpStep';
 import { SignupForm } from '@/components/auth/SignupForm';
 import { isValidEmail, safeRedirectPath } from '@/utils/url';
 import { LiveBadge, LoginGlobe, LoginTicker } from '@/components/auth/LoginShowcase';
@@ -21,9 +22,8 @@ interface LocationState {
 
 export function LoginPage() {
   const { t } = useI18n();
-  const { status, signIn, sessionExpired, acknowledgeSessionExpired } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const { status, signIn, sessionExpired, acknowledgeSessionExpired, otp } = useAuth();
+    const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
   // The site is members-only: after signing in, back to where they were going (the map by default).
   const redirectTo = safeRedirectPath(state.from, '/');
@@ -54,7 +54,10 @@ export function LoginPage() {
 
   if (status === 'unconfigured') return <SetupNotice />;
   if (status === 'loading' && !submitting) return <FullScreenLoader label={t('auth.verifying')} />;
-  if (status === 'signed_in') return <Navigate to={redirectTo} replace />;
+  // Signed in with the password but the emailed code is still owed: stay here (the code step shows below).
+  const needCode = status === 'signed_in' && otp === 'pending';
+  if (status === 'signed_in' && otp === 'unknown') return <FullScreenLoader label={t('auth.verifying')} />;
+  if (status === 'signed_in' && !needCode && !submitting) return <Navigate to={redirectTo} replace />;
 
   const expired = !kicked && (sessionExpired || state.reason === 'expired');
 
@@ -78,8 +81,8 @@ export function LoginPage() {
       setPassword('');
       return;
     }
+    // Success: the redirect (or the code step) is decided by the render above.
     acknowledgeSessionExpired();
-    navigate(redirectTo, { replace: true });
   };
 
   const failureMessage = (() => {
@@ -143,6 +146,7 @@ export function LoginPage() {
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/95 p-6 text-slate-900 shadow-2xl shadow-sky-950/50 backdrop-blur sm:p-7 dark:bg-slate-900/90 dark:text-white">
+            {needCode ? (<><h2 className="mb-4 text-lg font-bold tracking-tight">אימות דו-שלבי</h2><OtpStep /></>) : (<>
             <div role="tablist" className="mb-4 grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm font-semibold dark:bg-slate-800">
               {(['login', 'signup'] as const).map((m) => (
                 <button key={m} type="button" role="tab" aria-selected={mode === m} data-auth={`tab-${m}`}
@@ -225,6 +229,7 @@ export function LoginPage() {
         </p>
       </form>
       )}
+            </>)}
             <Link
               to="/"
               data-auth="guest"

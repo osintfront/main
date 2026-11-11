@@ -32,6 +32,10 @@ interface AuthContextValue {
   /** True after arriving from a password-recovery email link. */
   passwordRecovery: boolean;
   mfa: MfaState;
+  /** Email-code 2FA: 'pending' = password done, code still to enter. */
+  otp: 'unknown' | 'none' | 'pending' | 'done';
+  sendOtp: () => Promise<{ error: 'rate_limited' | 'network' | 'other' | null }>;
+  verifyOtp: (code: string) => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<authService.SignInFailure | null>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -121,6 +125,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => setAal2(data?.currentLevel === 'aal2'));
   }, [mfaRequired, session?.access_token]);
 
+  // Email-code 2FA status of the current session (asked of the database).
+  const [otp, setOtp] = useState<'unknown' | 'none' | 'pending' | 'done'>('unknown');
+  const otpReq = useRef(0);
+  const refreshOtp = useCallback(async () => {
+    const n = ++otpReq.current;
+    const r = await authService.getOtpStatus();
+    if (n === otpReq.current) setOtp(!r.required ? 'none' : r.verified ? 'done' : 'pending');
+  }, []);
+
   const signIn = useCallback(async (email: string, password: string) => {
     const failure = await authService.signInWithPassword(email, password);
     if (!failure) {
@@ -152,6 +165,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void recordLogin();
     void registerSession();
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) { otpReq.current++; setOtp('unknown'); return; }
+    void refreshOtp();
+  }, [sessionId, refreshOtp]);
+
+  const sendOtp = useCallback(() => authService.sendEmailOtp(session?.user.email ?? ''), [session?.user.email]);
+  const verifyOtp = useCallback(async (code: string) => {
+    const ok = await authService.verifyEmailOtp(session?.user.email ?? '', code, sessionId);
+    await refreshOtp();
+    return ok;
+  }, [session?.user.email, sessionId, refreshOtp]);
 
   // Still the active session? Signed in on another device → sign out here with a message.
   useEffect(() => {
@@ -208,6 +233,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionExpired,
       passwordRecovery,
       mfa: { required: mfaRequired, satisfied: !mfaRequired || aal2 },
+      otp,
+      sendOtp,
+      verifyOtp,
       signIn,
       signOut,
       refreshProfile,
@@ -223,6 +251,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       passwordRecovery,
       mfaRequired,
       aal2,
+      otp,
+      sendOtp,
+      verifyOtp,
       signIn,
       signOut,
       refreshProfile,
