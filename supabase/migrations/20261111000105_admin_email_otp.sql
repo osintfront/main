@@ -72,3 +72,8 @@ create or replace function public.is_super_admin() returns boolean language sql 
   select exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'super_admin' and p.status = 'active')
      and (public.otp_ok() or not coalesce((select s.value = 'true'::jsonb from public.app_settings s where s.key = 'enforce_admin_otp'), false));
 $$;
+
+-- 11 Nov: how the session was let in ('code', or 'mail_quota' when the email quota was used up);
+-- the admin-otp edge function sends the code. Server-side enforcement switched on.
+alter table public.otp_verified add column if not exists via text not null default 'code';
+update public.app_settings set value = 'true'::jsonb where key = 'enforce_admin_otp';

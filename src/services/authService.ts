@@ -164,15 +164,19 @@ export async function getOtpStatus(): Promise<OtpStatus> {
   return data as OtpStatus;
 }
 
-/** Remember the password session, then email a 6-digit code to the (existing) account. */
-export async function sendEmailOtp(email: string): Promise<{ error: 'rate_limited' | 'network' | 'other' | null }> {
+export type OtpSendResult = { error: 'cooldown' | 'network' | 'other' | null; seconds?: number; bypass?: boolean };
+
+/**
+ * Email the 6-digit code (sent by the admin-otp edge function, which also remembers the password
+ * session). When the email quota is used up the server lets this session in without a code: bypass.
+ */
+export async function sendEmailOtp(): Promise<OtpSendResult> {
   if (!supabase) return { error: 'other' };
-  const begin = await supabase.rpc('otp_begin');
-  if (begin.error) return { error: 'other' };
-  const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: false } });
-  if (!error) return { error: null };
-  if (error.status === 429 || /rate|seconds/i.test(error.message)) return { error: 'rate_limited' };
-  if (error.name === 'AuthRetryableFetchError' || error.status === 0) return { error: 'network' };
+  const { data, error } = await supabase.functions.invoke('admin-otp', { body: {} });
+  if (data?.bypass) return { error: null, bypass: true };
+  if (data?.sent) return { error: null };
+  if (data?.error === 'cooldown') return { error: 'cooldown', seconds: Number(data.seconds) || 60 };
+  if (error && /fetch|network/i.test(error.message)) return { error: 'network' };
   return { error: 'other' };
 }
 

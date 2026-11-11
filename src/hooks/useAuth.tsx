@@ -34,7 +34,7 @@ interface AuthContextValue {
   mfa: MfaState;
   /** Email-code 2FA: 'pending' = password done, code still to enter. */
   otp: 'unknown' | 'none' | 'pending' | 'done';
-  sendOtp: () => Promise<{ error: 'rate_limited' | 'network' | 'other' | null }>;
+  sendOtp: () => Promise<authService.OtpSendResult>;
   verifyOtp: (code: string) => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<authService.SignInFailure | null>;
   signOut: () => Promise<void>;
@@ -171,7 +171,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refreshOtp();
   }, [sessionId, refreshOtp]);
 
-  const sendOtp = useCallback(() => authService.sendEmailOtp(session?.user.email ?? ''), [session?.user.email]);
+  const sendOtp = useCallback(async () => {
+    const r = await authService.sendEmailOtp();
+    if (r.bypass) await refreshOtp(); // email quota used up: the server let this session in
+    return r;
+  }, [refreshOtp]);
   const verifyOtp = useCallback(async (code: string) => {
     const ok = await authService.verifyEmailOtp(session?.user.email ?? '', code, sessionId);
     await refreshOtp();

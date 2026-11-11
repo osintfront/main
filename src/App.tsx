@@ -1,7 +1,7 @@
 import { LicensesPage } from '@/pages/admin/LicensesPage';
 import { LegalPlaceholder } from '@/pages/public/LegalPlaceholder';
 import type { ComponentType, ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ADMIN_SECTIONS } from '@/config/adminSections';
@@ -60,6 +60,14 @@ function AdminHome({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Password entered but the emailed code still owed: nothing but /login until it is entered. */
+function OtpPendingGate({ children }: { children: ReactNode }) {
+  const { status, otp } = useAuth();
+  const { pathname } = useLocation();
+  if (status === 'signed_in' && otp === 'pending' && pathname !== '/login') return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
 export function App() {
   return (
     <ThemeProvider>
@@ -67,6 +75,7 @@ export function App() {
         <AuthProvider>
           <ToastProvider>
           <BrowserRouter>
+            <OtpPendingGate>
             <Routes>
               {/* Public — no login required */}
               {/* Members only: the map and the archive need a signed-in, active account. */}
@@ -129,6 +138,7 @@ export function App() {
 
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            </OtpPendingGate>
             <GateHost />
             <SessionTimeout />
             <IdleSignOut />

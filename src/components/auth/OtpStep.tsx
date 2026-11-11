@@ -28,9 +28,10 @@ export function OtpStep() {
     setWait(COOLDOWN);
     setBusy(true);
     setMsg(null);
-    const { error } = await sendOtp();
+    const { error, seconds, bypass } = await sendOtp();
     setBusy(false);
-    if (error === 'rate_limited') setMsg({ tone: 'error', text: 'מכסת המיילים לשעה הסתיימה. נסו שוב מאוחר יותר.' });
+    if (bypass) return; // email quota used up: signed in without a code
+    if (error === 'cooldown') { setWait(seconds ?? COOLDOWN); setMsg({ tone: 'info', text: 'קוד נשלח לאחרונה. בדקו את תיבת המייל.' }); }
     else if (error) setMsg({ tone: 'error', text: 'שליחת הקוד נכשלה. נסו שוב.' });
     else setMsg({ tone: 'info', text: 'שלחנו קוד בן 6 ספרות לאימייל שלכם.' });
   };
