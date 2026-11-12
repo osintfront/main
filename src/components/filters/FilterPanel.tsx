@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Crosshair, Loader2, Octagon, Plus, X } from 'lucide-react';
 import { compileEei, matchesEei, type Eei } from '@/lib/eei';
+import { fromEventFilters, isLocked, matchesSetFilter, toEventFilters, type FilterSet } from '@/lib/filterSets';
+import { FilterSetsBar } from './FilterSetsBar';
+import { FilterSetHeader } from './FilterSetHeader';
 import { hasFeature, myPlan } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { useI18n } from '@/i18n';
@@ -43,6 +46,17 @@ interface FilterPanelProps {
   eeis?: Eei[];
   onAddEei?: (name: string, query: string) => string;
   onRemoveEei?: (id: string) => void;
+  /** Filter sets (live map only; absent = today's panel). */
+  sets?: FilterSet[];
+  setLimit?: number;
+  onSetsChange?: (next: FilterSet[]) => void;
+  /** null = the general filter, else the id of the set being edited. */
+  scope?: string | null;
+  onScopeChange?: (scope: string | null) => void;
+  onDrawForSet?: (id: string) => void;
+  /** At least one set is in force (the general filter is paused). */
+  setsInForce?: boolean;
+  onSwitchSetsOff?: () => void;
 }
 
 const SHOW_EEI = false;
@@ -211,9 +225,23 @@ export function FilterPanel({
   eeis = [],
   onAddEei,
   onRemoveEei,
+  sets,
+  setLimit = 0,
+  onSetsChange,
+  scope = null,
+  onScopeChange,
+  onDrawForSet,
+  setsInForce = false,
+  onSwitchSetsOff,
 }: FilterPanelProps) {
   const { t, lang, categoryLabel } = useI18n();
-  const set = (patch: Partial<EventFilters>) => onChange({ ...filters, ...patch });
+  // The sections below edit either the general filter or the chosen set (as an EventFilters view).
+  const scopeSet = (scope && sets?.find((x) => x.id === scope)) || null;
+  const scopeLocked = !!scopeSet && isLocked(sets!, scopeSet.id, setLimit);
+  const view: EventFilters = useMemo(() => (scopeSet ? toEventFilters(scopeSet.filter) : filters), [scopeSet, filters]);
+  const replaceSet = (next: FilterSet) => onSetsChange?.(sets!.map((x) => (x.id === next.id ? next : x)));
+  const apply = (next: EventFilters) => (scopeSet ? replaceSet({ ...scopeSet, filter: fromEventFilters(next, scopeSet.filter.polygons) }) : onChange(next));
+  const set = (patch: Partial<EventFilters>) => apply({ ...view, ...patch });
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -225,11 +253,13 @@ export function FilterPanel({
 
   // Counts per option: the events that would show if that option were picked, given every other
   // active filter (time window included) — so they add up to what the feed shows.
+  const polygons = scopeSet?.filter.polygons;
   const counts = useMemo(() => {
     const now = Date.now();
+    const matches = (e: PublicEvent, f: EventFilters) => (polygons ? matchesSetFilter(e, fromEventFilters(f, polygons), now) : matchesFilters(e, f, now));
     const without = (patch: Partial<EventFilters>) => {
-      const f = { ...filters, ...patch };
-      return events.filter((e) => matchesFilters(e, f, now));
+      const f = { ...view, ...patch };
+      return events.filter((e) => matches(e, f));
     };
     const area = new Map<string, number>();
     const cat = new Map<string, number>();
@@ -245,7 +275,7 @@ export function FilterPanel({
     for (const e of without({ placeKinds: [] })) bump(place, placeKind(e));
     for (const e of without({ media: [] })) mediaKinds(e).forEach((m) => bump(media, m));
     return { area, cat, sev, src, place, media };
-  }, [events, filters]);
+  }, [events, view, polygons]);
 
   const categories = useMemo(() => {
     const known = DEFAULT_CATEGORIES.filter((c) => c.slug !== 'other' || counts.cat.has('other'));
@@ -269,7 +299,7 @@ export function FilterPanel({
     return [...known, ...extra];
   }, [counts, lang]);
 
-  const active = activeFilterCount(filters);
+  const active = activeFilterCount(filters) > 0 || setsInForce;
 
   return (
     <div className="fixed inset-0 z-[2500] lg:absolute lg:inset-auto lg:end-3 lg:top-14" role="presentation">
@@ -290,7 +320,10 @@ export function FilterPanel({
           {active ? (
             <button
               type="button"
-              onClick={() => onChange(EMPTY_FILTERS)}
+              onClick={() => {
+                onChange(EMPTY_FILTERS);
+                onSwitchSetsOff?.();
+              }}
               className="ms-auto rounded-lg px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
             >
               {t('filters.clearAll')}
@@ -309,11 +342,38 @@ export function FilterPanel({
           </button>
         </header>
 
+        {sets && onSetsChange && onScopeChange ? (
+          <FilterSetsBar sets={sets} setLimit={setLimit} events={events} scope={scopeSet ? scopeSet.id : null} onScopeChange={onScopeChange} onSetsChange={onSetsChange} />
+        ) : null}
+
         <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {scopeSet ? (
+            <FilterSetHeader
+              set={scopeSet}
+              position={sets!.indexOf(scopeSet) + 1}
+              locked={scopeLocked}
+              onChange={replaceSet}
+              onDelete={() => {
+                onSetsChange?.(sets!.filter((x) => x.id !== scopeSet.id));
+                onScopeChange?.(null);
+              }}
+              onDrawArea={() => onDrawForSet?.(scopeSet.id)}
+            />
+          ) : setsInForce ? (
+            <div data-sets-paused className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              <p className="min-w-0 flex-1">{t('sets.paused')}</p>
+              <button type="button" data-set-action="switch-off" onClick={onSwitchSetsOff} className="shrink-0 rounded-lg px-2 py-1 font-semibold underline-offset-2 hover:underline">
+                {t('sets.switchOff')}
+              </button>
+            </div>
+          ) : null}
+          {scopeLocked ? null : (
+            <>
           {/* צי"ח (EEI) is switched off for now; the section is kept for later. */}
           {SHOW_EEI && onAddEei && onRemoveEei ? (
             <EeiSection filters={filters} set={set} events={events} eeis={eeis} onAdd={onAddEei} onRemove={onRemoveEei} />
           ) : null}
+          {scopeSet ? null : (
           <Section title={t('filters.drawTitle')}>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -336,23 +396,24 @@ export function FilterPanel({
               ) : null}
             </div>
           </Section>
+          )}
           {hideTime ? null : (
             <Section title={t('filters.time')}>
               <div className="flex flex-wrap gap-1.5">
                 {TIME_PRESETS.map((p) => (
-                  <Chip key={p.id} on={filters.preset === p.id} onClick={() => set({ preset: p.id as TimePreset })}>
+                  <Chip key={p.id} on={view.preset === p.id} onClick={() => set({ preset: p.id as TimePreset })}>
                     {t(`filters.preset.${p.id}`)}
                   </Chip>
                 ))}
               </div>
-              {filters.preset === 'custom' ? (
+              {view.preset === 'custom' ? (
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {(['from', 'to'] as const).map((k) => (
                     <label key={k} className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                       {t(`filters.${k}`)}
                       <input
                         type="datetime-local"
-                        value={toLocalInput(filters[k])}
+                        value={toLocalInput(view[k])}
                         max={toLocalInput(new Date().toISOString())}
                         onChange={(e) => {
                           const v = e.target.value ? new Date(e.target.value).toISOString() : '';
@@ -376,7 +437,7 @@ export function FilterPanel({
           <Section title={t('filters.areas')}>
             <div className="flex flex-wrap gap-1.5">
               {areas.map((a) => (
-                <Chip key={a.id} on={filters.areas.includes(a.id)} onClick={() => set({ areas: toggle(filters.areas, a.id) })}>
+                <Chip key={a.id} on={view.areas.includes(a.id)} onClick={() => set({ areas: toggle(view.areas, a.id) })}>
                   {a.label}
                   <Count n={counts.area.get(a.id) ?? 0} />
                 </Chip>
@@ -391,8 +452,8 @@ export function FilterPanel({
                 return (
                   <Chip
                     key={c.slug}
-                    on={filters.categories.includes(c.slug)}
-                    onClick={() => set({ categories: toggle(filters.categories, c.slug) })}
+                    on={view.categories.includes(c.slug)}
+                    onClick={() => set({ categories: toggle(view.categories, c.slug) })}
                   >
                     <span className="inline-flex size-5 items-center justify-center rounded-full text-white" style={{ backgroundColor: c.color }} aria-hidden>
                       <Icon className="size-3" />
@@ -408,7 +469,7 @@ export function FilterPanel({
           <Section title={t('filters.severity')}>
             <div className="flex flex-wrap gap-1.5">
               {SEVERITIES.map((s: Severity) => (
-                <Chip key={s} on={filters.severities.includes(s)} onClick={() => set({ severities: toggle(filters.severities, s) })}>
+                <Chip key={s} on={view.severities.includes(s)} onClick={() => set({ severities: toggle(view.severities, s) })}>
                   {t(`severity.${s}`)}
                   <Count n={counts.sev.get(s) ?? 0} />
                 </Chip>
@@ -419,7 +480,7 @@ export function FilterPanel({
           <Section title={t('filters.source')}>
             <div className="flex flex-wrap gap-1.5">
               {SOURCES.map((s) => (
-                <Chip key={s} on={filters.sources.includes(s)} onClick={() => set({ sources: toggle(filters.sources, s) })}>
+                <Chip key={s} on={view.sources.includes(s)} onClick={() => set({ sources: toggle(view.sources, s) })}>
                   {t(`filters.source.${s}`)}
                   <Count n={counts.src.get(s) ?? 0} />
                 </Chip>
@@ -430,7 +491,7 @@ export function FilterPanel({
           <Section title={t('filters.media')}>
             <div className="flex flex-wrap gap-1.5">
               {MEDIA.map((m) => (
-                <Chip key={m} on={filters.media.includes(m)} onClick={() => set({ media: toggle(filters.media, m) })}>
+                <Chip key={m} on={view.media.includes(m)} onClick={() => set({ media: toggle(view.media, m) })}>
                   {t(`filters.media.${m}`)}
                   <Count n={counts.media.get(m) ?? 0} />
                 </Chip>
@@ -441,7 +502,7 @@ export function FilterPanel({
           <Section title={t('filters.location')}>
             <div className="flex flex-wrap gap-1.5">
               {(['place', 'country', 'none'] as PlaceKind[]).map((k) => (
-                <Chip key={k} on={filters.placeKinds.includes(k)} onClick={() => set({ placeKinds: toggle(filters.placeKinds, k) })}>
+                <Chip key={k} on={view.placeKinds.includes(k)} onClick={() => set({ placeKinds: toggle(view.placeKinds, k) })}>
                   {t(`filters.location.${k}`)}
                   <Count n={counts.place.get(k) ?? 0} />
                 </Chip>
@@ -452,14 +513,16 @@ export function FilterPanel({
 
           <Section title={t('filters.more')}>
             <div className="flex flex-wrap gap-1.5">
-              <Chip on={filters.breakingOnly} onClick={() => set({ breakingOnly: !filters.breakingOnly })}>
+              <Chip on={view.breakingOnly} onClick={() => set({ breakingOnly: !view.breakingOnly })}>
                 {t('filters.breakingOnly')}
               </Chip>
-              <Chip on={filters.verifiedOnly} onClick={() => set({ verifiedOnly: !filters.verifiedOnly })}>
+              <Chip on={view.verifiedOnly} onClick={() => set({ verifiedOnly: !view.verifiedOnly })}>
                 {t('filters.verifiedOnly')}
               </Chip>
             </div>
           </Section>
+            </>
+          )}
         </div>
 
         <footer className="border-t border-slate-200 px-4 py-3 pb-[max(env(safe-area-inset-bottom),12px)] dark:border-slate-800">

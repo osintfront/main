@@ -9,7 +9,7 @@ import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { openEventAllowed } from '@/lib/featureUse';
 import { featureLimit, hasFeature, usePlanVersion } from '@/lib/plans';
 import { useFilterSets } from '@/hooks/useFilterSets';
-import { matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, type FilterSet } from '@/lib/filterSets';
+import { addPolygon, matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, type FilterSet } from '@/lib/filterSets';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -203,6 +203,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const { sets, setSets } = useFilterSets();
   const setLimit = planSetLimit(hasFeature(undefined, 'filter_sets'), featureLimit('filter_sets'));
   const activeSets = useMemo(() => (isArchive ? [] : setsOn(sets, setLimit)), [isArchive, sets, setLimit]);
+  // The panel reopens on the set it was editing; a drawing can be for a set (drawTarget).
+  const [panelScopeRaw, setPanelScope] = useState<string | null>(null);
+  const panelScope = panelScopeRaw && sets.some((x) => x.id === panelScopeRaw) ? panelScopeRaw : null;
+  const drawTargetRef = useRef<string | null>(null);
   const switchSetsOff = useCallback(() => setSets((list) => (list.some((s) => s.enabled) ? list.map((s) => ({ ...s, enabled: false })) : list)), [setSets]);
   const archiveRange = useMemo(
     () => (isArchive ? null : activeSets.length ? setsArchiveRange(activeSets) : needsArchive(filters)),
@@ -260,8 +264,36 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     setMobilePane('map');
     setDrawMode('polygon');
   }, []);
+  const drawForSet = useCallback(
+    (id: string) => {
+      drawTargetRef.current = id;
+      startDrawing();
+    },
+    [startDrawing],
+  );
+  // Drawing for a set ended without a shape (cancelled): back to that set in the panel, nothing added.
+  const handleDrawModeChange = useCallback((mode: DrawMode | null) => {
+    setDrawMode(mode);
+    const target = drawTargetRef.current;
+    if (mode === null && target) {
+      drawTargetRef.current = null;
+      setPanelScope(target);
+      setFiltersOpen(true);
+    }
+  }, []);
   const handleAreaDrawn = useCallback(
     (points: LatLng[]) => {
+      const target = drawTargetRef.current;
+      if (target) {
+        // A drawing for a set goes into that set only (never into the general filter).
+        drawTargetRef.current = null;
+        setSets((list) => addPolygon(list, target, points, setLimit));
+        setAskFit({ key: Date.now(), points });
+        setDrawMode(null);
+        setPanelScope(target);
+        setFiltersOpen(true);
+        return;
+      }
       setFilters((f) => ({ ...f, polygon: points }));
       setDrawMode(null);
       if (activeSets.length) {
@@ -269,7 +301,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         toast.success(t('sets.switchedOff'));
       }
     },
-    [activeSets.length, switchSetsOff, toast, t],
+    [activeSets.length, switchSetsOff, toast, t, setSets, setLimit],
   );
   const filterByCategory = useCallback(
     (slug: string) => {
@@ -542,6 +574,18 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           eeis={eeis}
           onAddEei={addEei}
           onRemoveEei={removeEei}
+          {...(isArchive
+            ? {}
+            : {
+                sets,
+                setLimit,
+                onSetsChange: setSets,
+                scope: panelScope,
+                onScopeChange: setPanelScope,
+                onDrawForSet: drawForSet,
+                setsInForce: activeSets.length > 0,
+                onSwitchSetsOff: switchSetsOff,
+              })}
         />
       ) : null}
 
@@ -631,7 +675,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                       </span>
                       <button
                         type="button"
-                        onClick={() => setFilters(EMPTY_FILTERS)}
+                        onClick={() => {
+                          setFilters(EMPTY_FILTERS);
+                          switchSetsOff();
+                        }}
                         className="ms-auto h-8 rounded-lg px-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
                       >
                         {t('filters.clearAll')}
@@ -674,7 +721,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               setAreas={setAreas}
               tints={tints}
               drawMode={drawMode}
-              onDrawModeChange={setDrawMode}
+              onDrawModeChange={handleDrawModeChange}
               onAreaDrawn={handleAreaDrawn}
               onFilterCategory={filterByCategory}
               onClearArea={clearArea}

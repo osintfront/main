@@ -121,7 +121,9 @@ async function routeAll(page) {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--no-sandbox'] });
   const phone = DEVICE === 'phone';
   const out = { lang: LANG, device: DEVICE, plan: PLAN };
-  const T = LANG === 'he' ? { setsOn: (n) => `${n} סטים פעילים`, off: 'כיבוי הסטים' } : { setsOn: (n) => `${n} filter sets`, off: 'Switch sets off' };
+  const T = LANG === 'he'
+    ? { setsOn: (n) => `${n} סטים פעילים`, off: 'כיבוי הסטים', filters: /^(סינון|מסננים ·)/, set1: 'סט 1', lebanon: /^לבנון/, iran: /^איראן/, air: /^תקיפה אווירית/, missile: /^ירי רקטות וטילים/, week: /^שבוע$/, octagon: /^מתומן$/, cancel: /^ביטול$/, area1: 'אזור 1', clearAll: /^נקה הכול|^ניקוי הכול|^נקה הכל/ }
+    : { setsOn: (n) => `${n} filter sets`, off: 'Switch sets off', filters: /^Filters( ·|$)/, set1: 'Set 1', lebanon: /^Lebanon/, iran: /^Iran/, air: /^Airstrike/, missile: /^Missile or Rocket Attack/, week: /^7 days$/, octagon: /^Octagon$/, cancel: /^Cancel$/, area1: 'Area 1', clearAll: /^Clear all$/ };
 
   // One fresh page per scenario: `seed` is written to storage before the app starts.
   async function open(seed, at = '/') {
@@ -224,6 +226,139 @@ async function routeAll(page) {
       await showFeed(page);
       out.c7_cards = await cards(page); // 8
       await ctx.close();
+
+      // ── Panel, driven through the UI ──
+      ({ ctx, page } = await open(null));
+      page.on('dialog', (d) => d.accept());
+      const dlg = page.locator('[role="dialog"][aria-labelledby="filters-title"]');
+      const openPanel = async () => {
+        if (await dlg.count()) return;
+        await page.getByRole('button', { name: T.filters }).first().click();
+        await dlg.waitFor({ timeout: 5000 });
+      };
+      const closePanel = async () => { await page.keyboard.press('Escape'); await page.waitForTimeout(300); };
+      const pick = (re) => dlg.getByRole('button', { name: re }).first().click();
+      const feedCount = async () => { await closePanel(); await showFeed(page); const n = await cards(page); await openPanel(); return n; };
+
+      // P1: two sets through the UI.
+      await openPanel();
+      await dlg.locator('[data-set-action="add"]').click();
+      out.p1_firstChip = (await dlg.locator('[data-set-scope][aria-pressed="true"]').innerText()).includes(T.set1);
+      await pick(T.lebanon); await pick(T.air);
+      out.p1_cards1 = await feedCount(); // 2
+      await dlg.locator('[data-set-action="add"]').click();
+      await pick(T.iran); await pick(T.missile);
+      out.p1_cards2 = await feedCount(); // 3
+      out.p1_footer = /\b3\b/.test(await dlg.locator('footer button').innerText());
+      await shot(page, 'panel-set');
+
+      // P2: set 1 off → 1; on → 3.
+      const ids = await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').evaluateAll((els) => els.map((e) => e.getAttribute('data-set-scope')));
+      await dlg.locator(`[data-set-scope="${ids[0]}"]`).click();
+      await dlg.locator('[data-set-action="toggle"]').click();
+      out.p2_off = await feedCount(); // 1
+      await dlg.locator('[data-set-action="toggle"]').click();
+      out.p2_on = await feedCount(); // 3
+
+      // P3: set 2 → 7 days: archive loaded from ~7 days ago; the old Lebanon strike stays out (set 1 is 12 h).
+      archiveCalls.length = 0;
+      await dlg.locator(`[data-set-scope="${ids[1]}"]`).click();
+      await pick(T.week);
+      await page.waitForTimeout(1500);
+      const from = archiveCalls.flat().find((x) => x.startsWith('gte.'))?.slice(4);
+      out.p3_archive7d = !!from && Math.abs(Date.parse(from) - (Date.now() - 168 * H)) < 2 * H;
+      await closePanel(); await showFeed(page);
+      out.p3_oldHidden = !(await titles(page)).some((x) => x.includes('Old strike'));
+      await openPanel();
+
+      // P4: draw for a new set (octagon over the visible map) → Area 1, the general filter untouched.
+      await dlg.locator('[data-set-action="add"]').click();
+      await dlg.locator('[data-set-action="draw"]').click();
+      await page.getByRole('button', { name: T.octagon }).click();
+      const map = page.locator('.leaflet-container');
+      const box = await map.boundingBox();
+      await map.click({ position: { x: box.width / 2, y: box.height / 2 } });
+      await map.click({ position: { x: 4, y: 4 } });
+      await dlg.waitFor({ timeout: 5000 });
+      out.p4_area = (await dlg.locator('[data-set-area]').count()) === 1;
+      out.p4_generalUntouched = await page.evaluate(() => JSON.parse(localStorage.getItem('ofm.filters.v1') || '{}').polygon == null);
+
+      // P5: cancel a drawing → back on the set, nothing added.
+      await dlg.locator('[data-set-action="draw"]').click();
+      await page.getByRole('button', { name: T.cancel }).click();
+      await dlg.waitFor({ timeout: 5000 });
+      out.p5_stillOneArea = (await dlg.locator('[data-set-area]').count()) === 1;
+
+      // P6: General scope → paused note; switch off → 8, sets still listed.
+      await dlg.locator('[data-set-scope="general"]').click();
+      out.p6_paused = (await dlg.locator('[data-sets-paused]').count()) === 1;
+      await dlg.locator('[data-set-action="switch-off"]').click();
+      out.p6_cards = await feedCount(); // 8
+      out.p6_listed = (await dlg.locator('[data-set-scope]').count()) === 4;
+
+      // P7: switch set 1 on again, "Clear all" → off, still listed after reload.
+      await dlg.locator(`[data-set-scope="${ids[0]}"]`).click();
+      await dlg.locator('[data-set-action="toggle"]').click();
+      await dlg.getByRole('button', { name: T.clearAll }).first().click();
+      out.p7_cards = await feedCount(); // 8
+      await closePanel();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(3000);
+      await openPanel();
+      out.p7_listed = (await dlg.locator('[data-set-scope]').count()) === 4;
+
+      // P8: delete → chip gone, scope back to General.
+      await dlg.locator(`[data-set-scope="${ids[0]}"]`).click();
+      await dlg.locator('[data-set-action="delete"]').click();
+      await page.waitForTimeout(300);
+      out.p8_gone = (await dlg.locator(`[data-set-scope="${ids[0]}"]`).count()) === 0;
+      out.p8_general = (await dlg.locator('[data-set-scope="general"][aria-pressed="true"]').count()) === 1;
+
+      // P9: up to 6, then Add is disabled.
+      for (let i = 0; i < 6; i++) if (!(await dlg.locator('[data-set-action="add"]').isDisabled())) await dlg.locator('[data-set-action="add"]').click();
+      out.p9_six = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 6;
+      out.p9_disabled = await dlg.locator('[data-set-action="add"]').isDisabled();
+      if (LANG === 'en') out.p12_noHebrew = !/[\u0590-\u05FF]/.test(await dlg.innerText());
+      await ctx.close();
+    }
+
+    if (PLAN === 'free') {
+      let { ctx, page } = await open(null);
+      const dlg = page.locator('[role="dialog"][aria-labelledby="filters-title"]');
+      await page.getByRole('button', { name: T.filters }).first().click();
+      await dlg.waitFor({ timeout: 5000 });
+      await dlg.locator('[data-set-action="add"]').click();
+      out.f1_first = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 1;
+      await dlg.locator('[data-set-action="add"]').click();
+      await page.waitForTimeout(400);
+      out.f1_upgrade = (await page.locator('[data-gate="upgrade"]').count()) === 1;
+      out.f1_noSecond = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 1;
+      await ctx.close();
+
+      ({ ctx, page } = await open([A, B, mk('c', 'Third', '#059669', { areas: ['syria'] })]));
+      await showFeed(page);
+      out.f2_cards = await cards(page); // 2 (set A only)
+      const dlg2 = page.locator('[role="dialog"][aria-labelledby="filters-title"]');
+      await page.getByRole('button', { name: T.filters }).first().click();
+      await dlg2.waitFor({ timeout: 5000 });
+      out.f2_locked = (await dlg2.locator('[data-set-locked]').count()) === 2;
+      await page.keyboard.press('Escape');
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(2500);
+      out.f2_stored = JSON.parse(await page.evaluate((k) => localStorage.getItem(k), KEY)).length === 3;
+      await ctx.close();
+    }
+
+    if (PLAN === 'guest') {
+      const { ctx, page } = await open(null);
+      const dlg = page.locator('[role="dialog"][aria-labelledby="filters-title"]');
+      await page.getByRole('button', { name: T.filters }).first().click();
+      await dlg.waitFor({ timeout: 5000 });
+      await dlg.locator('[data-set-action="add"]').click();
+      await page.waitForTimeout(400);
+      out.g1_signup = (await page.locator('[data-gate="signup"]').count()) === 1;
+      out.g1_noChip = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 0;
+      await ctx.close();
     }
   } catch (e) {
     out.FAILED = String(e).slice(0, 400);
@@ -232,7 +367,7 @@ async function routeAll(page) {
   out.consoleErrors = errors.slice(0, 5);
   const bad = [];
   for (const [k, v] of Object.entries(out)) if (v === false) bad.push([k, v]);
-  const expect = { c1_cards: 8, c2_cards: 3, c3_cards: 8, c3_cardsAfterReload: 8, c7_cards: 8 };
+  const expect = { c1_cards: 8, c2_cards: 3, c3_cards: 8, c3_cardsAfterReload: 8, c7_cards: 8, p1_cards1: 2, p1_cards2: 3, p2_off: 1, p2_on: 3, p6_cards: 8, p7_cards: 8, f2_cards: 2 };
   for (const [k, v] of Object.entries(expect)) if (k in out && out[k] !== v) bad.push([k, out[k]]);
   if (out.consoleErrors.length) bad.push(['consoleErrors', out.consoleErrors]);
   if (out.FAILED) bad.push(['FAILED', out.FAILED]);
