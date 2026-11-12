@@ -90,15 +90,17 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
   const [extra, setExtra] = useState('');
   /** Feedback under a turn after Copy: which turn, and whether it worked. */
   const [copied, setCopied] = useState<{ turn: number; ok: boolean } | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const citeRef = useRef(onCite);
   citeRef.current = onCite;
 
   const full = turns.length >= MAX_TURNS;
 
-  // A new answer: bring it into view.
+  // A new answer: bring its first line to the top of the thread, so it is read from the start.
   useEffect(() => {
-    if (turns.length) endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    const list = listRef.current;
+    const last = list?.querySelector<HTMLElement>(`[data-ask-turn="${turns.length - 1}"]`);
+    if (list && last) list.scrollTo({ top: last.offsetTop - 8, behavior: 'smooth' });
   }, [turns.length]);
 
   useEffect(() => {
@@ -202,7 +204,7 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
           </button>
           <button type="button" onClick={() => setCollapsed((v) => !v)} className="inline-flex items-center gap-0.5 font-semibold text-sky-700 hover:underline dark:text-sky-400">
             {collapsed ? <ChevronDown className="size-3.5" aria-hidden /> : <ChevronUp className="size-3.5" aria-hidden />}
-            {collapsed ? t('ask.showAnswer') : t('ask.hideAnswer')}
+            <span className="max-sm:sr-only">{collapsed ? t('ask.showAnswer') : t('ask.hideAnswer')}</span>
           </button>
           <button type="button" onClick={close} aria-label={t('common.close')} className="inline-flex size-7 items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800">
             <X className="size-4" aria-hidden />
@@ -211,7 +213,8 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
       ) : null}
 
       {turns.length && !collapsed ? (
-        <div className="ofm-scroll max-h-[46vh] space-y-2 overflow-y-auto px-2 py-2 text-sm leading-relaxed text-slate-800 dark:text-slate-100">
+        // While the summary form is open the thread shrinks, so the form's button stays on a phone screen.
+        <div ref={listRef} className={cn('ofm-scroll relative space-y-2 overflow-y-auto px-2 py-2 text-sm leading-relaxed text-slate-800 dark:text-slate-100', summaryOpen ? 'max-h-[14vh]' : 'max-h-[46vh]')}>
           {turns.map((turn, i) => (
             <div
               key={i}
@@ -275,7 +278,6 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
             </div>
           ))}
           <p className="px-2 text-[11px] text-slate-400">{t('ask.disclaimer')}</p>
-          <div ref={endRef} />
         </div>
       ) : null}
 
@@ -342,7 +344,7 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
           {summaryOpen ? (
             <form data-ask-summary onSubmit={submitSummary} className="space-y-2 border-t border-slate-200 p-2 dark:border-slate-800">
               <p className="px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{t('ask.summaryArea')}</p>
-              <div className="flex flex-wrap gap-1">
+              <div className="ofm-scroll flex max-h-[22vh] flex-wrap gap-1 overflow-y-auto p-0.5">
                 {AREAS.map((a) => (
                   <button
                     key={a.id}
