@@ -204,12 +204,29 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     if (archiveRange && isGuest) openGate('signup');
   }, [archiveRange, isGuest]);
   const canAsk = !isArchive && !isDemo && profile?.status === 'active';
-  const [ask, setAsk] = useState<AskAnswer | null>(null);
+  // It is a short conversation: a list of turns; the map and feed show the selected turn's events.
+  const [askTurns, setAskTurns] = useState<AskAnswer[]>([]);
+  const [askSelected, setAskSelected] = useState(0);
+  const ask = askTurns[askSelected] ?? null;
   const [askFit, setAskFit] = useState<{ key: number; points: [number, number][] } | null>(null);
-  const handleAskResult = useCallback((r: AskAnswer | null) => {
-    setAsk(r);
+  const fitAsk = useCallback((r: AskAnswer | undefined) => {
     if (r?.events.length) setAskFit({ key: Date.now(), points: r.events.filter(isOnMap).map((e) => [e.latitude, e.longitude]) });
   }, []);
+  const handleAskTurns = useCallback(
+    (turns: AskAnswer[]) => {
+      setAskTurns(turns);
+      setAskSelected(Math.max(turns.length - 1, 0));
+      fitAsk(turns[turns.length - 1]);
+    },
+    [fitAsk],
+  );
+  const handleAskSelect = useCallback(
+    (i: number) => {
+      setAskSelected(i);
+      fitAsk(askTurns[i]);
+    },
+    [askTurns, fitAsk],
+  );
   const allEvents = useMemo(() => {
     const extra = [...older.events, ...(ask?.events ?? [])];
     if (!extra.length) return events;
@@ -263,8 +280,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   }
   // A different list (filters, search, "ask the map", archive day) starts the feed again at its first batch.
   const feedResetKey = useMemo(
-    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? ask.events.length : null]),
-    [isArchive, day, effectiveFilters, deferredQuery, ask],
+    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? [askSelected, ask.events.length] : null]),
+    [isArchive, day, effectiveFilters, deferredQuery, ask, askSelected],
   );
   // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
   const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
@@ -515,7 +532,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                       <span className="text-xs text-slate-500 dark:text-slate-400">{t('feed.count', { count: visibleEvents.length })}</span>
                       <button
                         type="button"
-                        onClick={() => setAsk(null)}
+                        onClick={() => handleAskTurns([])}
                         className="ms-auto h-8 rounded-lg px-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
                       >
                         {t('ask.clear')}
@@ -590,7 +607,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               onPlaceCategory={canMove ? (target, slug) => void placeCategory(target, slug) : undefined}
               onPlaceLocate={canMove ? setLocating : undefined}
               canRemovePin={!isDemo && can('event.edit.any')}
-              topSlot={canAsk ? <AskMap result={ask} onResult={handleAskResult} onCite={handleLocate} /> : undefined}
+              topSlot={canAsk ? <AskMap turns={askTurns} selected={askSelected} onTurns={handleAskTurns} onSelect={handleAskSelect} onCite={handleLocate} /> : undefined}
               fitTo={askFit}
             />
             {canAsk && !moving ? <QuickReportButton /> : null}

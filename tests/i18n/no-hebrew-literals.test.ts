@@ -14,6 +14,7 @@ const FILES = [
   'src/components/account/PlanCard.tsx',
   'src/components/map/mapRotate.ts',
   'src/pages/public/LegalPlaceholder.tsx',
+  'src/components/map/AskMap.tsx',
 ];
 
 const HEBREW = /[֐-׿]/;

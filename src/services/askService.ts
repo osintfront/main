@@ -2,6 +2,7 @@ import { requireFeature } from '@/lib/plans';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchPublicEventsByIds } from './eventService';
 import type { PublicEvent } from '@/types/event';
+import type { AskContext } from '@/lib/askChat';
 
 /** "Ask the map": the answer and the events behind it (in the order the answer cites them: [1] = events[0]). */
 export interface AskAnswer {
@@ -10,6 +11,8 @@ export interface AskAnswer {
   /** Cited/relevant event ids, [n] in the answer = ids[n-1]. */
   ids: string[];
   events: PublicEvent[];
+  /** How the answer is written: a direct answer, or a summary in titled blocks. */
+  mode: 'answer' | 'summary';
 }
 
 export class AskError extends Error {
@@ -29,10 +32,13 @@ export async function aiLimitCode(error: unknown): Promise<'quota' | 'budget' | 
   return 'rate_limited';
 }
 
-export async function askMap(question: string): Promise<AskAnswer> {
+/** ctx = the conversation so far, for a follow-up question (see lib/askChat buildContext). */
+export async function askMap(question: string, ctx?: AskContext): Promise<AskAnswer> {
   requireFeature('ai_expand_ask');
   if (!supabase) throw new AskError('failed', 'Not configured');
-  const { data, error } = await supabase.functions.invoke('event-agent', { body: { action: 'ask', question } });
+  const { data, error } = await supabase.functions.invoke('event-agent', {
+    body: { action: 'ask', question, ...(ctx?.history.length ? { history: ctx.history, prev_ids: ctx.prev_ids } : {}) },
+  });
   if (error) {
     const status = (error as { context?: { status?: number } }).context?.status;
     if (status === 429) throw new AskError(await aiLimitCode(error));
@@ -42,5 +48,5 @@ export async function askMap(question: string): Promise<AskAnswer> {
   if (!data?.ok) throw new AskError('failed', String(data?.error ?? 'failed'));
   const ids: string[] = Array.isArray(data.ids) ? data.ids : [];
   const events = await fetchPublicEventsByIds(ids);
-  return { question, answer: String(data.answer ?? ''), ids, events };
+  return { question, answer: String(data.answer ?? ''), ids, events, mode: data.mode === 'summary' ? 'summary' : 'answer' };
 }
