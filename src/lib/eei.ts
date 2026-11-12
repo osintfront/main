@@ -95,6 +95,8 @@ export function eventText(e: PublicEvent): string {
         e.sourceName ?? '',
         e.category.name,
         ...(e.places ?? []).flatMap((p) => [p.name, p.nameEn]),
+        // Every language version, so Hebrew and English keywords both hit.
+        ...Object.values(e.translations ?? {}).flatMap((x) => [x?.title ?? '', x?.description ?? '', x?.summary ?? '']),
       ].join(' \n '),
     );
     textCache.set(e, t);
