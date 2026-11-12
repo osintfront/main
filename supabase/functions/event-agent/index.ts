@@ -11,7 +11,7 @@
 //   {action:"compose", text}     staff (event.create / event.edit.any) — "quick compose" on the report
 //                                form: free text in any language → title, summary, category, place…
 //                                Nothing is saved; the form is filled for the person to check.
-//   {action:"ask", question}     signed-in users — "ask the map": a free-text question about our events
+//   {action:"ask", question, history?, prev_ids?}  signed-in users — "ask the map": a free-text question about our events
 //                                → answer + event ids (shown on the map). 40 questions / hour / user.
 //   {action:"classify_channels"} cron secret — region of public Telegram channels without one (batch of 120).
 //   {action:"dedupe", minutes?}  cron secret — fold duplicate reports of one incident into one event
@@ -24,6 +24,7 @@ import { runAsReader, setUsageSink } from "../_shared/usage.ts";
 import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
+import { cleanHistory, cleanIds } from "../_shared/askInput.ts";
 import { dedupeRecent, dropRepeats } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { TRANSLATE_API_URL, translateBriefChain } from "../_shared/translate.ts";
@@ -512,7 +513,9 @@ async function handle(req: Request): Promise<Response> {
       if (blocked) return blocked;
     }
     try {
-      const r = await runAsReader(uid, () => askMap(db, question));
+      // A follow-up question carries the conversation so far (cleaned: it comes from the browser).
+      const ctx = { history: cleanHistory(body?.history), prevIds: cleanIds(body?.prev_ids) };
+      const r = await runAsReader(uid, () => askMap(db, question, ctx));
       await db.from("ai_search_log").insert({ user_id: uid, question, results: r.ids.length });
       return json({ ok: true, ...r });
     } catch (e) {
