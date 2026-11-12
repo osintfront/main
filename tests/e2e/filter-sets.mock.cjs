@@ -257,7 +257,7 @@ async function routeAll(page) {
       await shot(page, 'panel-set');
 
       // P2: set 1 off → 1; on → 3.
-      const ids = await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').evaluateAll((els) => els.map((e) => e.getAttribute('data-set-scope')));
+      const ids = await dlg.locator('[data-set-scope]:not([data-set-scope="general"]):not([data-set-scope="eei"])').evaluateAll((els) => els.map((e) => e.getAttribute('data-set-scope')));
       await dlg.locator(`[data-set-scope="${ids[0]}"]`).click();
       await dlg.locator('[data-set-action="toggle"]').click();
       out.p2_off = await feedCount(); // 1
@@ -298,7 +298,7 @@ async function routeAll(page) {
       out.p6_paused = (await dlg.locator('[data-sets-paused]').count()) === 1;
       await dlg.locator('[data-set-action="switch-off"]').click();
       out.p6_cards = await feedCount(); // 8
-      out.p6_listed = (await dlg.locator('[data-set-scope]').count()) === 4;
+      out.p6_listed = (await dlg.locator('[data-set-scope]:not([data-set-scope="eei"])').count()) === 4;
 
       // P7: switch set 1 on again, "Clear all" → off, still listed after reload.
       await dlg.locator(`[data-set-scope="${ids[0]}"]`).click();
@@ -309,7 +309,7 @@ async function routeAll(page) {
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(3000);
       await openPanel();
-      out.p7_listed = (await dlg.locator('[data-set-scope]').count()) === 4;
+      out.p7_listed = (await dlg.locator('[data-set-scope]:not([data-set-scope="eei"])').count()) === 4;
 
       // P8: delete → chip gone, scope back to General.
       await dlg.locator(`[data-set-scope="${ids[0]}"]`).click();
@@ -320,7 +320,7 @@ async function routeAll(page) {
 
       // P9: up to 6, then Add is disabled.
       for (let i = 0; i < 6; i++) if (!(await dlg.locator('[data-set-action="add"]').isDisabled())) await dlg.locator('[data-set-action="add"]').click();
-      out.p9_six = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 6;
+      out.p9_six = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"]):not([data-set-scope="eei"])').count()) === 6;
       out.p9_disabled = await dlg.locator('[data-set-action="add"]').isDisabled();
       if (LANG === 'en') out.p12_noHebrew = !/[\u0590-\u05FF]/.test(await dlg.innerText());
       await ctx.close();
@@ -369,11 +369,11 @@ async function routeAll(page) {
       await page.getByRole('button', { name: T.filters }).first().click();
       await dlg.waitFor({ timeout: 5000 });
       await dlg.locator('[data-set-action="add"]').click();
-      out.f1_first = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 1;
+      out.f1_first = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"]):not([data-set-scope="eei"])').count()) === 1;
       await dlg.locator('[data-set-action="add"]').click();
       await page.waitForTimeout(400);
       out.f1_upgrade = (await page.locator('[data-gate="upgrade"]').count()) === 1;
-      out.f1_noSecond = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 1;
+      out.f1_noSecond = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"]):not([data-set-scope="eei"])').count()) === 1;
       await ctx.close();
 
       ({ ctx, page } = await open([A, B, mk('c', 'Third', '#059669', { areas: ['syria'] })]));
@@ -382,7 +382,7 @@ async function routeAll(page) {
       const dlg2 = page.locator('[role="dialog"][aria-labelledby="filters-title"]');
       await page.getByRole('button', { name: T.filters }).first().click();
       await dlg2.waitFor({ timeout: 5000 });
-      out.f2_locked = (await dlg2.locator('[data-set-locked]').count()) === 2;
+      out.f2_locked = (await dlg2.locator('[data-set-locked]:not([data-set-scope="eei"])').count()) === 2;
       await page.keyboard.press('Escape');
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2500);
@@ -398,7 +398,7 @@ async function routeAll(page) {
       await dlg.locator('[data-set-action="add"]').click();
       await page.waitForTimeout(400);
       out.g1_signup = (await page.locator('[data-gate="signup"]').count()) === 1;
-      out.g1_noChip = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 0;
+      out.g1_noChip = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"]):not([data-set-scope="eei"])').count()) === 0;
       await ctx.close();
 
       // R2 (review): a guest with a saved 7-day set is not sent to sign-up on every load (the set is locked).

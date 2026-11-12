@@ -9,6 +9,8 @@ import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { openEventAllowed } from '@/lib/featureUse';
 import { featureLimit, hasFeature, planConfigReady, usePlanVersion } from '@/lib/plans';
 import { useFilterSets } from '@/hooks/useFilterSets';
+import { useEeiList } from '@/hooks/useEeiList';
+import { eeiMatches, theatreColor, theatresOn, waitingCount } from '@/lib/eeiLens';
 import { MAX_SETS, addPolygon, matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, type FilterSet } from '@/lib/filterSets';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
@@ -207,11 +209,22 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const plansSettled = planConfigReady() && authStatus !== 'loading';
   const setLimit = plansSettled ? planSetLimit(hasFeature(undefined, 'filter_sets'), featureLimit('filter_sets')) : MAX_SETS;
   const activeSets = useMemo(() => (isArchive ? [] : setsOn(sets, setLimit)), [isArchive, sets, setLimit]);
+  // Free-text EEI (צי"ח): the user's theatres act like more sets (OR). Live map only, Pro / Max.
+  const eeiAllowed = authStatus === 'signed_in' && hasFeature(undefined, 'eei_text');
+  const eei = useEeiList(!isArchive && eeiAllowed, lastUpdated);
+  const eeiOn = useMemo(() => (isArchive || !eeiAllowed ? [] : theatresOn(eei.list, eei.view)), [isArchive, eeiAllowed, eei.list, eei.view]);
+  /** Sets and EEI theatres in force: while any is, the general filter is paused. */
+  const inForce = activeSets.length + eeiOn.length;
   // The panel reopens on the set it was editing; a drawing can be for a set (drawTarget).
   const [panelScopeRaw, setPanelScope] = useState<string | null>(null);
-  const panelScope = panelScopeRaw && sets.some((x) => x.id === panelScopeRaw) ? panelScopeRaw : null;
+  const panelScope = panelScopeRaw === 'eei' || (panelScopeRaw && sets.some((x) => x.id === panelScopeRaw)) ? panelScopeRaw : null;
   const drawTargetRef = useRef<string | null>(null);
-  const switchSetsOff = useCallback(() => setSets((list) => (list.some((s) => s.enabled) ? list.map((s) => ({ ...s, enabled: false })) : list)), [setSets]);
+  const { view: eeiView, setView: setEeiView, list: eeiList } = eei;
+  const switchSetsOff = useCallback(() => {
+    setSets((list) => (list.some((s) => s.enabled) ? list.map((s) => ({ ...s, enabled: false })) : list));
+    // EEI theatres are switched off too — the list itself is never deleted here.
+    if (eeiList?.theatres.length) setEeiView({ ...eeiView, off: eeiList.theatres.map((x) => x.id) });
+  }, [setSets, eeiList, eeiView, setEeiView]);
   const archiveRange = useMemo(
     () => (isArchive ? null : activeSets.length ? setsArchiveRange(activeSets) : needsArchive(filters)),
     [filters, isArchive, activeSets],
@@ -299,22 +312,22 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
       }
       setFilters((f) => ({ ...f, polygon: points }));
       setDrawMode(null);
-      if (activeSets.length) {
+      if (inForce) {
         switchSetsOff();
         toast.success(t('sets.switchedOff'));
       }
     },
-    [activeSets.length, switchSetsOff, toast, t, setSets, setLimit],
+    [inForce, switchSetsOff, toast, t, setSets, setLimit],
   );
   const filterByCategory = useCallback(
     (slug: string) => {
       setFilters((f) => ({ ...f, categories: [slug] }));
-      if (activeSets.length) {
+      if (inForce) {
         switchSetsOff();
         toast.success(t('sets.switchedOff'));
       }
     },
-    [activeSets.length, switchSetsOff, toast, t],
+    [inForce, switchSetsOff, toast, t],
   );
   const clearArea = useCallback(() => setFilters((f) => ({ ...f, polygon: null })), []);
 
@@ -323,26 +336,41 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
       (ask ? ask.events : allEvents)
         .filter((e) => matchesQuery(e, deferredQuery, categoryLabel(e.category.slug, e.category.name)))
         .filter((e) =>
-          activeSets.length
-            ? matchingSets(e, activeSets).length > 0
+          inForce
+            ? matchingSets(e, activeSets).length > 0 || eeiMatches(e, eeiOn, eei.tags, eei.view).length > 0
             : matchesFilters(e, effectiveFilters) && (!eeiMatchers.length || eeiMatchers.some((m) => matchesEei(e, m))),
         )
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()),
-    [ask, allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers, activeSets],
+    [ask, allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers, activeSets, eeiOn, eei.tags, eei.view],
   );
   // Which set each shown event fits (the first one): a coloured ring on the map, a tag in the feed.
+  // Which set / theatre each shown event fits: a coloured ring on the map, a tag in the feed.
+  // A manual set wins the colour; an event in both shows both names.
   const { tints, setTags } = useMemo(() => {
-    if (!activeSets.length) return { tints: undefined, setTags: undefined };
+    if (!inForce) return { tints: undefined, setTags: undefined };
     const tints = new Map<string, string>();
-    const setTags = new Map<string, { name: string; color: string }>();
+    const setTags = new Map<string, { name: string; color: string; topic?: string; star?: boolean; more?: number }>();
+    const order = eei.list?.theatres ?? [];
     for (const e of visibleEvents) {
       const s: FilterSet | undefined = matchingSets(e, activeSets)[0];
-      if (!s) continue;
-      tints.set(e.id, s.color);
-      setTags.set(e.id, { name: s.name || `#${sets.indexOf(s) + 1}`, color: s.color });
+      const m = eeiOn.length ? eeiMatches(e, eeiOn, eei.tags, eei.view)[0] : undefined;
+      if (!s && !m) continue;
+      const setName = s ? s.name || `#${sets.indexOf(s) + 1}` : '';
+      const thName = m ? (m.theatre.kind === 'exceptional' ? t('eeiList.exceptional') : m.theatre.name) : '';
+      const color = s ? s.color : theatreColor(order.indexOf(m!.theatre));
+      tints.set(e.id, color);
+      const first = m && m.theatre.kind === 'theatre' ? m.topics[0] : undefined;
+      setTags.set(e.id, {
+        name: [setName, thName].filter(Boolean).join(' · '),
+        color,
+        topic: first?.label,
+        star: first?.priority,
+        more: m && m.topics.length > 1 ? m.topics.length - 1 : undefined,
+      });
     }
     return { tints, setTags };
-  }, [visibleEvents, activeSets, sets]);
+  }, [inForce, visibleEvents, activeSets, sets, eeiOn, eei.tags, eei.view, eei.list, t]);
+  const eeiWaiting = useMemo(() => (eeiOn.length ? waitingCount(allEvents, eeiOn, eei.tags) : 0), [allEvents, eeiOn, eei.tags]);
   const setAreas = useMemo(
     () => activeSets.flatMap((s) => s.filter.polygons.map((points) => ({ points, color: s.color }))),
     [activeSets],
@@ -350,10 +378,11 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   {
     const f = effectiveFilters;
     soundFilterRef.current = {
-      active: !!ask || !!deferredQuery || filterCount > 0 || activeSets.length > 0,
+      active: !!ask || !!deferredQuery || filterCount > 0 || inForce > 0,
       ids: new Set(visibleEvents.map((e) => e.id)),
       alert: (a) => {
-        if (activeSets.length) {
+        // EEI theatres never accept a Home Front alert; only manual sets do.
+        if (inForce) {
           const pts: LatLng[] = [...(a.center ? [a.center] : []), ...a.areaPoints.map((p) => [p.lat, p.lng] as LatLng)];
           return activeSets.some((s) => setAcceptsAlert(s, pts, HFC_CATEGORY.slug));
         }
@@ -369,8 +398,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   }
   // A different list (filters, search, "ask the map", archive day) starts the feed again at its first batch.
   const feedResetKey = useMemo(
-    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? [askSelected, ask.events.length] : null, activeSets]),
-    [isArchive, day, effectiveFilters, deferredQuery, ask, askSelected, activeSets],
+    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? [askSelected, ask.events.length] : null, activeSets, eeiOn.map((x) => x.id), eei.view]),
+    [isArchive, day, effectiveFilters, deferredQuery, ask, askSelected, activeSets, eeiOn, eei.view],
   );
   // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
   const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
@@ -559,7 +588,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         query={query}
         onQueryChange={setQuery}
         mode={mode}
-        filterCount={activeSets.length || filterCount}
+        filterCount={inForce || filterCount}
         filtersOpen={filtersOpen}
         onToggleFilters={() => setFiltersOpen((v) => !v)}
         onSoundOpen={() => setFiltersOpen(false)}
@@ -589,8 +618,24 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                 scope: panelScope,
                 onScopeChange: setPanelScope,
                 onDrawForSet: drawForSet,
-                setsInForce: activeSets.length > 0,
+                setsInForce: inForce > 0,
                 onSwitchSetsOff: switchSetsOff,
+                eei: {
+                  locked: !eeiAllowed,
+                  count: eeiOn.length,
+                  list: eei.list,
+                  rawText: eei.rawText,
+                  prev: eei.prev,
+                  tags: eei.tags,
+                  degraded: eei.degraded,
+                  waiting: eeiWaiting,
+                  view: eei.view,
+                  onView: eei.setView,
+                  onSave: eei.save,
+                  onClear: eei.clear,
+                  onRestore: eei.restore,
+                  events: allEvents,
+                },
               })}
         />
       ) : null}
@@ -626,7 +671,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             live={!isArchive}
             resetKey={feedResetKey}
             toolbar={
-              isArchive || filterCount || ask || activeSets.length ? (
+              isArchive || filterCount || ask || inForce ? (
                 <div className="space-y-2">
                   {ask ? (
                     <div className="flex items-center gap-2">
@@ -644,7 +689,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                     </div>
                   ) : null}
                   {isArchive ? <ArchiveDayPicker day={day} onChange={setDay} /> : null}
-                  {activeSets.length ? (
+                  {inForce ? (
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -652,7 +697,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                         className="inline-flex h-8 items-center gap-1.5 rounded-full bg-sky-600 px-3 text-xs font-semibold text-white hover:bg-sky-500"
                       >
                         <SlidersHorizontal className="size-3.5" aria-hidden />
-                        {t('sets.active', { count: activeSets.length })}
+                        {activeSets.length || !eeiOn.length ? t('sets.active', { count: inForce }) : t('eeiList.active', { count: eeiOn.length })}
                       </button>
                       <span className="text-xs text-slate-500 dark:text-slate-400">
                         {t('feed.count', { count: visibleEvents.length })}
@@ -694,7 +739,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                 </div>
               ) : undefined
             }
-            emptyText={filterCount || activeSets.length ? t('filters.none') : isArchive ? t('archive.empty') : undefined}
+            emptyText={filterCount || inForce ? t('filters.none') : isArchive ? t('archive.empty') : undefined}
             footer={
               <>
                 <SiteLinks className="justify-center border-t border-slate-200 px-3 py-2 dark:border-slate-800" />
@@ -723,7 +768,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               compact={isPhone}
               legend={<CategoryLegend events={mapEvents} alertCount={alerts.length} />}
               onBackgroundClick={isPhone ? clearSelection : undefined}
-              area={activeSets.length ? null : filters.polygon}
+              area={inForce ? null : filters.polygon}
               setAreas={setAreas}
               tints={tints}
               drawMode={drawMode}

@@ -4,6 +4,8 @@ import { compileEei, matchesEei, type Eei } from '@/lib/eei';
 import { fromEventFilters, isLocked, matchesSetFilter, toEventFilters, type FilterSet } from '@/lib/filterSets';
 import { FilterSetsBar } from './FilterSetsBar';
 import { FilterSetHeader } from './FilterSetHeader';
+import { EeiPanel } from './EeiPanel';
+import type { ComponentProps } from 'react';
 import { hasFeature, myPlan } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { useI18n } from '@/i18n';
@@ -57,6 +59,8 @@ interface FilterPanelProps {
   /** At least one set is in force (the general filter is paused). */
   setsInForce?: boolean;
   onSwitchSetsOff?: () => void;
+  /** Free-text EEI (צי"ח): the panel's "EEI" scope (absent = no chip). */
+  eei?: ComponentProps<typeof EeiPanel> & { locked: boolean; count: number };
 }
 
 const SHOW_EEI = false;
@@ -233,10 +237,12 @@ export function FilterPanel({
   onDrawForSet,
   setsInForce = false,
   onSwitchSetsOff,
+  eei,
 }: FilterPanelProps) {
   const { t, lang, categoryLabel } = useI18n();
   // The sections below edit either the general filter or the chosen set (as an EventFilters view).
   const scopeSet = (scope && sets?.find((x) => x.id === scope)) || null;
+  const eeiScope = scope === 'eei' && !!eei && !eei.locked;
   const scopeLocked = !!scopeSet && isLocked(sets!, scopeSet.id, setLimit);
   const view: EventFilters = useMemo(() => (scopeSet ? toEventFilters(scopeSet.filter) : filters), [scopeSet, filters]);
   const replaceSet = (next: FilterSet) => onSetsChange?.(sets!.map((x) => (x.id === next.id ? next : x)));
@@ -347,11 +353,21 @@ export function FilterPanel({
         </header>
 
         {sets && onSetsChange && onScopeChange ? (
-          <FilterSetsBar sets={sets} setLimit={setLimit} events={events} scope={scopeSet ? scopeSet.id : null} onScopeChange={onScopeChange} onSetsChange={onSetsChange} />
+          <FilterSetsBar
+            sets={sets}
+            setLimit={setLimit}
+            events={events}
+            scope={scopeSet ? scopeSet.id : eeiScope ? 'eei' : null}
+            onScopeChange={onScopeChange}
+            onSetsChange={onSetsChange}
+            eei={eei ? { locked: eei.locked, count: eei.count } : undefined}
+          />
         ) : null}
 
         <div className="ofm-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {scopeSet ? (
+          {eeiScope && eei ? (
+            <EeiPanel {...eei} />
+          ) : scopeSet ? (
             <FilterSetHeader
               set={scopeSet}
               position={sets!.indexOf(scopeSet) + 1}
@@ -371,7 +387,7 @@ export function FilterPanel({
               </button>
             </div>
           ) : null}
-          {scopeLocked ? null : (
+          {scopeLocked || eeiScope ? null : (
             <>
           {/* צי"ח (EEI) is switched off for now; the section is kept for later. */}
           {SHOW_EEI && onAddEei && onRemoveEei ? (

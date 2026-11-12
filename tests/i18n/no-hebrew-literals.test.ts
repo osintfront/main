@@ -17,6 +17,7 @@ const FILES = [
   'src/components/map/AskMap.tsx',
   'src/components/filters/FilterSetsBar.tsx',
   'src/components/filters/FilterSetHeader.tsx',
+  'src/components/filters/EeiPanel.tsx',
 ];
 
 const HEBREW = /[֐-׿]/;

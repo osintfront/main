@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Lock, Plus } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { openGate } from '@/components/plans/GateDialog';
-import { myPlan } from '@/lib/plans';
+import { myPlan, planConfigReady } from '@/lib/plans';
 import { MAX_SETS, isLocked, matchesSetFilter, newSet, type FilterSet } from '@/lib/filterSets';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -15,6 +15,8 @@ interface FilterSetsBarProps {
   scope: string | null;
   onScopeChange: (scope: string | null) => void;
   onSetsChange: (next: FilterSet[]) => void;
+  /** The EEI (צי"ח) chip: locked = not in the plan (opens the gate); count = theatres on. */
+  eei?: { locked: boolean; count: number };
 }
 
 const chip =
@@ -23,7 +25,7 @@ const chipOn = 'border-slate-900 bg-slate-900 text-white dark:border-white dark:
 const chipOff = 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800';
 
 /** The scope row of the filter panel: General · one chip per filter set · Add set. */
-export function FilterSetsBar({ sets, setLimit, events, scope, onScopeChange, onSetsChange }: FilterSetsBarProps) {
+export function FilterSetsBar({ sets, setLimit, events, scope, onScopeChange, onSetsChange, eei }: FilterSetsBarProps) {
   const { t } = useI18n();
   const counts = useMemo(() => {
     const now = Date.now();
@@ -47,6 +49,20 @@ export function FilterSetsBar({ sets, setLimit, events, scope, onScopeChange, on
       <button type="button" data-set-scope="general" aria-pressed={scope === null} onClick={() => onScopeChange(null)} className={cn(chip, scope === null ? chipOn : chipOff)}>
         {t('sets.general')}
       </button>
+      {eei ? (
+        <button
+          type="button"
+          data-set-scope="eei"
+          data-set-locked={eei.locked && planConfigReady() ? '' : undefined}
+          aria-pressed={scope === 'eei'}
+          onClick={() => (eei.locked ? openGate(myPlan() === 'guest' ? 'signup' : 'upgrade', 'eei_text') : onScopeChange('eei'))}
+          className={cn(chip, scope === 'eei' ? chipOn : chipOff, !eei.count && scope !== 'eei' && 'opacity-70')}
+        >
+          {eei.locked && planConfigReady() ? <Lock className="size-3.5" aria-hidden /> : null}
+          {t('eeiList.chip')}
+          {eei.count ? <span className="font-mono text-[11px] tabular-nums opacity-70">{eei.count}</span> : null}
+        </button>
+      ) : null}
       {sets.map((s) => {
         const locked = isLocked(sets, s.id, setLimit);
         return (

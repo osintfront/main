@@ -1,5 +1,5 @@
 import { memo, type CSSProperties, type MouseEvent } from 'react';
-import { Crosshair, ExternalLink, FileText, MapPin, MapPinOff } from 'lucide-react';
+import { Crosshair, ExternalLink, FileText, MapPin, MapPinOff, Star } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -20,7 +20,7 @@ interface EventCardProps {
   /** Opens the full event window (shown when the text is clamped). */
   onOpenDetails?: (id: string) => void;
   /** The filter set this event fits (first one), shown as a small coloured tag. */
-  setTag?: { name: string; color: string };
+  setTag?: { name: string; color: string; topic?: string; star?: boolean; more?: number };
 }
 
 function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDetails, setTag }: EventCardProps) {
@@ -74,11 +74,18 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
         <CategoryBadge category={event.category} />
         <SeverityBadge severity={event.severity} />
         {setTag ? (
-          <span data-set-tag className="inline-flex max-w-[10rem] items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <span data-set-tag className="inline-flex max-w-[16rem] items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
             <span className="size-2 shrink-0 rounded-full" style={{ background: setTag.color }} aria-hidden />
-            <span className="truncate" dir="auto">
+            <span className={setTag.topic ? 'max-w-[7rem] shrink-0 truncate' : 'truncate'} dir="auto">
               {setTag.name}
             </span>
+            {setTag.topic ? (
+              <span data-eei-topic className="inline-flex min-w-0 items-center gap-0.5 font-medium text-slate-600 dark:text-slate-300">
+                ·{setTag.star ? <Star className="size-3 shrink-0 fill-amber-400 text-amber-500" aria-hidden /> : null}
+                <span className="truncate" dir="auto">{setTag.topic}</span>
+              </span>
+            ) : null}
+            {setTag.more ? <span className="shrink-0 font-mono text-[10px] opacity-70">+{setTag.more}</span> : null}
           </span>
         ) : null}
       </div>
