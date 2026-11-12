@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { ArrowLeft, Check, Mail, Minus, Tag } from 'lucide-react';
 import { Logo } from '@/components/common/Logo';
 import { LanguageToggle, ThemeToggle } from '@/components/common/Toggles';
@@ -15,12 +15,32 @@ import { cn } from '@/utils/cn';
 
 type Sold = 'free' | 'pro' | 'max';
 
+// Grow payment links — used ONLY on the internal test copy (/packages-test), never on /packages.
+const GROW_LINKS = {
+  pro: {
+    monthly: 'https://pay.grow.link/MTA4NDUw~060928448cc1165604aa7e3345cf8aa0-NDI4ODc1Mg',
+    yearly: 'https://pay.grow.link/MTA4NDUw~35e9e892feb16673c38d3faeaa9d10ad-NDI4ODk3OA',
+  },
+  max: {
+    monthly: 'https://pay.grow.link/MTA4NDUw~c506544653cb6ddde2b0398f337adad3-NDI4ODk2Mg',
+    yearly: 'https://pay.grow.link/MTA4NDUw~dff69eef45e4fc085992bf924611f30f-NDI4ODk4MA',
+  },
+} as const;
+
+/** /packages-test — the same pricing page with Grow payment links. Super admin only; others go to /packages. */
+export function PackagesTestPage() {
+  const { status, profile } = useAuth();
+  if (status === 'loading') return null;
+  if (profile?.role !== 'super_admin') return <Navigate to="/packages" replace />;
+  return <PackagesPage grow />;
+}
+
 /**
  * Plans & pricing. Reached from the user menu, the plan line in it, and the "uses ran out" window.
  * Prices are introductory; buying is manual for now (contact us), so every paid button goes to /contact.
  * Daily limits are read from plan_features, so the page follows the admin's settings.
  */
-export function PackagesPage() {
+export function PackagesPage({ grow = false }: { grow?: boolean }) {
   const { t, locale } = useI18n();
   const { status, profile } = useAuth();
   usePlanVersion();
@@ -174,6 +194,11 @@ export function PackagesPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:py-12">
+        {grow ? (
+          <p className="mb-6 rounded-xl bg-red-600 px-4 py-2.5 text-center text-sm font-bold text-white">
+            דף בדיקות פנימי (קישורי Grow) — לא להפצה. הדף הציבורי: /packages
+          </p>
+        ) : null}
         <Link to="/" className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-sky-700 hover:underline dark:text-sky-400">
           <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
           {t('site.backToMap')}
@@ -211,7 +236,9 @@ export function PackagesPage() {
             current={mine === 'pro'}
             lead={t('pk.plusFree')}
             items={proItems}
-            cta={mine === 'pro' ? null : <Link to="/contact" className={ctaPrimary}>{t('pk.buy')}</Link>}
+            cta={grow
+              ? <a href={GROW_LINKS.pro[yearly ? 'yearly' : 'monthly']} className={ctaPrimary}>{t('pk.buy')}</a>
+              : mine === 'pro' ? null : <Link to="/contact" className={ctaPrimary}>{t('pk.buy')}</Link>}
           />
           <PlanCard
             name="Max"
@@ -223,7 +250,9 @@ export function PackagesPage() {
             current={mine === 'max'}
             lead={t('pk.plusPro')}
             items={maxItems}
-            cta={mine === 'max' ? null : <Link to="/contact" className={ctaSecondary}>{t('pk.buy')}</Link>}
+            cta={grow
+              ? <a href={GROW_LINKS.max[yearly ? 'yearly' : 'monthly']} className={ctaSecondary}>{t('pk.buy')}</a>
+              : mine === 'max' ? null : <Link to="/contact" className={ctaSecondary}>{t('pk.buy')}</Link>}
           />
         </section>
         <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">{t('pk.introNote')}</p>

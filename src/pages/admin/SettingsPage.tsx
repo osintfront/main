@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Bot, Database, KeyRound, Map as MapIcon, Send, ShieldCheck, Siren } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Bot, Database, KeyRound, Map as MapIcon, Send, ShieldCheck, Siren, Tag } from 'lucide-react';
 import { ToggleField } from '@/components/common/Form';
 import { useToast } from '@/components/common/Toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/hooks/useAuth';
 import { friendlyError } from '@/services/serviceError';
 import {
   getAiLimits,
@@ -246,6 +248,7 @@ function AiLimitsRow() {
 
 export function SettingsPage() {
   const { t } = useI18n();
+  const { profile } = useAuth();
   const roles = authConfig.requireMfaForRoles.map((r) => t(`role.${r}`)).join(', ') || t('settings.none');
   return (
     <div className="mx-auto max-w-3xl">
@@ -266,6 +269,12 @@ export function SettingsPage() {
         <Row icon={<ShieldCheck className="size-[18px]" aria-hidden />} title={t('settings.security')}>
           {t('settings.securityBody')}
         </Row>
+        {profile?.role === 'super_admin' ? (
+          <Row icon={<Tag className="size-[18px]" aria-hidden />} title="דף חבילות לבדיקות (Grow)">
+            עותק פנימי של דף החבילות עם קישורי התשלום של Grow, למנהל העל בלבד.{' '}
+            <Link to="/packages-test" className="font-semibold text-sky-700 hover:underline dark:text-sky-400">/packages-test</Link>
+          </Row>
+        ) : null}
       </div>
     </div>
   );

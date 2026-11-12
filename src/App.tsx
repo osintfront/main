@@ -34,7 +34,7 @@ import { UsersPage } from '@/pages/admin/UsersPage';
 import { ModulePlaceholderPage } from '@/pages/admin/ModulePlaceholderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { SitePage } from '@/pages/public/SitePage';
-import { PackagesPage } from '@/pages/public/PackagesPage';
+import { PackagesPage, PackagesTestPage } from '@/pages/public/PackagesPage';
 import { InsightsPage } from '@/pages/public/InsightsPage';
 import { InsightDetailPage } from '@/pages/public/InsightDetailPage';
 
@@ -84,6 +84,7 @@ export function App() {
               <Route path="/privacy" element={<SitePage page="privacy" />} />
               <Route path="/contact" element={<SitePage page="contact" />} />
               <Route path="/packages" element={<PackagesPage />} />
+              <Route path="/packages-test" element={<PackagesTestPage />} />
               <Route path="/insights" element={<InsightsPage />} />
               <Route path="/insights/:slug" element={<InsightDetailPage />} />
               <Route path="/pricing" element={<Navigate to="/packages" replace />} />
