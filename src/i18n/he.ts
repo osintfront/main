@@ -1309,6 +1309,7 @@ export const he: Record<TranslationKey, string> = {
   "pk.c.share": "שיתוף",
   "pk.c.copy": "העתקת טקסט",
   "pk.c.search": "חיפוש מילים בפיד",
+  "pk.c.sets": "סטים של סינון",
   "pk.c.categories": "סינון בלבד",
   "pk.c.archive": "ארכיון",
   "pk.c.days": "{n} ימים",

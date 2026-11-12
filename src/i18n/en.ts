@@ -1307,6 +1307,7 @@ export const en = {
   "pk.c.share": "Sharing",
   "pk.c.copy": "Copy text",
   "pk.c.search": "Keyword search",
+  "pk.c.sets": "Filter sets",
   "pk.c.categories": "Filters only",
   "pk.c.archive": "Archive",
   "pk.c.days": "{n} days",
