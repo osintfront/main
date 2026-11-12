@@ -1,0 +1,74 @@
+{
+  "theatres": [
+    {
+      "name": "איראן",
+      "kind": "theatre",
+      "areas": ["iran"],
+      "topics": [
+        { "label": "תקיפות אפשריות", "priority": true, "categories": ["airstrike", "missile-rocket-attack", "military-activity"], "query": "תקיפה, תקיפות, strike, attack" },
+        { "label": "מו\"מ עם ארה\"ב, גם בהקשרי המתווכת קטר", "priority": true, "categories": ["political-event", "statements"], "query": "מו\"מ, משא ומתן, שיחות, negotiation, talks, קטר, qatar" },
+        { "label": "כוונות להפעלת כוח במצר הורמוז", "priority": false, "categories": ["military-activity", "statements"], "query": "הורמוז, hormuz" },
+        { "label": "שיח על הממשלה בישראל", "priority": false, "categories": ["statements", "political-event"], "query": "ממשלה ישראל, israeli government, נתניהו, netanyahu" }
+      ]
+    },
+    {
+      "name": "לבנון",
+      "kind": "theatre",
+      "areas": ["lebanon"],
+      "topics": [
+        { "label": "BDA פעילות כוחותינו", "priority": true, "categories": ["airstrike", "artillery-shelling", "explosion", "assassination"], "query": "צה\"ל, idf, נפגע, destroyed, הושמד" },
+        { "label": "העלאת מוכנות והצהרות בכירים", "priority": true, "categories": ["statements", "military-activity"], "query": "כוננות, מוכנות, readiness, alert, הצהרה, statement" },
+        { "label": "שיח איראני בלבנון וההיפך", "priority": false, "categories": ["statements", "political-event"], "query": "איראן, iran, איראני, iranian" }
+      ]
+    },
+    {
+      "name": "עזה",
+      "kind": "theatre",
+      "areas": ["gaza"],
+      "topics": [
+        { "label": "הסכמים מדיניים בינלאומיים", "priority": false, "categories": ["political-event"], "query": "הסכם, agreement, deal, הפסקת אש, ceasefire" },
+        { "label": "התבטאויות מדינות זרות אודות הנעשה בעזה", "priority": false, "categories": ["statements"], "query": "גינוי, condemn, הצהרה, statement" },
+        { "label": "כוונות להפעלת כוח", "priority": true, "categories": ["military-activity", "statements", "force-sighting"], "query": "כוונה, תוכנית, intends, plan, threat, איום" },
+        { "label": "פגישות חמא\"ס עם גורמים עוינים ובינלאומיים", "priority": false, "categories": ["political-event"], "query": "חמאס, hamas, פגישה, meeting, נפגש, met" }
+      ]
+    },
+    {
+      "name": "סוריה",
+      "kind": "theatre",
+      "areas": ["syria"],
+      "topics": [
+        { "label": "סוידאא' - עימותים בין המשטר לבין הדרוזים", "priority": true, "categories": ["shooting-gunfire", "terror-security-incident", "protest-civil-unrest"], "query": "סווידא, סוידאא, suwayda, sweida, דרוזים, druze" },
+        { "label": "התערבות סורית בלבנון", "priority": false, "categories": ["military-activity", "statements"], "query": "לבנון, lebanon" },
+        { "label": "התערבות מדינות זרות (תורכיה) בסוריה", "priority": true, "categories": ["military-activity", "airstrike", "statements"], "query": "טורקיה, תורכיה, turkey, turkish, טורקי" },
+        { "label": "הפגנות ברחבי סוריה", "priority": false, "categories": ["protest-civil-unrest"], "query": "הפגנה, הפגנות, protest, demonstration" },
+        { "label": "יחסי סוריה מדינות זרות", "priority": false, "categories": ["political-event", "statements"], "query": "יחסים, relations, שגריר, ambassador, ביקור, visit" },
+        { "label": "תקיפות ירדן בסוריה- התבטאויות והתייחסות המשטר הסורי", "priority": true, "categories": ["airstrike", "statements"], "query": "ירדן, jordan, ירדני, jordanian" }
+      ]
+    },
+    {
+      "name": "תימן/סעודיה",
+      "kind": "theatre",
+      "areas": ["yemen", "saudi"],
+      "topics": [
+        { "label": "מאבקים פנים תימניים ומאבקים בין סעודיה ותימן, מעורבות תורכיה ופקיסטן", "priority": true, "categories": ["shooting-gunfire", "airstrike", "military-activity"], "query": "עימות, קרבות, clashes, fighting, טורקיה, turkey, פקיסטן, pakistan" },
+        { "label": "מצר באב אלמנדב", "priority": false, "categories": ["military-activity", "missile-rocket-attack"], "query": "באב אלמנדב, bab el-mandeb, bab al-mandab, ספינה, ship" },
+        { "label": "התבטאויות בכירים חות'ים וסעודים", "priority": false, "categories": ["statements"], "query": "חות'ים, houthi, הצהרה, statement" },
+        { "label": "יחסי ח'ותים - איראן", "priority": true, "categories": ["political-event", "statements"], "query": "איראן, iran" },
+        { "label": "יחסי סעודיה ומדינות המערב", "priority": false, "categories": ["political-event"], "query": "ארה\"ב, usa, united states, בריטניה, uk, צרפת, france" },
+        { "label": "כוונת סוריה להתערב בלחימה", "priority": false, "categories": ["statements", "military-activity"], "query": "סוריה, syria" },
+        { "label": "הצפת תיעודים ונתונים על הפעלת כוח של הסעודים", "priority": true, "categories": ["airstrike", "military-activity"], "query": "סעודי, saudi, תקיפה, strike" }
+      ]
+    },
+    {
+      "name": "יו\"ש",
+      "kind": "theatre",
+      "areas": ["westbank"],
+      "topics": [
+        { "label": "התבטאויות על חיכוכים ופשיעה לאומנית בין מתיישבים לפלסטינים", "priority": false, "categories": ["statements", "terror-security-incident"], "query": "מתנחלים, מתיישבים, settlers, settler" },
+        { "label": "כוונות להפעלת כוח", "priority": false, "categories": ["military-activity", "statements"], "query": "מבצע, operation, כוונה, intends" },
+        { "label": "תקופת מסיק", "priority": true, "categories": [], "query": "מסיק, זיתים, olive, harvest" }
+      ]
+    },
+    { "name": "חריגים ככלל", "kind": "exceptional", "areas": [], "topics": [] }
+  ]
+}
