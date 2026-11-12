@@ -110,7 +110,7 @@ export const he: Record<TranslationKey, string> = {
   'filters.active': 'מסננים · {count}',
   'filters.loadingArchive': 'טוען אירועים ישנים…',
   'filters.none': 'אין אירועים שתואמים את הסינון.',
-  'sets.active': '{count} סטים פעילים',
+  'sets.active': 'סטים פעילים · {count}',
   'sets.switchOff': 'כיבוי הסטים',
   'sets.switchedOff': 'הסטים כובו',
   'sets.general': 'כללי',

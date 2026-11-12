@@ -7,9 +7,9 @@ import { PAGE_RELOADED, useMapSelection } from '@/hooks/useMapSelection';
 import { HOME_EVENT } from '@/components/common/Logo';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { openEventAllowed } from '@/lib/featureUse';
-import { featureLimit, hasFeature, usePlanVersion } from '@/lib/plans';
+import { featureLimit, hasFeature, planConfigReady, usePlanVersion } from '@/lib/plans';
 import { useFilterSets } from '@/hooks/useFilterSets';
-import { addPolygon, matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, type FilterSet } from '@/lib/filterSets';
+import { MAX_SETS, addPolygon, matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, type FilterSet } from '@/lib/filterSets';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -201,7 +201,11 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   usePlanVersion(); // re-render when the plan rows load
   const toast = useToast();
   const { sets, setSets } = useFilterSets();
-  const setLimit = planSetLimit(hasFeature(undefined, 'filter_sets'), featureLimit('filter_sets'));
+  // Until the plan rows and the sign-in are known, keep the saved sets as they are (no flicker to the
+  // general filter and back, no sign-up window for a set that will turn out to be locked).
+  const { profile, status: authStatus } = useAuth();
+  const plansSettled = planConfigReady() && authStatus !== 'loading';
+  const setLimit = plansSettled ? planSetLimit(hasFeature(undefined, 'filter_sets'), featureLimit('filter_sets')) : MAX_SETS;
   const activeSets = useMemo(() => (isArchive ? [] : setsOn(sets, setLimit)), [isArchive, sets, setLimit]);
   // The panel reopens on the set it was editing; a drawing can be for a set (drawTarget).
   const [panelScopeRaw, setPanelScope] = useState<string | null>(null);
@@ -214,12 +218,11 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   );
   const older = useArchiveRange(archiveRange);
   // "Ask the map" (signed-in users): a free-text question → answer + only the matching events.
-  const { profile, status: authStatus } = useAuth();
   const isGuest = authStatus === 'signed_out';
   // A time range reaching past the live 24 hours needs an account (guests have no archive).
   useEffect(() => {
-    if (archiveRange && isGuest) openGate('signup');
-  }, [archiveRange, isGuest]);
+    if (archiveRange && isGuest && plansSettled) openGate('signup');
+  }, [archiveRange, isGuest, plansSettled]);
   const canAsk = !isArchive && !isDemo && profile?.status === 'active';
   // It is a short conversation: a list of turns; the map and feed show the selected turn's events.
   const [askTurns, setAskTurns] = useState<AskAnswer[]>([]);
@@ -568,7 +571,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           onClose={() => setFiltersOpen(false)}
           events={allEvents}
           resultCount={visibleEvents.length}
-          onDrawArea={startDrawing}
+          onDrawArea={() => {
+            drawTargetRef.current = null; // a general drawing, even if a set's drawing was left open
+            startDrawing();
+          }}
           hideTime={isArchive}
           loadingArchive={older.loading}
           eeis={eeis}

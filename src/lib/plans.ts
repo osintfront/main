@@ -23,6 +23,11 @@ let features: FeatureRow[] = [];
 let me: Pick<Profile, 'plan' | 'planExpiresAt' | 'role'> | null = null;
 const listeners = new Set<() => void>();
 let loaded = false;
+let ready = false;
+/** The plan rows and the enforce flag have been read (until then hasFeature lets everything through). */
+export function planConfigReady(): boolean {
+  return ready;
+}
 
 export async function loadPlanConfig() {
   if (!supabase || loaded) return;
@@ -33,6 +38,7 @@ export async function loadPlanConfig() {
   ]);
   enforce = s?.value === true;
   features = (f ?? []) as FeatureRow[];
+  ready = true;
   listeners.forEach((l) => l());
 }
 

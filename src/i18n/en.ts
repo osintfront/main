@@ -108,7 +108,7 @@ export const en = {
   'filters.active': 'Filters · {count}',
   'filters.loadingArchive': 'Loading older events…',
   'filters.none': 'No events match these filters.',
-  'sets.active': '{count} filter sets',
+  'sets.active': 'Filter sets · {count}',
   'sets.switchOff': 'Switch sets off',
   'sets.switchedOff': 'Filter sets switched off',
   'sets.general': 'General',

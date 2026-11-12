@@ -244,12 +244,16 @@ export function FilterPanel({
   const set = (patch: Partial<EventFilters>) => apply({ ...view, ...patch });
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Focus the panel once when it opens. onClose goes through a ref: the page passes a new function
+  // on every render (every second while an alert is on), and re-focusing would steal typing.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current();
     document.addEventListener('keydown', onKey);
     panelRef.current?.focus();
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
 
   // Counts per option: the events that would show if that option were picked, given every other
   // active filter (time window included) — so they add up to what the feed shows.

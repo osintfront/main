@@ -74,6 +74,9 @@ const server = http.createServer((req, res) => {
 });
 
 const archiveCalls = [];
+// An active Home Front alert makes the page re-render every second (the alert clock).
+let withAlert = false;
+const ALERT = { id: 'hfc-1', threat: 1, started_at: new Date().toISOString(), last_alert_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3600e3).toISOString(), areas: ['חיפה'], areas_en: ['Haifa'], zones_he: [], zones_en: [], alert_count: 1, geojson: null, center_lat: 32.79, center_lng: 34.99, area_points: [] };
 const errors = [];
 
 async function routeAll(page) {
@@ -110,6 +113,7 @@ async function routeAll(page) {
       const to = occ.find((x) => x.startsWith('lt.'))?.slice(3);
       return json(OLD.filter((e) => (!from || e.occurred_at >= from) && (!to || e.occurred_at < to)));
     }
+    if (u.pathname === '/rest/v1/active_hfc_alerts') return json(withAlert ? [ALERT] : []);
     if (u.pathname.startsWith('/rest/v1/rpc/')) return json(null);
     if (u.pathname.startsWith('/rest/v1/')) return single ? none() : json([]);
     return json({});
@@ -122,8 +126,8 @@ async function routeAll(page) {
   const phone = DEVICE === 'phone';
   const out = { lang: LANG, device: DEVICE, plan: PLAN };
   const T = LANG === 'he'
-    ? { setsOn: (n) => `${n} סטים פעילים`, off: 'כיבוי הסטים', filters: /^(סינון|מסננים ·)/, set1: 'סט 1', lebanon: /^לבנון/, iran: /^איראן/, air: /^תקיפה אווירית/, missile: /^ירי רקטות וטילים/, week: /^שבוע$/, octagon: /^מתומן$/, cancel: /^ביטול$/, area1: 'אזור 1', clearAll: /^נקה הכול|^ניקוי הכול|^נקה הכל/ }
-    : { setsOn: (n) => `${n} filter sets`, off: 'Switch sets off', filters: /^Filters( ·|$)/, set1: 'Set 1', lebanon: /^Lebanon/, iran: /^Iran/, air: /^Airstrike/, missile: /^Missile or Rocket Attack/, week: /^7 days$/, octagon: /^Octagon$/, cancel: /^Cancel$/, area1: 'Area 1', clearAll: /^Clear all$/ };
+    ? { drawGeneral: /^סימון אזור במפה/, setsOn: (n) => `סטים פעילים · ${n}`, off: 'כיבוי הסטים', filters: /^(סינון|מסננים ·)/, set1: 'סט 1', lebanon: /^לבנון/, iran: /^איראן/, air: /^תקיפה אווירית/, missile: /^ירי רקטות וטילים/, week: /^שבוע$/, octagon: /^מתומן$/, cancel: /^ביטול$/, area1: 'אזור 1', clearAll: /^נקה הכול|^ניקוי הכול|^נקה הכל/ }
+    : { drawGeneral: /^Draw an area on the map/, setsOn: (n) => `Filter sets · ${n}`, off: 'Switch sets off', filters: /^Filters( ·|$)/, set1: 'Set 1', lebanon: /^Lebanon/, iran: /^Iran/, air: /^Airstrike/, missile: /^Missile or Rocket Attack/, week: /^7 days$/, octagon: /^Octagon$/, cancel: /^Cancel$/, area1: 'Area 1', clearAll: /^Clear all$/ };
 
   // One fresh page per scenario: `seed` is written to storage before the app starts.
   async function open(seed, at = '/') {
@@ -320,6 +324,43 @@ async function routeAll(page) {
       out.p9_disabled = await dlg.locator('[data-set-action="add"]').isDisabled();
       if (LANG === 'en') out.p12_noHebrew = !/[\u0590-\u05FF]/.test(await dlg.innerText());
       await ctx.close();
+
+      // R1 (review): a set's name can be typed while an alert clock re-renders the page every second.
+      withAlert = true;
+      ({ ctx, page } = await open([mk('a', 'Old name', '#7c3aed', { areas: ['lebanon'] })]));
+      await page.getByRole('button', { name: T.filters }).first().click();
+      const dlgR = page.locator('[role="dialog"][aria-labelledby="filters-title"]');
+      await dlgR.waitFor({ timeout: 5000 });
+      await dlgR.locator('[data-set-scope="a"]').click();
+      const nameBox = dlgR.locator('[data-set-header] input');
+      await nameBox.fill('');
+      await nameBox.pressSequentially('Northern front', { delay: 250 });
+      out.r1_typed = (await nameBox.inputValue()) === 'Northern front';
+      out.r1_focused = await nameBox.evaluate((el) => document.activeElement === el);
+      withAlert = false;
+      await ctx.close();
+
+      // R3 (review): Set → Draw area → back in the panel mid-draw → General → draw: the shape is the general one.
+      ({ ctx, page } = await open([mk('a', 'A', '#7c3aed', { areas: ['lebanon'] })]));
+      const dlg3 = page.locator('[role="dialog"][aria-labelledby="filters-title"]');
+      await page.getByRole('button', { name: T.filters }).first().click();
+      await dlg3.waitFor({ timeout: 5000 });
+      await dlg3.locator('[data-set-scope="a"]').click();
+      await dlg3.locator('[data-set-action="draw"]').click();
+      await page.getByRole('button', { name: T.filters }).first().click();
+      await dlg3.waitFor({ timeout: 5000 });
+      await dlg3.locator('[data-set-scope="general"]').click();
+      await dlg3.getByRole('button', { name: T.drawGeneral }).click();
+      await page.getByRole('button', { name: T.octagon }).click();
+      const map3 = page.locator('.leaflet-container');
+      const b3 = await map3.boundingBox();
+      await map3.click({ position: { x: b3.width / 2, y: b3.height / 2 } });
+      await map3.click({ position: { x: b3.width / 2 + 60, y: b3.height / 2 } });
+      await page.waitForTimeout(600);
+      const st = await page.evaluate((k) => ({ sets: JSON.parse(localStorage.getItem(k)), general: JSON.parse(localStorage.getItem('ofm.filters.v1') || '{}') }), KEY);
+      out.r3_setUntouched = st.sets[0].filter.polygons.length === 0;
+      out.r3_generalDrawn = Array.isArray(st.general.polygon) && st.general.polygon.length >= 3;
+      await ctx.close();
     }
 
     if (PLAN === 'free') {
@@ -359,6 +400,12 @@ async function routeAll(page) {
       out.g1_signup = (await page.locator('[data-gate="signup"]').count()) === 1;
       out.g1_noChip = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"])').count()) === 0;
       await ctx.close();
+
+      // R2 (review): a guest with a saved 7-day set is not sent to sign-up on every load (the set is locked).
+      const r2 = await open([mk('a', 'Week', '#7c3aed', { areas: ['lebanon'], preset: '7d' })]);
+      await r2.page.waitForTimeout(1000);
+      out.r2_noSignupGate = (await r2.page.locator('[data-gate="signup"]').count()) === 0;
+      await r2.ctx.close();
     }
   } catch (e) {
     out.FAILED = String(e).slice(0, 400);
