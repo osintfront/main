@@ -11,6 +11,7 @@ import { formatDateTime } from '@/utils/time';
 import { cn } from '@/utils/cn';
 import { Gauge, MOOD_COLOR, moodOf, OfiAvatar, OfiDisclaimerShort, OfiHorizons, OfiLegend, pct, Sparkline, TimesUsual, type OfiHorizon } from '@/components/ofi/OfiParts';
 import { OfiAdminPanel } from '@/components/ofi/OfiAdminPanel';
+import { OFI_OWNER_EMAIL, OfiRefreshNow } from '@/components/ofi/OfiRefreshNow';
 import { OfiAlerts, ofiTrack, PrintBrief, SawItFirstShare, ScenarioExplorer } from '@/components/ofi/OfiExtras';
 import { GuestGate, OfiFrame, Trend, UpdateTimes } from './InsightsPage';
 
@@ -159,7 +160,7 @@ function TrackRecord({ tr, slug, base }: { tr: OfiTrackRecord | null; slug: stri
 export function InsightDetailPage() {
   const { slug = '' } = useParams();
   const { t, lang } = useI18n();
-  const { status, profile } = useAuth();
+  const { status, profile, user } = useAuth();
   const [d, setD] = useState<OfiDetail | null | undefined>(undefined);
   const [tr, setTr] = useState<OfiTrackRecord | null>(null);
   const [sel, setSel] = useState<OfiHorizon | null>(null);
@@ -204,6 +205,9 @@ export function InsightDetailPage() {
   return (
     <OfiFrame back={back} mood={moodOf(d.probability)}>
       <div className="space-y-6">
+        {profile?.role === 'super_admin' && user?.email?.toLowerCase() === OFI_OWNER_EMAIL ? (
+          <OfiRefreshNow slug={d.slug} last={d.last_update} next={d.next_update} onDone={load} />
+        ) : null}
         <section className={card}>
           <h2 className="text-xl font-bold leading-snug text-slate-900 dark:text-white">{title}</h2>
           <div className="mt-4 flex flex-col items-center gap-5 sm:flex-row sm:items-center">
