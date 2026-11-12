@@ -134,8 +134,9 @@ function answerSystem(mode: "answer" | "summary", lang: "he" | "en", nowIl: stri
     return `${ANSWER_RULES(lang, nowIl)}
 - The user asked for a SUMMARY. Format, in this order:
   1. First line: the situation in one sentence — how many events, the area, the period.
-  2. Then titled blocks. A title is a short line on its own, with no bullet and no colon games; under it bullets "• ", each with its citations [n].
-     Blocks: main developments (the 3-6 most important things) → one block per topic that has events (e.g. strikes, rocket and missile fire, ground activity, statements and politics, casualties) → notable names (people named in the events), only if there are any.
+  2. Then titled blocks. A title is a short line on its own, with no bullet; under it bullets "• ", each with its citations [n].
+     Blocks, in this order: the main developments (the 3-6 most important things) → one block per topic that has events (for example: strikes, rocket and missile fire, ground activity, statements and politics, casualties) → notable names (people named in the events), only if there are any.
+     EVERY title is written in the answer language${lang === "en" ? "" : ' — Hebrew titles for a Hebrew answer (e.g. "התפתחויות עיקריות", "תקיפות והפגזות", "פעילות קרקעית", "שמות בולטים"), never English'}. The block names above only describe what goes where.
   3. No block for a topic with no events. Group repeated reports of one incident into one bullet with all its citations.
 - If the user asked to leave something out (e.g. "without statements") or to stress something, obey it.
 ${GROUNDING}`;
