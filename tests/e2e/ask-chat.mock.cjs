@@ -225,6 +225,14 @@ const server = http.createServer((req, res) => {
     out.new_inputBack = await sendBtn.count(); // 1
     await ask(T.q1, 1);
     out.newChat_noHistory = !('history' in asks[asks.length - 1]);
+    // "New chat" pressed while a question is still running: the old conversation must not come back.
+    await input.fill(T.q2);
+    await sendBtn.click();
+    await page.locator('[data-ask-action="new"]').click();
+    await page.waitForTimeout(1300);
+    out.cleared_staysCleared = (await turns()) === 0;
+    out.cleared_noLateError = (await page.locator('[data-ask-error]').count()) === 0;
+    out.cleared_canAskAgain = !(await input.isDisabled());
     await page.locator('[data-ask-panel] button[aria-label]').last().click(); // X in the header
     await page.waitForTimeout(300);
     out.closed_panel = await page.locator('[data-ask-panel]').count(); // 0

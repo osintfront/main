@@ -60,17 +60,23 @@ function hash(s: string): string {
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
-/** Cache key of a question. Inside a conversation the earlier questions are part of it, so a
- *  follow-up never gets the saved answer of the same words asked on their own. */
-export function cacheKey(question: string, history: AskTurn[]): string {
+/** Cache key of a question. Inside a conversation everything the answer was built from is part of
+ *  it — the earlier questions AND answers and the previous events. They all come from the browser,
+ *  so a made-up context can only ever get back an answer saved for that same made-up context,
+ *  never one that another user's real conversation would be served. */
+export function cacheKey(question: string, history: AskTurn[], prevIds: string[] = []): string {
   const key = norm(question);
-  return history.length ? `${key}|${hash(history.map((t) => norm(t.q)).join("\n"))}` : key;
+  if (!history.length && !prevIds.length) return key;
+  const context = [...history.map((t) => `${norm(t.q)}\u0001${norm(t.a)}`), prevIds.join(",")].join("\u0002");
+  return `${key}|${hash(context)}`;
 }
 
-/** The conversation so far as model messages (question → answer, in order). */
+/** The conversation so far as model messages (question → answer, in order). Citation numbers
+ *  [n] are taken out of earlier answers: they point into earlier event lists, and one echoed
+ *  into the new answer would be linked to the wrong event. */
 export function historyMessages(history: AskTurn[]): { role: "user" | "assistant"; content: string }[] {
   return history.flatMap((t) => [
     { role: "user" as const, content: t.q },
-    { role: "assistant" as const, content: t.a },
+    { role: "assistant" as const, content: t.a.replace(/\s*\[\d+\]/g, "").trim() || "-" },
   ]);
 }

@@ -44,7 +44,7 @@ export interface ShareLabels {
 /** Cut at the last line break that fits, and mark the cut. */
 function cutAtLine(text: string, max: number): string {
   if (text.length <= max) return text;
-  const room = text.slice(0, max - 1);
+  const room = text.slice(0, Math.max(max - 1, 0));
   const at = room.lastIndexOf('\n');
   return `${at > 0 ? room.slice(0, at) : room}\n…`;
 }
@@ -54,6 +54,8 @@ function cutAtLine(text: string, max: number): string {
  * one "[n] title — link" line per cited event that is loaded, and the site line.
  * Every source line starts with its number and ends with the link, so it reads right in
  * both right-to-left and left-to-right chats.
+ * max = the longest text before the site line (a WhatsApp link limit; pass Infinity for the
+ * clipboard). When it is too long only the answer is cut: the source links always stay whole.
  */
 export function answerShareText(turn: AskTurnLike, siteUrl: string, labels: ShareLabels, max = MAX_SHARE): string {
   const byId = new Map(turn.events.map((e) => [e.id, e]));
@@ -63,9 +65,10 @@ export function answerShareText(turn: AskTurnLike, siteUrl: string, labels: Shar
     const ev = byId.get(turn.ids[n - 1] ?? '');
     if (ev) sources.push(`[${n}] ${ev.title.replace(/\s+/g, ' ').trim()} — ${siteUrl}/e/${ev.id}`);
   }
-  const parts = [turn.question.trim(), turn.answer.trim()];
-  if (sources.length) parts.push(`${labels.sources}\n${sources.join('\n')}`);
-  return `${cutAtLine(parts.join('\n\n'), max)}\n\n${labels.site}`;
+  const question = turn.question.trim();
+  const sourceBlock = sources.length ? `\n\n${labels.sources}\n${sources.join('\n')}` : '';
+  const answer = cutAtLine(turn.answer.trim(), max - question.length - 2 - sourceBlock.length);
+  return `${question}\n\n${answer}${sourceBlock}\n\n${labels.site}`;
 }
 
 /** The ordinary question the "Summary" button sends (the server recognises it as a summary request). */

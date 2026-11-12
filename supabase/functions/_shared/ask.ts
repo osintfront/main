@@ -95,7 +95,7 @@ export interface AskResult {
 
 /** Same question (in the same conversation) within 15 minutes → the saved answer (public.ai_cache), no AI call. */
 export async function askMap(db: Db, question: string, ctx: AskCtx = NO_CTX): Promise<AskResult> {
-  const key = cacheKey(question, ctx.history);
+  const key = cacheKey(question, ctx.history, ctx.prevIds);
   const { data: hit } = await db.from("ai_cache").select("result").eq("kind", "ask").eq("key", key)
     .gte("created_at", new Date(Date.now() - 15 * 60_000).toISOString()).maybeSingle();
   if (hit?.result) return hit.result as AskResult;

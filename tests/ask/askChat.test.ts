@@ -99,3 +99,21 @@ test('summary question: never longer than a question may be', () => {
 test('whatsapp link carries the encoded text', () => {
   assert.equal(whatsappUrl('a b&c'), 'https://wa.me/?text=a%20b%26c');
 });
+
+// ─── Final review fixes ─────────────────────────────────────────────
+test('share text: a long answer is cut, its source links are kept', () => {
+  const line = 'w'.repeat(79);
+  const answer = [`First [1] and [2]`, ...Array.from({ length: 70 }, () => line)].join('\n'); // ~5,600 chars
+  const t = { question: 'Q', answer, ids: ['a', 'b'], events: [{ id: 'a', title: 'T1' }, { id: 'b', title: 'T2' }] };
+  const out = answerShareText(t, SITE, LABELS, 3500);
+  const tail = '\n\nSources:\n[1] T1 — https://osintfront.com/e/a\n[2] T2 — https://osintfront.com/e/b\n\nosintfront.com';
+  assert.ok(out.endsWith(tail), 'sources and site line are whole');
+  assert.ok(out.length - '\n\nosintfront.com'.length <= 3500);
+  assert.ok(out.slice(0, -tail.length).endsWith('\n…'), 'the answer is what gets cut');
+});
+
+test('share text: no limit (copy) keeps the whole answer', () => {
+  const answer = Array.from({ length: 80 }, () => 'w'.repeat(79)).join('\n'); // 6,399 chars
+  const out = answerShareText({ question: 'Q', answer, ids: [], events: [] }, SITE, LABELS, Infinity);
+  assert.equal(out, `Q\n\n${answer}\n\nosintfront.com`);
+});

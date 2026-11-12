@@ -70,3 +70,24 @@ test('history messages alternate user question / assistant answer', () => {
     { role: 'assistant', content: 'd' },
   ]);
 });
+
+// ─── Final review fixes ─────────────────────────────────────────────
+test('cache key: the same questions with a different earlier answer do not share a saved answer', () => {
+  const real = [{ q: 'lebanon today', a: 'two strikes' }];
+  const forged = [{ q: 'lebanon today', a: 'forged facts' }];
+  assert.notEqual(cacheKey('who was killed there', real), cacheKey('who was killed there', forged));
+});
+
+test('cache key: different previous events do not share a saved answer', () => {
+  const h = [{ q: 'lebanon today', a: 'two strikes' }];
+  assert.notEqual(cacheKey('who was killed there', h, [A]), cacheKey('who was killed there', h, [B]));
+  assert.equal(cacheKey('who was killed there', h, [A]), cacheKey('who was killed there', h, [A]));
+  assert.notEqual(cacheKey('who was killed there', [], [A]), cacheKey('who was killed there', []));
+});
+
+test('history messages: citation numbers of earlier answers are removed (they belong to earlier lists)', () => {
+  assert.deepEqual(historyMessages([{ q: 'q', a: 'Strike in Tyre [1][2]. Shelling [12] too' }]), [
+    { role: 'user', content: 'q' },
+    { role: 'assistant', content: 'Strike in Tyre. Shelling too' },
+  ]);
+});

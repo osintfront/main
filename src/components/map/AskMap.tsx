@@ -93,6 +93,9 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
   const listRef = useRef<HTMLDivElement>(null);
   const citeRef = useRef(onCite);
   citeRef.current = onCite;
+  /** The conversation as it is now — an answer that arrives after "New chat" / close is dropped. */
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
 
   const full = turns.length >= MAX_TURNS;
 
@@ -117,6 +120,7 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
     setError(null);
     try {
       const r = await askMap(question, buildContext(turns));
+      if (turnsRef.current !== turns) return; // the conversation was cleared or closed meanwhile
       setCollapsed(false);
       setQ('');
       setSummaryOpen(false);
@@ -124,6 +128,7 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
       setExtra('');
       onTurns([...turns, r]);
     } catch (err) {
+      if (turnsRef.current !== turns) return;
       const code = err instanceof AskError ? err.code : 'failed';
       setError(t(code === 'upgrade' ? 'ai.upgrade' : code === 'quota' ? 'ai.quota' : code === 'budget' ? 'ai.budget' : code === 'rate_limited' ? 'ask.rateLimited' : code === 'sign_in' ? 'ask.signIn' : 'ask.failed'));
     } finally {
@@ -148,8 +153,9 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
     void send(summaryQuestion(areaLabel(area), extra, lang === 'he' ? 'he' : 'en'));
   };
 
-  const shareText = (turn: AskAnswer) => answerShareText(turn, authConfig.siteUrl, { sources: t('ask.sources'), site: SITE_LINE });
-  const copy = async (i: number) => setCopied({ turn: i, ok: await copyText(shareText(turns[i])) });
+  /** max: the clipboard takes the whole answer; a share link (WhatsApp) has a length limit. */
+  const shareText = (turn: AskAnswer, max?: number) => answerShareText(turn, authConfig.siteUrl, { sources: t('ask.sources'), site: SITE_LINE }, max);
+  const copy = async (i: number) => setCopied({ turn: i, ok: await copyText(shareText(turns[i], Infinity)) });
   const share = async (i: number) => {
     const text = shareText(turns[i]);
     if (typeof navigator.share === 'function') {
@@ -163,6 +169,7 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
   };
 
   const newChat = () => {
+    setCopied(null);
     setError(null);
     setQ('');
     setSummaryOpen(false);
