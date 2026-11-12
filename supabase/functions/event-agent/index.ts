@@ -13,6 +13,11 @@
 //                                Nothing is saved; the form is filled for the person to check.
 //   {action:"ask", question, history?, prev_ids?}  signed-in users — "ask the map": a free-text question about our events
 //                                → answer + event ids (shown on the map). 40 questions / hour / user.
+//   {action:"eei_parse", text}   Pro / Max (or cron secret) — free-text EEI (צי"ח): split the pasted list into
+//                                theatres and topics (Haiku; cached by text; 5 splits / day / user).
+//   {action:"eei_save", raw_text, list}  Pro / Max — save the (edited) list; yesterday's is kept for restore;
+//                                new theatres are tagged in the background (10 saves / day).
+//   {action:"eei_clear"}         Pro / Max — switch the list off (yesterday's stays restorable).
 //   {action:"classify_channels"} cron secret — region of public Telegram channels without one (batch of 120).
 //   {action:"dedupe", minutes?}  cron secret — fold duplicate reports of one incident into one event
 //                                (events created since the last run vs. the last 12 hours).
@@ -25,6 +30,8 @@ import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { cleanHistory, cleanIds } from "../_shared/askInput.ts";
+import { eeiBudget, eeiSpentToday, parseEei, saveEei, tagTheatre } from "../_shared/eei.ts";
+import { LIMITS as EEI_LIMITS, parseCacheKey } from "../_shared/eeiInput.ts";
 import { dedupeRecent, dropRepeats } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { TRANSLATE_API_URL, translateBriefChain } from "../_shared/translate.ts";
@@ -486,6 +493,62 @@ async function handle(req: Request): Promise<Response> {
     try {
       if (action === "attach_media") return await attachMedia(body);
       return await compose(body);
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "eei_parse" || action === "eei_save" || action === "eei_clear") {
+    // Signed-in active Pro / Max users (staff always); eei_parse also with the cron secret (internal checks).
+    const internal = action === "eei_parse" && await cronOk(req);
+    let uid: string | null = null;
+    if (!internal) {
+      const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        auth: { persistSession: false },
+        global: { headers: { Authorization: req.headers.get("authorization") ?? "" } },
+      });
+      const { data: who } = await asUser.auth.getUser();
+      uid = who?.user?.id ?? null;
+      if (!uid) return json({ error: "sign in required" }, 401);
+      const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
+      if (prof?.status !== "active") return json({ error: "sign in required" }, 401);
+      const { data: allowed } = await db.rpc("eei_allowed", { p_uid: uid });
+      if (!allowed?.enabled) return json({ error: "upgrade" }, 429);
+    }
+    try {
+      if (action === "eei_parse") {
+        const text = String(body?.text ?? "").slice(0, EEI_LIMITS.raw);
+        if (text.trim().length < 10) return json({ error: "empty" }, 422);
+        // A split already cached costs nothing and is not counted.
+        const r = await (async () => {
+          const { data: hit } = await db.from("ai_cache").select("key").eq("kind", "eei_parse").eq("key", await parseCacheKey(text))
+            .gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()).maybeSingle();
+          if (!hit && uid) {
+            const budget = await eeiBudget(db);
+            if (budget != null && (await eeiSpentToday(db)) >= budget) return "budget" as const;
+            const { data: counted } = await db.rpc("eei_count", { p_uid: uid, p_kind: "parse" });
+            if (!counted) return "quota" as const;
+          }
+          return await parseEei(db, text);
+        })();
+        if (r === "budget" || r === "quota") return json({ error: r }, 429);
+        if (!r.theatres.length) return json({ error: "empty" }, 422);
+        return json({ ok: true, theatres: r.theatres, cached: r.cached });
+      }
+      if (action === "eei_save") {
+        const { data: counted } = await db.rpc("eei_count", { p_uid: uid, p_kind: "save" });
+        if (!counted) return json({ error: "quota" }, 429);
+        const r = await saveEei(db, uid!, String(body?.raw_text ?? ""), body?.list);
+        if (!r.list.theatres.length) return json({ error: "empty" }, 422);
+        // New theatres: a first pass over the last 24 h in the background (the answer does not wait).
+        const first = (async () => {
+          for (const h of r.fresh) await tagTheatre(db, h, EEI_LIMITS.firstPass, 12).catch((e) => console.warn("eei first pass", String(e).slice(0, 200)));
+        })();
+        const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
+        if (rt?.waitUntil) rt.waitUntil(first);
+        return json({ ok: true, list: r.list });
+      }
+      await db.from("eei_lists").update({ raw_text: "", list: null, updated_at: new Date().toISOString() }).eq("user_id", uid);
+      return json({ ok: true });
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }
