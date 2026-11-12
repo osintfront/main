@@ -77,3 +77,11 @@ $$;
 -- the admin-otp edge function sends the code. Server-side enforcement switched on.
 alter table public.otp_verified add column if not exists via text not null default 'code';
 update public.app_settings set value = 'true'::jsonb where key = 'enforce_admin_otp';
+
+-- 12 Nov: the email 2FA is switched OFF (problems to fix first). Everything stays in place;
+-- to turn it back on: update public.app_settings set value = 'true'::jsonb where key in ('admin_otp_enabled', 'enforce_admin_otp');
+insert into public.app_settings (key, value) values ('admin_otp_enabled', 'false'::jsonb) on conflict (key) do update set value = 'false'::jsonb;
+update public.app_settings set value = 'false'::jsonb where key = 'enforce_admin_otp';
+create or replace function public.otp_required() returns boolean language sql stable security definer set search_path = '' as
+$$ select coalesce((select s.value = 'true'::jsonb from public.app_settings s where s.key = 'admin_otp_enabled'), false)
+      and exists (select 1 from public.two_factor_users t join auth.users u on lower(u.email) = lower(t.email) where u.id = auth.uid()) $$;
