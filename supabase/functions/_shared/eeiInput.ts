@@ -281,12 +281,13 @@ export function tagUserMessage(spec: TheatreSpec, events: TagEvent[]): string {
   return `THEATRE ${JSON.stringify(spec.name)}\n${JSON.stringify(topics)}\n${JSON.stringify(evs)}`;
 }
 
-/** The tagger's answer cleaned: index i = event i+1; [] = checked, no topic. Never throws. */
-export function cleanTagOutput(raw: unknown, batchSize: number, keys: string[]): string[][] {
-  const out: string[][] = Array.from({ length: batchSize }, () => []);
+/** The tagger's answer cleaned: index i = event i+1; [] = checked, no topic. null = no usable answer
+ *  (no results list): the call counts as failed and nothing is stored. Never throws. */
+export function cleanTagOutput(raw: unknown, batchSize: number, keys: string[]): string[][] | null {
   const valid = new Set(keys);
   const results = raw && typeof raw === "object" ? (raw as Record<string, unknown>).results : null;
-  if (!Array.isArray(results)) return out;
+  if (!Array.isArray(results)) return null;
+  const out: string[][] = Array.from({ length: batchSize }, () => []);
   for (const r of results) {
     if (!r || typeof r !== "object") continue;
     const { n, topics } = r as Record<string, unknown>;

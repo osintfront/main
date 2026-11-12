@@ -547,7 +547,14 @@ async function handle(req: Request): Promise<Response> {
         if (rt?.waitUntil) rt.waitUntil(first);
         return json({ ok: true, list: r.list });
       }
-      await db.from("eei_lists").update({ raw_text: "", list: null, updated_at: new Date().toISOString() }).eq("user_id", uid);
+      // Switch the list off; it stays restorable (moved to prev_*), as the browser shows.
+      const { data: cur } = await db.from("eei_lists").select("raw_text,list").eq("user_id", uid).maybeSingle();
+      const off: Record<string, unknown> = { raw_text: "", list: null, updated_at: new Date().toISOString() };
+      if (cur?.list) {
+        off.prev_raw_text = cur.raw_text;
+        off.prev_list = cur.list;
+      }
+      await db.from("eei_lists").update(off).eq("user_id", uid);
       return json({ ok: true });
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);

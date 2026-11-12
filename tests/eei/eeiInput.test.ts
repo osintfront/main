@@ -124,7 +124,9 @@ test('prompts say what they must', () => {
 test('tagger output: only valid marks, every event answered', () => {
   const raw = { results: [{ n: 1, topics: ['aaaaaaaa', 'zzzzzzzz'] }, { n: 9, topics: ['aaaaaaaa'] }, { n: 3, topics: 'x' }, { n: 1, topics: ['bbbbbbbb'] }] };
   assert.deepEqual(cleanTagOutput(raw, 3, ['aaaaaaaa', 'bbbbbbbb']), [['aaaaaaaa', 'bbbbbbbb'], [], []]);
-  for (const v of [null, {}, { results: 'x' }]) assert.deepEqual(cleanTagOutput(v, 3, ['aaaaaaaa']), [[], [], []]);
+  // A missing or broken answer is a failed call (nothing stored), not "no topic" for every event.
+  for (const v of [null, {}, { results: 'x' }]) assert.equal(cleanTagOutput(v, 3, ['aaaaaaaa']), null);
+  assert.deepEqual(cleanTagOutput({ results: [] }, 2, ['aaaaaaaa']), [[], []]);
 });
 
 test('batches of 40', () => {

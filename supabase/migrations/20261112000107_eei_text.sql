@@ -21,8 +21,10 @@ create table if not exists public.eei_theatres (
   created_at    timestamptz not null default now(),
   last_used_at  timestamptz not null default now(),
   busy_until    timestamptz,                  -- lease: one tagging run at a time
+  busy_token    uuid,                         -- whose lease it is (renewed per batch, released only by its owner)
+  last_tagged_at timestamptz,                 -- the tick serves the least recently tagged theatre first
   tagged_day    date,
-  tagged_count  integer not null default 0,   -- events checked on tagged_day (daily cap)
+  tagged_count  integer not null default 0,   -- events checked on tagged_day (daily cap: 1,200)
   fail_count    integer not null default 0,
   paused_until  timestamptz                   -- 5 failures in a row → paused 1 hour
 );
@@ -53,7 +55,8 @@ alter table public.eei_theatres enable row level security;
 alter table public.eei_tags enable row level security;
 alter table public.eei_lists enable row level security;
 revoke all on public.eei_theatres, public.eei_tags from anon, authenticated;
-revoke insert, update, delete on public.eei_lists from anon, authenticated;
+revoke all on public.eei_lists from anon, authenticated;
+grant select on public.eei_lists to authenticated;
 drop policy if exists eei_lists_own_select on public.eei_lists;
 create policy eei_lists_own_select on public.eei_lists for select to authenticated using (user_id = auth.uid());
 
@@ -119,16 +122,33 @@ returns numeric language sql stable security definer set search_path = '' as $$
     and at >= ((now() at time zone 'Asia/Jerusalem')::date)::timestamp at time zone 'Asia/Jerusalem';
 $$;
 
-/** Take the theatre's 2-minute lease (true) — or not, when another run holds it or it is paused. */
+/** Take the theatre's 2-minute lease: its token — or null when another run holds it or it is paused. */
 create or replace function public.eei_claim(p_hash text)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v uuid := gen_random_uuid(); n int;
+begin
+  update public.eei_theatres set busy_until = now() + interval '2 minutes', busy_token = v
+  where hash = p_hash and coalesce(busy_until, '-infinity') < now() and coalesce(paused_until, '-infinity') < now();
+  get diagnostics n = row_count;
+  return case when n > 0 then v end;
+end $$;
+
+/** Extend the lease for another 2 minutes — only while it is still ours. */
+create or replace function public.eei_renew(p_hash text, p_token uuid)
 returns boolean language plpgsql security definer set search_path = '' as $$
 declare n int;
 begin
   update public.eei_theatres set busy_until = now() + interval '2 minutes'
-  where hash = p_hash and coalesce(busy_until, '-infinity') < now() and coalesce(paused_until, '-infinity') < now();
+  where hash = p_hash and busy_token = p_token and busy_until > now();
   get diagnostics n = row_count;
   return n > 0;
 end $$;
+
+/** Give the lease back — only our own. */
+create or replace function public.eei_release(p_hash text, p_token uuid)
+returns void language sql security definer set search_path = '' as $$
+  update public.eei_theatres set busy_until = null, busy_token = null where hash = p_hash and busy_token = p_token;
+$$;
 
 /** Published events of the last 24 h in the theatre (country text or pin inside a box) not yet checked for it. */
 create or replace function public.eei_pending(p_hash text, p_limit int)
@@ -155,7 +175,8 @@ language sql stable security definer set search_path = '' as $$
 $$;
 
 revoke all on function public.eei_allowed(uuid), public.eei_count(uuid, text), public.eei_spent_today(),
-  public.eei_claim(text), public.eei_pending(text, int) from public, anon, authenticated;
+  public.eei_claim(text), public.eei_renew(text, uuid), public.eei_release(text, uuid), public.eei_pending(text, int)
+  from public, anon, authenticated;
 
 -- ── The browser's call ──────────────────────────────────────────────────────────
 /** The caller's marks: { degraded, tags: [{ h: theatre hash, e: event id, t: topic keys, at }] }. */
@@ -176,8 +197,10 @@ begin
     select g.* from public.eei_tags g
     join public.events e on e.id = g.event_id
     where g.theatre_hash = any (v_hashes)
+      and g.tagged_at > now() - interval '25 hours'
       and e.occurred_at >= now() - interval '24 hours'
-      and (p_after is null or g.tagged_at > p_after)
+      -- 3 minutes of overlap: a run that commits late (older tagged_at) is not skipped; the browser's merge is idempotent.
+      and (p_after is null or g.tagged_at > p_after - interval '3 minutes')
     order by g.tagged_at
     limit 5000
   ) g;
@@ -195,7 +218,9 @@ begin
   -- Once a day (01:00–01:04 UTC): old marks and theatres nobody used for 8 days.
   if extract(hour from now()) = 1 and extract(minute from now()) < 5 then
     delete from public.eei_tags where tagged_at < now() - interval '8 days';
-    delete from public.eei_theatres where last_used_at < now() - interval '8 days';
+    delete from public.eei_theatres t where t.last_used_at < now() - interval '8 days'
+      and not exists (select 1 from public.eei_lists l, jsonb_array_elements(coalesce(l.list->'theatres', '[]')) th
+                      where th->>'hash' = t.hash);
   end if;
   if not exists (select 1 from public.eei_theatres where last_used_at > now() - interval '24 hours') then return; end if;
   select value into v_secret from public.intel_config where key = 'cron_secret';

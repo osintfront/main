@@ -28,6 +28,8 @@ export function useEeiList(enabled: boolean, refreshKey: unknown) {
   const [view, setViewState] = useState<EeiView>(loadView);
   const afterRef = useRef<string | null>(null);
   const busyRef = useRef(false);
+  /** Bumped when the list changes: an answer for the old list is dropped, and a pull is allowed again. */
+  const genRef = useRef(0);
 
   const setView = useCallback((v: EeiView) => {
     setViewState(v);
@@ -59,18 +61,27 @@ export function useEeiList(enabled: boolean, refreshKey: unknown) {
   const pull = useCallback(async () => {
     if (busyRef.current) return;
     busyRef.current = true;
+    const gen = genRef.current;
     try {
-      const r = await fetchMyTags(afterRef.current);
-      afterRef.current = lastAt(r.tags, afterRef.current);
-      setDegraded(r.degraded);
-      if (r.tags.length) setTags((old) => mergeTags(old, r.tags));
+      // The server answers at most 5,000 rows a time: keep reading while a page comes back full.
+      for (let page = 0; page < 10; page++) {
+        const r = await fetchMyTags(afterRef.current);
+        if (gen !== genRef.current) return;
+        const before = afterRef.current;
+        afterRef.current = lastAt(r.tags, afterRef.current);
+        setDegraded(r.degraded);
+        if (r.tags.length) setTags((old) => mergeTags(old, r.tags));
+        if (r.tags.length < 5000 || afterRef.current === before) break;
+      }
     } finally {
-      busyRef.current = false;
+      if (gen === genRef.current) busyRef.current = false;
     }
   }, []);
 
   // A different list starts the marks from scratch.
   useEffect(() => {
+    genRef.current++;
+    busyRef.current = false;
     afterRef.current = null;
     setTags(NO_TAGS);
   }, [hashes]);
@@ -91,8 +102,16 @@ export function useEeiList(enabled: boolean, refreshKey: unknown) {
     setPrev((p) => (list && JSON.stringify(list) !== JSON.stringify(saved) ? { rawText, list } : p));
     setList(saved);
     setRawText(text);
-    setView({ ...view, off: [] });
-  }, [list, rawText, view, setView]);
+    setViewState((v) => {
+      const next = { ...v, off: [] };
+      try {
+        window.localStorage.setItem(VIEW_KEY, JSON.stringify(next));
+      } catch {
+        /* storage blocked */
+      }
+      return next;
+    });
+  }, [list, rawText]);
 
   const clear = useCallback(async () => {
     await clearEei();

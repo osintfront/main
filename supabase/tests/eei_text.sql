@@ -36,13 +36,20 @@ begin
   insert into public.eei_tags (theatre_hash, event_id, topics) values (h_a, e_tagged, '{aaaaaaaa}'), (h_b, e_b, '{bbbbbbbb}');
 
   -- pending: only the untagged, fresh, published Lebanon event
-  select count(*) into n from public.eei_pending(h_a, 100) p where p.id in (e_ok, e_tagged, e_old, e_draft, e_other);
+  select count(*) into n from public.eei_pending(h_a, 2000) p where p.id in (e_ok, e_tagged, e_old, e_draft, e_other);
   assert n = 1, 'pending count ' || n;
-  assert exists (select 1 from public.eei_pending(h_a, 100) p where p.id = e_ok), 'pending misses the fresh event';
+  assert exists (select 1 from public.eei_pending(h_a, 2000) p where p.id = e_ok), 'pending misses the fresh event';
 
-  -- lease
-  assert public.eei_claim(h_a), 'first claim';
-  assert not public.eei_claim(h_a), 'second claim must fail';
+  -- lease: one owner; renew / release only by the owner
+  declare tok uuid := public.eei_claim(h_a); begin
+    assert tok is not null, 'first claim';
+    assert public.eei_claim(h_a) is null, 'second claim must fail';
+    assert not public.eei_renew(h_a, gen_random_uuid()), 'a stranger renewed the lease';
+    assert public.eei_renew(h_a, tok), 'the owner could not renew';
+    perform public.eei_release(h_a, gen_random_uuid());
+    assert public.eei_claim(h_a) is null, 'a stranger released the lease';
+    perform public.eei_release(h_a, tok);
+  end;
 
   -- daily counter: 5 splits
   for i in 1..6 loop if public.eei_count(a, 'parse') then cnt := cnt + 1; end if; end loop;

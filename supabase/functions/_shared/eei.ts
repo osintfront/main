@@ -13,15 +13,23 @@ type Db = any;
 
 export const EEI_MODEL = "claude-haiku-5-5";
 
+const CALL_TIMEOUT_MS = 30_000;
+
+/** One forced-tool call. null = no usable answer (no tool output, or cut off at max_tokens). */
 async function forcedTool(tool: { name: string }, system: string, user: string, purpose: string, maxTokens: number): Promise<unknown> {
-  const out = await callClaude(EEI_MODEL, {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("eei call timed out")), CALL_TIMEOUT_MS);
+  });
+  const out = await Promise.race([callClaude(EEI_MODEL, {
     max_tokens: maxTokens,
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     tools: [tool],
     tool_choice: { type: "tool", name: tool.name },
     messages: [{ role: "user", content: user }],
-  }, purpose);
-  return out.content?.find((x: any) => x.type === "tool_use")?.input ?? null;
+  }, purpose), timeout]).finally(() => clearTimeout(timer));
+  if (out?.stop_reason === "max_tokens") return null;
+  return out?.content?.find((x: any) => x.type === "tool_use")?.input ?? null;
 }
 
 export async function eeiBudget(db: Db): Promise<number | null> {
@@ -63,6 +71,7 @@ export async function upsertTheatres(db: Db, theatres: CleanTheatre[]): Promise<
 /** Save a user's list; yesterday's moves to prev_*. fresh = theatres nobody has marks for yet. */
 export async function saveEei(db: Db, uid: string, rawText: string, list: unknown): Promise<{ list: { theatres: CleanTheatre[] }; fresh: string[] }> {
   const clean = await cleanList(list);
+  if (!clean.theatres.length) return { list: clean, fresh: [] }; // nothing usable: the saved list stays as it is
   await upsertTheatres(db, clean.theatres);
   const { data: cur } = await db.from("eei_lists").select("raw_text,list").eq("user_id", uid).maybeSingle();
   const row: Record<string, unknown> = { user_id: uid, raw_text: rawText.slice(0, LIMITS.raw), list: clean, updated_at: new Date().toISOString() };
@@ -70,7 +79,8 @@ export async function saveEei(db: Db, uid: string, rawText: string, list: unknow
     row.prev_raw_text = cur.raw_text;
     row.prev_list = cur.list;
   }
-  await db.from("eei_lists").upsert(row, { onConflict: "user_id" });
+  const { error: saveError } = await db.from("eei_lists").upsert(row, { onConflict: "user_id" });
+  if (saveError) throw new Error(saveError.message);
   const fresh: string[] = [];
   for (const t of clean.theatres) {
     if (!t.hash) continue;
@@ -85,8 +95,8 @@ export async function saveEei(db: Db, uid: string, rawText: string, list: unknow
  * time (2-minute lease). A failed call writes nothing; 5 failures in a row pause the theatre 1 hour.
  */
 export async function tagTheatre(db: Db, hash: string, maxEvents: number, maxCalls: number): Promise<{ tagged: number; calls: number; stopped?: "busy" | "budget" | "cap" | "error" }> {
-  const { data: claimed } = await db.rpc("eei_claim", { p_hash: hash });
-  if (!claimed) return { tagged: 0, calls: 0, stopped: "busy" };
+  const { data: token } = await db.rpc("eei_claim", { p_hash: hash });
+  if (!token) return { tagged: 0, calls: 0, stopped: "busy" };
   let tagged = 0;
   let calls = 0;
   try {
@@ -107,14 +117,19 @@ export async function tagTheatre(db: Db, hash: string, maxEvents: number, maxCal
       const list = (rows ?? []) as any[];
       if (!list.length) break;
       for (const batch of batches(list)) {
+        // Keep the lease only while it is still ours (a slow run must not overlap another one).
+        const { data: still } = await db.rpc("eei_renew", { p_hash: hash, p_token: token });
+        if (!still) return { tagged, calls, stopped: "busy" };
         const events: TagEvent[] = batch.map((r) => ({
           id: r.id, category: r.category_slug ?? "", country: r.country ?? "", place: r.location_name ?? "",
           title: r.title ?? "", description: r.description ?? "",
         }));
-        let out: unknown;
+        let marks: string[][] | null = null;
         calls++;
         try {
-          out = await forcedTool(TAG_TOOL, tagSystemPrompt(), tagUserMessage(spec, events), "eei_tag", 1500);
+          const out = await forcedTool(TAG_TOOL, tagSystemPrompt(), tagUserMessage(spec, events), "eei_tag", 3000);
+          marks = cleanTagOutput(out, events.length, keys);
+          if (!marks) throw new Error("no usable tagger answer");
         } catch (e) {
           const fails = Number(th.fail_count ?? 0) + 1;
           th.fail_count = fails >= 5 ? 0 : fails;
@@ -124,29 +139,29 @@ export async function tagTheatre(db: Db, hash: string, maxEvents: number, maxCal
           console.warn("eei tag failed", hash.slice(0, 8), String((e as Error)?.message ?? e).slice(0, 200));
           return { tagged, calls, stopped: "error" };
         }
-        const marks = cleanTagOutput(out, events.length, keys);
-        const now = new Date().toISOString();
-        await db.from("eei_tags").upsert(
-          events.map((e, i) => ({ theatre_hash: hash, event_id: e.id, topics: marks[i], tagged_at: now })),
+        const { error: tagError } = await db.from("eei_tags").upsert(
+          events.map((e, i) => ({ theatre_hash: hash, event_id: e.id, topics: marks![i] })),
           { onConflict: "theatre_hash,event_id", ignoreDuplicates: true },
         );
+        // A failed write must stop the run: the same events would come back and be paid for again.
+        if (tagError) throw new Error(tagError.message);
         tagged += events.length;
         day += events.length;
         th.fail_count = 0;
-        await db.from("eei_theatres").update({ tagged_day: today, tagged_count: day, fail_count: 0 }).eq("hash", hash);
+        await db.from("eei_theatres").update({ tagged_day: today, tagged_count: day, fail_count: 0, last_tagged_at: new Date().toISOString() }).eq("hash", hash);
       }
     }
     return { tagged, calls };
   } finally {
-    await db.from("eei_theatres").update({ busy_until: null }).eq("hash", hash);
+    await db.rpc("eei_release", { p_hash: hash, p_token: token });
   }
 }
 
 /** Every theatre used in the last 24 h, least recently tagged first, until 25 calls are used. */
 export async function tick(db: Db): Promise<{ theatres: number; tagged: number; calls: number }> {
-  const { data } = await db.from("eei_theatres").select("hash,tagged_day")
+  const { data } = await db.from("eei_theatres").select("hash")
     .gt("last_used_at", new Date(Date.now() - 24 * 3600_000).toISOString())
-    .order("tagged_day", { ascending: true, nullsFirst: true }).limit(100);
+    .order("last_tagged_at", { ascending: true, nullsFirst: true }).limit(100);
   let tagged = 0;
   let calls = 0;
   let theatres = 0;
