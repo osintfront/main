@@ -264,7 +264,8 @@ export function octagon(center: LatLng, edge: LatLng): LatLng[] {
   });
 }
 
-function eventPoints(e: PublicEvent): LatLng[] {
+/** The event's main pin and its further places. */
+export function eventPoints(e: PublicEvent): LatLng[] {
   return [[e.latitude, e.longitude], ...(e.places ?? []).map((p) => [p.latitude, p.longitude] as LatLng)];
 }
 
@@ -317,20 +318,24 @@ export function needsArchive(f: EventFilters, now = Date.now()): { from: string;
 /** The visitor's last filters, kept in this browser so a refresh keeps them. */
 const FILTERS_KEY = 'ofm.filters.v1';
 
+/** A saved filter (already parsed) cleaned into a valid one; anything unusable → the empty filter. */
+export function sanitizeFilters(raw: unknown): EventFilters {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return EMPTY_FILTERS;
+  const f = { ...EMPTY_FILTERS } as Record<string, unknown>;
+  for (const [k, v] of Object.entries(EMPTY_FILTERS)) {
+    const got = (raw as Record<string, unknown>)[k];
+    if (got === undefined) continue;
+    if (Array.isArray(v) && Array.isArray(got)) f[k] = got.filter((x) => typeof x === 'string');
+    else if (k === 'polygon') f[k] = Array.isArray(got) && got.length >= 3 && got.every((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)) ? got : null;
+    else if (typeof v === typeof got) f[k] = got;
+  }
+  if (!TIME_PRESETS.some((p) => p.id === f.preset)) f.preset = 'live';
+  return f as unknown as EventFilters;
+}
+
 export function loadFilters(): EventFilters {
   try {
-    const raw = JSON.parse(window.localStorage.getItem(FILTERS_KEY) ?? 'null');
-    if (!raw || typeof raw !== 'object') return EMPTY_FILTERS;
-    const f = { ...EMPTY_FILTERS } as Record<string, unknown>;
-    for (const [k, v] of Object.entries(EMPTY_FILTERS)) {
-      const got = (raw as Record<string, unknown>)[k];
-      if (got === undefined) continue;
-      if (Array.isArray(v) && Array.isArray(got)) f[k] = got.filter((x) => typeof x === 'string');
-      else if (k === 'polygon') f[k] = Array.isArray(got) && got.length >= 3 && got.every((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite)) ? got : null;
-      else if (typeof v === typeof got) f[k] = got;
-    }
-    if (!TIME_PRESETS.some((p) => p.id === f.preset)) f.preset = 'live';
-    return f as unknown as EventFilters;
+    return sanitizeFilters(JSON.parse(window.localStorage.getItem(FILTERS_KEY) ?? 'null'));
   } catch {
     return EMPTY_FILTERS;
   }
