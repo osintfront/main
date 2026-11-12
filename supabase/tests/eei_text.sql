@@ -5,7 +5,8 @@ declare
   a uuid := gen_random_uuid(); b uuid := gen_random_uuid();
   h_a text := repeat('a', 64); h_b text := repeat('b', 64);
   e_ok uuid; e_tagged uuid; e_old uuid; e_draft uuid; e_other uuid; e_b uuid;
-  r jsonb; n int; ok boolean; i int; cnt int := 0;
+  r jsonb; n int; i int; cnt int := 0;
+  cat uuid := (select id from public.event_categories where slug = 'airstrike' limit 1); -- published events need a category
 begin
   insert into auth.users (id, email, aud, role, email_confirmed_at) values
     (a, 'eei-a@e2e.test', 'authenticated', 'authenticated', now()),
@@ -21,18 +22,18 @@ begin
     (a, jsonb_build_object('theatres', jsonb_build_array(jsonb_build_object('hash', h_a, 'kind', 'theatre')))),
     (b, jsonb_build_object('theatres', jsonb_build_array(jsonb_build_object('hash', h_b, 'kind', 'theatre'))));
 
-  insert into public.events (title, occurred_at, created_by, status, country, latitude, longitude) values
-    ('eei ok', now() - interval '1 hour', a, 'published', 'Lebanon', 33.27, 35.2) returning id into e_ok;
-  insert into public.events (title, occurred_at, created_by, status, country) values
-    ('eei tagged', now() - interval '2 hours', a, 'published', 'Lebanon') returning id into e_tagged;
-  insert into public.events (title, occurred_at, created_by, status, country) values
-    ('eei old', now() - interval '30 hours', a, 'published', 'Lebanon') returning id into e_old;
-  insert into public.events (title, occurred_at, created_by, status, country) values
-    ('eei draft', now() - interval '1 hour', a, 'draft', 'Lebanon') returning id into e_draft;
-  insert into public.events (title, occurred_at, created_by, status, country, latitude, longitude) values
-    ('eei other', now() - interval '1 hour', a, 'published', 'Iran', 35.69, 51.39) returning id into e_other;
-  insert into public.events (title, occurred_at, created_by, status, country) values
-    ('eei b', now() - interval '1 hour', a, 'published', 'Iran') returning id into e_b;
+  insert into public.events (title, occurred_at, created_by, status, country, latitude, longitude, category_id) values
+    ('eei ok', now() - interval '1 hour', a, 'published', 'Lebanon', 33.27, 35.2, cat) returning id into e_ok;
+  insert into public.events (title, occurred_at, created_by, status, country, category_id) values
+    ('eei tagged', now() - interval '2 hours', a, 'published', 'Lebanon', cat) returning id into e_tagged;
+  insert into public.events (title, occurred_at, created_by, status, country, category_id) values
+    ('eei old', now() - interval '30 hours', a, 'published', 'Lebanon', cat) returning id into e_old;
+  insert into public.events (title, occurred_at, created_by, status, country, category_id) values
+    ('eei draft', now() - interval '1 hour', a, 'draft', 'Lebanon', cat) returning id into e_draft;
+  insert into public.events (title, occurred_at, created_by, status, country, latitude, longitude, category_id) values
+    ('eei other', now() - interval '1 hour', a, 'published', 'Iran', 35.69, 51.39, cat) returning id into e_other;
+  insert into public.events (title, occurred_at, created_by, status, country, category_id) values
+    ('eei b', now() - interval '1 hour', a, 'published', 'Iran', cat) returning id into e_b;
   insert into public.eei_tags (theatre_hash, event_id, topics) values (h_a, e_tagged, '{aaaaaaaa}'), (h_b, e_b, '{bbbbbbbb}');
 
   -- pending: only the untagged, fresh, published Lebanon event
