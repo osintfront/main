@@ -27,8 +27,14 @@ const db = createClient(URL_, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+// The admin page calls this from the browser (supabase.functions.invoke), so it needs CORS.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info, x-cron-secret',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 function safeEqual(a: string, b: string): boolean {
   if (!a || a.length !== b.length) return false;
@@ -194,6 +200,7 @@ async function polymarketSearch(q: string) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'method' }, 405);
   const who = await authorized(req);
   if (!who) return json({ error: 'unauthorized' }, 401);
