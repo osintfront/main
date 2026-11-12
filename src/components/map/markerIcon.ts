@@ -31,6 +31,8 @@ interface MarkerIconOptions {
   shift?: number;
   /** Pixels down (negative = up): many pins on one spot are laid out in a ring or rows. */
   shiftY?: number;
+  /** Colour of the filter set the event fits: a ring around the pin (same size and anchor). */
+  ring?: string;
 }
 
 const iconCache = new Map<string, L.DivIcon>();
@@ -42,7 +44,8 @@ const iconCache = new Map<string, L.DivIcon>();
  */
 export function createMarkerIcon(opts: MarkerIconOptions): L.DivIcon {
   const color = safeColor(opts.color);
-  const key = `${opts.iconName}|${color}|${opts.severity}|${opts.selected ? 1 : 0}|${opts.breaking ? 1 : 0}|${opts.compact ? 1 : 0}|${opts.shift ?? 0}|${opts.shiftY ?? 0}`;
+  const ring = opts.ring ? safeColor(opts.ring) : '';
+  const key = `${opts.iconName}|${color}|${opts.severity}|${opts.selected ? 1 : 0}|${opts.breaking ? 1 : 0}|${opts.compact ? 1 : 0}|${opts.shift ?? 0}|${opts.shiftY ?? 0}|${ring}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
 
@@ -52,13 +55,14 @@ export function createMarkerIcon(opts: MarkerIconOptions): L.DivIcon {
     `ofm-pin--${opts.severity}`,
     opts.selected ? 'is-selected' : '',
     opts.breaking ? 'is-breaking' : '',
+    ring ? 'has-ring' : '',
   ]
     .filter(Boolean)
     .join(' ');
 
   const icon = L.divIcon({
     className: 'ofm-pin-wrap',
-    html: `<div class="${classes}" style="--pin-color:${color};--pin-size:${size}px"><span class="ofm-pin__body"><span class="ofm-pin__glyph">${iconSvg(opts.iconName, opts.compact ? 12 : opts.selected ? 18 : 15)}</span></span></div>`,
+    html: `<div class="${classes}" style="--pin-color:${color};--pin-size:${size}px${ring ? `;--pin-ring:${ring}` : ''}"><span class="ofm-pin__body"><span class="ofm-pin__glyph">${iconSvg(opts.iconName, opts.compact ? 12 : opts.selected ? 18 : 15)}</span></span></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2 - (opts.shift ?? 0), size - (opts.shiftY ?? 0)],
     popupAnchor: [opts.shift ?? 0, -size + 2 + (opts.shiftY ?? 0)],

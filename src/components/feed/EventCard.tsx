@@ -19,9 +19,11 @@ interface EventCardProps {
   isNew?: boolean;
   /** Opens the full event window (shown when the text is clamped). */
   onOpenDetails?: (id: string) => void;
+  /** The filter set this event fits (first one), shown as a small coloured tag. */
+  setTag?: { name: string; color: string };
 }
 
-function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDetails }: EventCardProps) {
+function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDetails, setTag }: EventCardProps) {
   const { t, locale, lang } = useI18n();
   const { title } = eventTexts(event, lang);
   const where = whereLabel(event, lang);
@@ -71,6 +73,14 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <CategoryBadge category={event.category} />
         <SeverityBadge severity={event.severity} />
+        {setTag ? (
+          <span data-set-tag className="inline-flex max-w-[10rem] items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <span className="size-2 shrink-0 rounded-full" style={{ background: setTag.color }} aria-hidden />
+            <span className="truncate" dir="auto">
+              {setTag.name}
+            </span>
+          </span>
+        ) : null}
       </div>
 
       <h3 className="mt-2 text-[15px] font-semibold leading-snug text-slate-900 dark:text-white" dir="auto">

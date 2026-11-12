@@ -153,6 +153,12 @@
   animation: ofm-pulse 1.8s ease-out infinite;
   pointer-events: none;
 }
+/* Filter sets: a ring in the colour of the set the event fits (box-shadow: size and anchor unchanged). */
+.ofm-pin.has-ring .ofm-pin__body {
+  box-shadow:
+    0 0 0 3px var(--pin-ring),
+    0 2px 6px rgb(0 0 0 / 0.35);
+}
 .ofm-pin.is-selected .ofm-pin__body {
   border-color: #0ea5e9;
   box-shadow:

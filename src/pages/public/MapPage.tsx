@@ -7,7 +7,9 @@ import { PAGE_RELOADED, useMapSelection } from '@/hooks/useMapSelection';
 import { HOME_EVENT } from '@/components/common/Logo';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { openEventAllowed } from '@/lib/featureUse';
-import { featureLimit, usePlanVersion } from '@/lib/plans';
+import { featureLimit, hasFeature, usePlanVersion } from '@/lib/plans';
+import { useFilterSets } from '@/hooks/useFilterSets';
+import { matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, type FilterSet } from '@/lib/filterSets';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -194,7 +196,18 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [drawMode, setDrawMode] = useState<DrawMode | null>(null);
   const effectiveFilters = useMemo(() => (isArchive ? { ...filters, preset: 'live' as const } : filters), [filters, isArchive]);
-  const archiveRange = useMemo(() => (isArchive ? null : needsArchive(filters)), [filters, isArchive]);
+  // Filter sets: several named filters; while one is in force they replace the general filter.
+  // Live map only (not the archive page). Sets past the plan's limit are kept but locked.
+  usePlanVersion(); // re-render when the plan rows load
+  const toast = useToast();
+  const { sets, setSets } = useFilterSets();
+  const setLimit = planSetLimit(hasFeature(undefined, 'filter_sets'), featureLimit('filter_sets'));
+  const activeSets = useMemo(() => (isArchive ? [] : setsOn(sets, setLimit)), [isArchive, sets, setLimit]);
+  const switchSetsOff = useCallback(() => setSets((list) => (list.some((s) => s.enabled) ? list.map((s) => ({ ...s, enabled: false })) : list)), [setSets]);
+  const archiveRange = useMemo(
+    () => (isArchive ? null : activeSets.length ? setsArchiveRange(activeSets) : needsArchive(filters)),
+    [filters, isArchive, activeSets],
+  );
   const older = useArchiveRange(archiveRange);
   // "Ask the map" (signed-in users): a free-text question → answer + only the matching events.
   const { profile, status: authStatus } = useAuth();
@@ -247,27 +260,68 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     setMobilePane('map');
     setDrawMode('polygon');
   }, []);
-  const handleAreaDrawn = useCallback((points: LatLng[]) => {
-    setFilters((f) => ({ ...f, polygon: points }));
-    setDrawMode(null);
-  }, []);
+  const handleAreaDrawn = useCallback(
+    (points: LatLng[]) => {
+      setFilters((f) => ({ ...f, polygon: points }));
+      setDrawMode(null);
+      if (activeSets.length) {
+        switchSetsOff();
+        toast.success(t('sets.switchedOff'));
+      }
+    },
+    [activeSets.length, switchSetsOff, toast, t],
+  );
+  const filterByCategory = useCallback(
+    (slug: string) => {
+      setFilters((f) => ({ ...f, categories: [slug] }));
+      if (activeSets.length) {
+        switchSetsOff();
+        toast.success(t('sets.switchedOff'));
+      }
+    },
+    [activeSets.length, switchSetsOff, toast, t],
+  );
   const clearArea = useCallback(() => setFilters((f) => ({ ...f, polygon: null })), []);
 
   const visibleEvents = useMemo(
     () =>
       (ask ? ask.events : allEvents)
         .filter((e) => matchesQuery(e, deferredQuery, categoryLabel(e.category.slug, e.category.name)))
-        .filter((e) => matchesFilters(e, effectiveFilters))
-        .filter((e) => !eeiMatchers.length || eeiMatchers.some((m) => matchesEei(e, m)))
+        .filter((e) =>
+          activeSets.length
+            ? matchingSets(e, activeSets).length > 0
+            : matchesFilters(e, effectiveFilters) && (!eeiMatchers.length || eeiMatchers.some((m) => matchesEei(e, m))),
+        )
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()),
-    [ask, allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers],
+    [ask, allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers, activeSets],
+  );
+  // Which set each shown event fits (the first one): a coloured ring on the map, a tag in the feed.
+  const { tints, setTags } = useMemo(() => {
+    if (!activeSets.length) return { tints: undefined, setTags: undefined };
+    const tints = new Map<string, string>();
+    const setTags = new Map<string, { name: string; color: string }>();
+    for (const e of visibleEvents) {
+      const s: FilterSet | undefined = matchingSets(e, activeSets)[0];
+      if (!s) continue;
+      tints.set(e.id, s.color);
+      setTags.set(e.id, { name: s.name || `#${sets.indexOf(s) + 1}`, color: s.color });
+    }
+    return { tints, setTags };
+  }, [visibleEvents, activeSets, sets]);
+  const setAreas = useMemo(
+    () => activeSets.flatMap((s) => s.filter.polygons.map((points) => ({ points, color: s.color }))),
+    [activeSets],
   );
   {
     const f = effectiveFilters;
     soundFilterRef.current = {
-      active: !!ask || !!deferredQuery || filterCount > 0,
+      active: !!ask || !!deferredQuery || filterCount > 0 || activeSets.length > 0,
       ids: new Set(visibleEvents.map((e) => e.id)),
       alert: (a) => {
+        if (activeSets.length) {
+          const pts: LatLng[] = [...(a.center ? [a.center] : []), ...a.areaPoints.map((p) => [p.lat, p.lng] as LatLng)];
+          return activeSets.some((s) => setAcceptsAlert(s, pts, HFC_CATEGORY.slug));
+        }
         if (f.categories.length && !f.categories.includes(HFC_CATEGORY.slug)) return false;
         if (f.areas.length && !f.areas.includes('israel')) return false;
         if (f.polygon && f.polygon.length >= 3) {
@@ -280,8 +334,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   }
   // A different list (filters, search, "ask the map", archive day) starts the feed again at its first batch.
   const feedResetKey = useMemo(
-    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? [askSelected, ask.events.length] : null]),
-    [isArchive, day, effectiveFilters, deferredQuery, ask, askSelected],
+    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? [askSelected, ask.events.length] : null, activeSets]),
+    [isArchive, day, effectiveFilters, deferredQuery, ask, askSelected, activeSets],
   );
   // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
   const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
@@ -322,7 +376,6 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   );
   // Staff: move a pin from the map (popup or phone card, then confirm on the map).
   const { can } = usePermissions();
-  const toast = useToast();
   const canMove = !isDemo && (can('event.edit.any') || can('event.edit.own'));
   const [moving, setMoving] = useState<MoveTarget | null>(null);
   const startMove = useCallback((target: MoveTarget) => {
@@ -471,7 +524,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         query={query}
         onQueryChange={setQuery}
         mode={mode}
-        filterCount={filterCount}
+        filterCount={activeSets.length || filterCount}
         filtersOpen={filtersOpen}
         onToggleFilters={() => setFiltersOpen((v) => !v)}
         onSoundOpen={() => setFiltersOpen(false)}
@@ -502,6 +555,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         >
           <EventFeed
             events={visibleEvents}
+            setTags={setTags}
             status={status}
             error={error}
             isDemo={isDemo}
@@ -522,7 +576,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             live={!isArchive}
             resetKey={feedResetKey}
             toolbar={
-              isArchive || filterCount || ask ? (
+              isArchive || filterCount || ask || activeSets.length ? (
                 <div className="space-y-2">
                   {ask ? (
                     <div className="flex items-center gap-2">
@@ -540,7 +594,29 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                     </div>
                   ) : null}
                   {isArchive ? <ArchiveDayPicker day={day} onChange={setDay} /> : null}
-                  {filterCount ? (
+                  {activeSets.length ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFiltersOpen(true)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-sky-600 px-3 text-xs font-semibold text-white hover:bg-sky-500"
+                      >
+                        <SlidersHorizontal className="size-3.5" aria-hidden />
+                        {t('sets.active', { count: activeSets.length })}
+                      </button>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {t('feed.count', { count: visibleEvents.length })}
+                      </span>
+                      <button
+                        type="button"
+                        data-sets-off
+                        onClick={switchSetsOff}
+                        className="ms-auto h-8 rounded-lg px-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
+                      >
+                        {t('sets.switchOff')}
+                      </button>
+                    </div>
+                  ) : filterCount ? (
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -565,7 +641,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
                 </div>
               ) : undefined
             }
-            emptyText={filterCount ? t('filters.none') : isArchive ? t('archive.empty') : undefined}
+            emptyText={filterCount || activeSets.length ? t('filters.none') : isArchive ? t('archive.empty') : undefined}
             footer={
               <>
                 <SiteLinks className="justify-center border-t border-slate-200 px-3 py-2 dark:border-slate-800" />
@@ -594,11 +670,13 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               compact={isPhone}
               legend={<CategoryLegend events={mapEvents} alertCount={alerts.length} />}
               onBackgroundClick={isPhone ? clearSelection : undefined}
-              area={filters.polygon}
+              area={activeSets.length ? null : filters.polygon}
+              setAreas={setAreas}
+              tints={tints}
               drawMode={drawMode}
               onDrawModeChange={setDrawMode}
               onAreaDrawn={handleAreaDrawn}
-              onFilterCategory={(slug) => setFilters((f) => ({ ...f, categories: [slug] }))}
+              onFilterCategory={filterByCategory}
               onClearArea={clearArea}
               moving={moving}
               onMoveRequest={canMove ? startMove : undefined}

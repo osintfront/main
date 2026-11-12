@@ -50,6 +50,10 @@ interface MapViewProps {
   onBackgroundClick?: () => void;
   /** Drawn-area filter: the applied area (outlined on the map). */
   area?: LatLng[] | null;
+  /** Filter sets in force: their drawn areas, each outlined in its set's colour. */
+  setAreas?: { points: LatLng[]; color: string }[];
+  /** Filter sets in force: event id → colour of the first set it fits (a ring around its pins). */
+  tints?: ReadonlyMap<string, string>;
   /** Drawing an area right now ('polygon' = free shape, 'octagon' = centre + edge). */
   drawMode?: DrawMode | null;
   onDrawModeChange?: (mode: DrawMode | null) => void;
@@ -166,6 +170,8 @@ export function MapView({
   legend,
   onBackgroundClick,
   area = null,
+  setAreas,
+  tints,
   drawMode = null,
   onDrawModeChange,
   onAreaDrawn,
@@ -225,6 +231,8 @@ export function MapView({
   // Latest callbacks/selection without re-binding every marker.
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
+  const tintsRef = useRef(tints);
+  tintsRef.current = tints;
   const onMarkerSelectRef = useRef(onMarkerSelect);
   onMarkerSelectRef.current = onMarkerSelect;
   const onViewEventRef = useRef(onViewEvent);
@@ -497,6 +505,7 @@ export function MapView({
             selected,
             breaking: event.isBreaking,
             compact: false, // all places of an event are equal
+            ring: tintsRef.current?.get(event.id),
           }),
           title: hoverTips ? '' : place.label,
           alt: place.label,
@@ -606,6 +615,7 @@ export function MapView({
               compact: false, // all places of an event are equal
               shift,
               shiftY,
+              ring: tintsRef.current?.get(event.id),
             }),
           );
         });
@@ -839,6 +849,7 @@ export function MapView({
             compact: false, // all places of an event are equal
             shift: (marker.options as { ofmShift?: number }).ofmShift,
             shiftY: (marker.options as { ofmShiftY?: number }).ofmShiftY,
+            ring: tintsRef.current?.get(event.id),
           }),
         );
         marker.setZIndexOffset(selected ? 1000 : event.severity === 'critical' ? 400 : 0);
@@ -975,10 +986,43 @@ export function MapView({
     };
   }, [drawMode, finishDrawing, setDraftBoth]);
 
+  // Filter sets changed: give each pin the ring of the set its event fits now (or none).
+  const ringsRef = useRef(new Map<string, string>());
+  useEffect(() => {
+    const before = ringsRef.current;
+    const now = new Map<string, string>();
+    markersRef.current.forEach(({ markers, event }, id) => {
+      const ring = tints?.get(event.id) ?? '';
+      if (ring) now.set(id, ring);
+      if ((before.get(id) ?? '') === ring) return;
+      const selected = id === pinOf(selectedRef.current);
+      markers.forEach((marker) => {
+        const o = marker.options as { ofmIcon?: string; ofmColor?: string; ofmShift?: number; ofmShiftY?: number };
+        marker.setIcon(
+          createMarkerIcon({
+            iconName: o.ofmIcon ?? event.category.icon,
+            color: o.ofmColor ?? event.category.markerColor,
+            severity: event.severity,
+            selected,
+            breaking: event.isBreaking,
+            compact: false, // all places of an event are equal
+            shift: o.ofmShift,
+            shiftY: o.ofmShiftY,
+            ring: ring || undefined,
+          }),
+        );
+      });
+    });
+    ringsRef.current = now;
+  }, [tints, markersVersion]);
+
   useEffect(() => {
     const layer = drawLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
+    for (const a of setAreas ?? []) {
+      if (a.points.length >= 3) L.polygon(a.points, { color: a.color, weight: 2, dashArray: '6 4', fillColor: a.color, fillOpacity: 0.06, interactive: false }).addTo(layer);
+    }
     const style = { color: '#0284c7', weight: 2, dashArray: '6 4', fillColor: '#0ea5e9', fillOpacity: 0.08, interactive: false };
     if (area && area.length >= 3 && !drawMode) L.polygon(area, style).addTo(layer);
     if (drawMode && draft.length) {
@@ -988,7 +1032,7 @@ export function MapView({
         L.circleMarker(p, { radius: 6, color: '#0284c7', weight: 2, fillColor: '#ffffff', fillOpacity: 1, interactive: false }).addTo(layer);
       }
     }
-  }, [area, draft, drawMode]);
+  }, [area, setAreas, draft, drawMode]);
 
   // Show the whole area once it is applied.
   useEffect(() => {

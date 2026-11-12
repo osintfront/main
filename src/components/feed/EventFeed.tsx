@@ -16,6 +16,8 @@ import { AlertCard } from './AlertCard';
 
 interface EventFeedProps {
   events: PublicEvent[];
+  /** Filter sets in force: event id → the set it fits (a tag on its card). */
+  setTags?: ReadonlyMap<string, { name: string; color: string }>;
   status: LoadStatus;
   error: string | null;
   isDemo: boolean;
@@ -83,6 +85,7 @@ function FeedSkeleton() {
 
 export function EventFeed({
   events,
+  setTags,
   status,
   error,
   isDemo,
@@ -278,7 +281,7 @@ export function EventFeed({
             {events.slice(0, shown).flatMap((event, index) => {
               const items = [
                 <li key={event.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_180px]">
-                  <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} onOpenDetails={onOpenDetails} />
+                  <EventCard event={event} selected={event.id === selectedId} now={now} onLocate={onLocate} isNew={newIds?.has(event.id) ?? false} onOpenDetails={onOpenDetails} setTag={setTags?.get(event.id)} />
                 </li>,
               ];
               if (adEvery && (index + 1) % adEvery === 0 && index < events.length - 1) {
