@@ -312,3 +312,43 @@ export function mayTag(spentUsd: number, budgetUsd: number | null, taggedToday: 
 export function israelDay(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
+
+/**
+ * Priority from the pasted text itself: a topic written in *bold* (a segment that starts with "*",
+ * even when the closing "*" is missing) is priority; a topic found in the text without "*" is not.
+ * The AI is not reliable at this (real check, 12 Nov: one star per theatre). Topics not found in the
+ * text keep what the AI said. Fingerprints are unchanged (priority is not part of them).
+ */
+export function markBold(theatres: CleanTheatre[], raw: string): CleanTheatre[] {
+  const clean = (x: string) => normalizeLabel(x).replace(/[.:]+$/, "").trim();
+  // One group of segments per line, with the line's theatre name (the same topic can be in two theatres).
+  const lines: { name: string; segs: { norm: string; bold: boolean }[] }[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const body = line.replace(/^\s*[\u05d0-\u05ea]{1,2}[.)]\s*/, "");
+    const dash = body.indexOf(" - ");
+    const name = dash >= 0 ? clean(body.slice(0, dash)) : "";
+    const segs: { norm: string; bold: boolean }[] = [];
+    for (const part of (dash >= 0 ? body.slice(dash + 3) : body).split(/\||\.\s+/)) {
+      const t = part.trim();
+      const norm = clean(t);
+      if (norm.length >= 4) segs.push({ norm, bold: t.startsWith("*") });
+    }
+    lines.push({ name, segs });
+  }
+  const all = lines.flatMap((l) => l.segs);
+  const match = (segs: { norm: string; bold: boolean }[], label: string) => {
+    const l = clean(label);
+    return segs.find((s) => s.norm === l) ?? segs.find((s) => l.length >= 6 && s.norm.length >= 6 && (s.norm.includes(l) || l.includes(s.norm)));
+  };
+  return theatres.map((th) => {
+    const n = clean(th.name);
+    const own = n ? lines.find((l) => l.name && (l.name === n || l.name.includes(n) || n.includes(l.name))) : undefined;
+    return {
+      ...th,
+      topics: th.topics.map((tp) => {
+        const seg = match(own?.segs ?? all, tp.label);
+        return seg ? { ...tp, priority: seg.bold } : tp;
+      }),
+    };
+  });
+}

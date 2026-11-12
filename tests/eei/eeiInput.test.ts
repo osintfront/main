@@ -151,3 +151,19 @@ test('split cache key ignores spacing', async () => {
   assert.equal(k, await parseCacheKey(`  ${sample.replace(/ \| /g, '  |  ')}\n\n`));
   assert.notEqual(k, await parseCacheKey(`${sample} x`));
 });
+
+// ─── Real check (12 Nov): the AI marked only one bold topic per theatre ─────────
+test('bold topics in the pasted text are priority, whatever the AI said', async () => {
+  const { markBold } = await import('../../supabase/functions/_shared/eeiInput.ts');
+  const ai = await cleanList({ theatres: (fixture.theatres as { topics: { priority: boolean }[] }[]).map((t) => ({ ...t, topics: t.topics.map((x) => ({ ...x, priority: false })) })) });
+  const out = markBold(ai.theatres, sample);
+  const prio = (name: string) => out.find((t) => t.name === name)!.topics.filter((x) => x.priority).map((x) => x.label);
+  assert.deepEqual(prio('איראן').sort(), ['מו"מ עם ארה"ב, גם בהקשרי המתווכת קטר', 'תקיפות אפשריות'].sort());
+  assert.deepEqual(prio('לבנון').sort(), ['BDA פעילות כוחותינו', 'העלאת מוכנות והצהרות בכירים'].sort());
+  assert.equal(prio('סוריה').length, 3);
+  assert.equal(prio('תימן/סעודיה').length, 3);
+  assert.deepEqual(prio('יו"ש'), ['תקופת מסיק']);
+  assert.ok(!prio('עזה').includes('הסכמים מדיניים בינלאומיים'));
+  // fingerprints do not change (priority is not part of them)
+  assert.deepEqual(out.map((t) => t.hash), ai.theatres.map((t) => t.hash));
+});

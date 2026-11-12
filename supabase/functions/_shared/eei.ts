@@ -5,7 +5,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { callClaude } from "./editor.ts";
 import {
-  batches, cleanList, cleanTagOutput, israelDay, LIMITS, mayTag, PARSE_TOOL, parseCacheKey, parseSystemPrompt,
+  batches, cleanList, cleanTagOutput, israelDay, LIMITS, markBold, mayTag, PARSE_TOOL, parseCacheKey, parseSystemPrompt,
   TAG_TOOL, tagSystemPrompt, tagUserMessage, theatreSpec, type CleanTheatre, type TagEvent, type TheatreSpec,
 } from "./eeiInput.ts";
 
@@ -51,7 +51,9 @@ export async function parseEei(db: Db, text: string): Promise<{ theatres: CleanT
     .gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()).maybeSingle();
   if (hit?.result?.theatres) return { theatres: (await cleanList(hit.result)).theatres, cached: true };
   const out = await forcedTool(PARSE_TOOL, parseSystemPrompt(), raw, "eei_parse", 6000);
-  const list = await cleanList(out);
+  const cleaned = await cleanList(out);
+  // Priority comes from the *bold* marks in the text itself (the AI misses most of them).
+  const list = { theatres: markBold(cleaned.theatres, raw) };
   if (list.theatres.length) {
     await db.from("ai_cache").upsert({ kind: "eei_parse", key, result: list, created_at: new Date().toISOString() }, { onConflict: "kind,key" });
   }
