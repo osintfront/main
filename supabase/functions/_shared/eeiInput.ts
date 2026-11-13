@@ -352,3 +352,40 @@ export function markBold(theatres: CleanTheatre[], raw: string): CleanTheatre[] 
     };
   });
 }
+
+// ─── One split of a pasted list: counting toward the daily limit ───────────────────
+export interface ParseDeps<T extends { theatres: unknown[] } = { theatres: unknown[]; cached: boolean }> {
+  /** The same text was split in the last 7 days (costs nothing). */
+  cached: () => Promise<boolean>;
+  overBudget: () => Promise<boolean>;
+  /** Count one split; false = the daily limit is reached. */
+  count: () => Promise<boolean>;
+  /** Give the counted split back. */
+  uncount: () => Promise<void>;
+  parse: () => Promise<T>;
+}
+
+/**
+ * Users with a limit (subscribers) are counted once per new split; staff and internal calls are not.
+ * A split that fails or finds nothing is given back.
+ */
+export async function runParse<T extends { theatres: unknown[] }>(
+  d: ParseDeps<T>, o: { uid: string | null; limitless: boolean },
+): Promise<T | "budget" | "quota"> {
+  let counted = false;
+  if (o.uid && !(await d.cached())) {
+    if (await d.overBudget()) return "budget";
+    if (!o.limitless) {
+      if (!(await d.count())) return "quota";
+      counted = true;
+    }
+  }
+  try {
+    const r = await d.parse();
+    if (counted && !r.theatres.length) await d.uncount();
+    return r;
+  } catch (e) {
+    if (counted) await d.uncount().catch(() => {});
+    throw e;
+  }
+}

@@ -38,7 +38,7 @@ import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { cleanHistory, cleanIds } from "../_shared/askInput.ts";
 import { eeiBudget, eeiSpentToday, parseEei, saveEei, tagTheatre } from "../_shared/eei.ts";
-import { LIMITS as EEI_LIMITS, parseCacheKey } from "../_shared/eeiInput.ts";
+import { LIMITS as EEI_LIMITS, parseCacheKey, runParse } from "../_shared/eeiInput.ts";
 import { dedupeRecent, dropRepeats } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { saveEventTerms } from "../_shared/eventTerms.ts";
@@ -658,6 +658,7 @@ async function handle(req: Request): Promise<Response> {
     // Signed-in active Pro / Max users (staff always); eei_parse also with the cron secret (internal checks).
     const internal = action === "eei_parse" && await cronOk(req);
     let uid: string | null = null;
+    let limitless = false;
     if (!internal) {
       const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
         auth: { persistSession: false },
@@ -670,23 +671,31 @@ async function handle(req: Request): Promise<Response> {
       if (prof?.status !== "active") return json({ error: "sign in required" }, 401);
       const { data: allowed } = await db.rpc("eei_allowed", { p_uid: uid });
       if (!allowed?.enabled) return json({ error: "upgrade" }, 429);
+      limitless = allowed.limit == null;
     }
     try {
       if (action === "eei_parse") {
         const text = String(body?.text ?? "").slice(0, EEI_LIMITS.raw);
         if (text.trim().length < 10) return json({ error: "empty" }, 422);
-        // A split already cached costs nothing and is not counted.
-        const r = await (async () => {
-          const { data: hit } = await db.from("ai_cache").select("key").eq("kind", "eei_parse").eq("key", await parseCacheKey(text))
-            .gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()).maybeSingle();
-          if (!hit && uid) {
+        // A split already cached costs nothing and is not counted; staff have no daily limit;
+        // a split that fails or finds nothing is given back (runParse).
+        const r = await runParse({
+          cached: async () => {
+            const { data: hit } = await db.from("ai_cache").select("key").eq("kind", "eei_parse").eq("key", await parseCacheKey(text))
+              .gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString()).maybeSingle();
+            return !!hit;
+          },
+          overBudget: async () => {
             const budget = await eeiBudget(db);
-            if (budget != null && (await eeiSpentToday(db)) >= budget) return "budget" as const;
-            const { data: counted } = await db.rpc("eei_count", { p_uid: uid, p_kind: "parse" });
-            if (!counted) return "quota" as const;
-          }
-          return await parseEei(db, text);
-        })();
+            return budget != null && (await eeiSpentToday(db)) >= budget;
+          },
+          count: async () => !!(await db.rpc("eei_count", { p_uid: uid, p_kind: "parse" })).data,
+          uncount: async () => {
+            const { data: row } = await db.from("eei_lists").select("parse_count").eq("user_id", uid).maybeSingle();
+            if (row && row.parse_count > 0) await db.from("eei_lists").update({ parse_count: row.parse_count - 1 }).eq("user_id", uid);
+          },
+          parse: () => parseEei(db, text),
+        }, { uid, limitless });
         if (r === "budget" || r === "quota") return json({ error: r }, 429);
         if (!r.theatres.length) return json({ error: "empty" }, 422);
         return json({ ok: true, theatres: r.theatres, cached: r.cached });
