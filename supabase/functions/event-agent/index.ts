@@ -25,6 +25,10 @@
 //   {action:"deep_refresh", entry_id, poll?}  staff (or cron secret) — rewrite an entry (old content kept one step back).
 //   {action:"deep_update", entry_id, patch}   staff — hand edit of an entry (names, texts, sections, sources, picture).
 //   {action:"deep_remove", entry_id}          staff — remove an entry and its names.
+//   {action:"media_translate", event_id, poll?, redo?}  Pro / Max / Intel / staff (or cron secret = staff) — "Translate
+//                                image/video" after Expand: reads the event's pictures and videos once (Gemini writes a video's
+//                                speech down through /api/transcribe, one Claude call reads, translates and summarises), saves one
+//                                row per media item; a background job polled by the browser. redo = staff "Run again".
 //   {action:"classify_channels"} cron secret — region of public Telegram channels without one (batch of 120).
 //   {action:"dedupe", minutes?}  cron secret — fold duplicate reports of one incident into one event
 //                                (events created since the last run vs. the last 12 hours).
@@ -46,6 +50,8 @@ import { saveEventTerms } from "../_shared/eventTerms.ts";
 import { jobState, ownersOf, writeEntry } from "../_shared/deep.ts";
 import { aliasPlan, cleanPatch, DEEP_LIMITS, nextStep, overAfterClaim, staleJob } from "../_shared/deepInput.ts";
 import { normTerm } from "../_shared/terms.ts";
+import { loadItems, speechOn, translateMedia } from "../_shared/media.ts";
+import { mediaNextStep, mediaOverAfterClaim, pickTodo, staleMediaJob } from "../_shared/mediaInput.ts";
 import { TRANSLATE_API_URL, translateBriefChain } from "../_shared/translate.ts";
 import { AGENT_EXCLUDED_CATEGORIES } from "../_shared/categoryRules.ts";
 import { classifyChannels } from "../_shared/channels.ts";
@@ -211,6 +217,74 @@ async function deepAction(action: string, body: Record<string, any>, uid: string
     for (const alias of plan.add) await db.from("deep_aliases").insert({ alias, entry_id: id });
   }
   return json({ ok: true, version: Number(old.version ?? 1) + 1 });
+}
+
+/** media_translate: serve / wait / refuse / start one background reading of the event's media. */
+async function mediaAction(eventId: string, o: { uid: string | null; staff: boolean; redo: boolean; poll: boolean }): Promise<Response> {
+  if (!UUID.test(eventId)) return json({ error: "bad id" }, 400);
+  const { data: ev } = await db.from("events").select("status,deleted_at").eq("id", eventId).maybeSingle();
+  if (!ev || ev.deleted_at || !["published", "archived"].includes(ev.status)) return json({ error: "not found" }, 404);
+  const refund = (uid: string | null) => uid ? db.rpc("refund_feature", { p_uid: uid, p_key: "media_translate" }) : Promise.resolve(null);
+
+  let { data: row } = await db.from("media_jobs").select("busy_until,retry_after,fail_reason,started_by,staff").eq("event_id", eventId).maybeSingle();
+  // A lease that ran out with no answer: the worker died — mark it failed and give the starter's use back.
+  if (staleMediaJob(row, Date.now())) {
+    const { data: gone } = await db.from("media_jobs")
+      .update({ busy_until: null, busy_token: null, fail_reason: "failed", retry_after: new Date(Date.now() + 10 * 60_000).toISOString() })
+      .eq("event_id", eventId).eq("busy_until", row!.busy_until).select("event_id");
+    if (gone?.length && !row!.staff) await db.rpc("refund_feature", { p_uid: row!.started_by, p_key: "media_translate" });
+    ({ data: row } = await db.from("media_jobs").select("busy_until,retry_after,fail_reason,started_by,staff").eq("event_id", eventId).maybeSingle());
+  }
+  const now = Date.now();
+  const on = await speechOn(db);
+  const { items, readings } = await loadItems(db, eventId);
+  const todo = pickTodo(items, readings, { speechOn: on, redo: false });
+  const ids = new Set(items.map((i) => i.id));
+  const [{ data: spent }, { data: flight }, { data: setting }] = await Promise.all([
+    db.rpc("media_spent_today"), db.rpc("media_in_flight"),
+    db.from("app_settings").select("value").eq("key", "media_daily_budget_usd").maybeSingle(),
+  ]);
+  const budget = setting?.value == null ? null : Number(setting.value);
+  const budgetUsd = budget == null || !Number.isFinite(budget) ? null : budget;
+  const step = mediaNextStep({
+    items: items.length, todo: todo.length, hasRows: readings.some((r) => ids.has(r.media_id)), redo: o.redo,
+    leaseHeld: !!row?.busy_until && new Date(row.busy_until).getTime() > now, poll: o.poll,
+    failed: row?.fail_reason === "failed", retryLater: !!row?.retry_after && new Date(row.retry_after).getTime() > now,
+    staff: o.staff, spentUsd: Number(spent ?? 0) || 0, budgetUsd,
+    inFlight: Number(flight?.all ?? 0) || 0, readersInFlight: Number(flight?.readers ?? 0) || 0,
+  });
+  if (step === "pending") return json({ pending: true }, 202);
+  if (step === "serve") return json({ ok: true });
+  if (step === "no_media") return json({ error: "no_media" }, 404);
+  if (step === "failed") return json({ error: "failed" }, 409);
+  if (step === "budget" || step === "busy") return json({ error: step }, 429);
+
+  // start: count the use, take the lease, count again with this run included, then work in the background.
+  if (o.uid) {
+    const { data: use, error: useErr } = await db.rpc("consume_feature", { p_uid: o.uid, p_key: "media_translate" });
+    if (useErr) return json({ error: "error" }, 503);
+    if (!use?.ok) return json({ error: use?.reason ?? "quota_exceeded", used: use?.used, limit: use?.limit }, 429);
+  }
+  const { data: token } = await db.rpc("media_claim", { p_event: eventId, p_uid: o.uid, p_staff: o.staff });
+  if (!token) {
+    await refund(o.uid);
+    return json({ pending: true }, 202);
+  }
+  const [{ data: spent2 }, { data: flight2 }] = await Promise.all([db.rpc("media_spent_today"), db.rpc("media_in_flight")]);
+  const over = mediaOverAfterClaim({
+    staff: o.staff, spentUsd: Number(spent2 ?? 0) || 0, budgetUsd,
+    all: Number(flight2?.all ?? 0) || 0, readers: Number(flight2?.readers ?? 0) || 0,
+  });
+  if (over) {
+    await db.rpc("media_done", { p_event: eventId, p_token: token, p_fail: null, p_cost: 0 });
+    await refund(o.uid);
+    return json({ error: over }, 429);
+  }
+  const work = translateMedia(db, { eventId, token, uid: o.uid, staff: o.staff, redo: o.redo });
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(work);
+  else await work;
+  return json({ pending: true, started: true }, 202);
 }
 
 async function cronOk(req: Request) {
@@ -750,6 +824,33 @@ async function handle(req: Request): Promise<Response> {
     if (action !== "deep_write" && !staff) return json({ error: "forbidden" }, 403);
     try {
       return await deepAction(action, body ?? {}, uid, staff, internal);
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "media_translate") {
+    // Signed-in active users whose plan has media_translate (staff always); the cron secret counts as staff.
+    const internal = await cronOk(req);
+    let uid: string | null = null;
+    let staff = internal;
+    if (!internal) {
+      const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        auth: { persistSession: false },
+        global: { headers: { Authorization: req.headers.get("authorization") ?? "" } },
+      });
+      const { data: who } = await asUser.auth.getUser();
+      uid = who?.user?.id ?? null;
+      if (!uid) return json({ error: "sign in required" }, 401);
+      const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
+      if (prof?.status !== "active") return json({ error: "sign in required" }, 401);
+      const { data: allowed } = await db.rpc("media_allowed", { p_uid: uid });
+      if (!allowed?.enabled) return json({ error: "not_in_plan" }, 429);
+      staff = allowed.staff === true;
+    }
+    const redo = body?.redo === true;
+    if (redo && !staff) return json({ error: "forbidden" }, 403);
+    try {
+      return await mediaAction(String(body?.event_id ?? ""), { uid, staff, redo, poll: body?.poll === true });
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }
