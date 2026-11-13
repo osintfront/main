@@ -87,7 +87,7 @@ export async function speechFor(
 export interface MediaJob { eventId: string; token: string; uid: string | null; staff: boolean; redo: boolean }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const noSpeech = (state: RouteSpeech["state"]): RouteSpeech => ({ state, lang: "und", seconds: null, speech: "", onScreen: [], cut: false });
+const noSpeech = (state: RouteSpeech["state"]): RouteSpeech => ({ state, lang: "und", seconds: null, speech: "", onScreen: [], cut: false, segments: [] });
 
 /** One Claude turn with a time limit; a transient error is retried once after 5 s; a missing model → the next one. */
 async function claude(body: Record<string, unknown>, purpose: string, deadline: number): Promise<{ out: any; model: string }> {
@@ -210,7 +210,14 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
       description_he: fixTerms(r.description_he),
       description_en: r.description_en,
       texts: r.texts.map((t) => ({ ...t, he: fixTerms(t.he), where_he: fixTerms(t.where_he) })),
-      speech: r.speech ? { ...r.speech, he: fixTerms(r.speech.he), summary_he: fixTerms(r.speech.summary_he) } : null,
+      speech: r.speech
+        ? {
+          ...r.speech,
+          he: fixTerms(r.speech.he),
+          summary_he: fixTerms(r.speech.summary_he),
+          ...(r.speech.segments ? { segments: r.speech.segments.map((l) => ({ ...l, he: fixTerms(l.he) })) } : {}),
+        }
+        : null,
       model,
       version: versions.has(r.media_id) ? versions.get(r.media_id)! + 1 : 1,
       created_by: job.uid,
