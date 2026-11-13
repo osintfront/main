@@ -84,3 +84,15 @@ test('mapTranslation: the staff speech note', () => {
   for (const v of [undefined, 5, '']) assert.equal(mapTranslation({ items: [], speech_note: v })!.speechNote, null);
   assert.equal(mapTranslation({ items: [], speech_note: 'x'.repeat(1000) })!.speechNote!.length, 300);
 });
+
+test('mapTranslation: boxes and timed lines', () => {
+  const one = (box: unknown) => mapTranslation({ items: [{ media_id: 'p', kind: 'image', texts: [{ orig: 'x', lang: 'ar', he: 'a', en: 'b', box }] }] })!.items[0].texts[0].box;
+  assert.deepEqual(one([100, 100, 300, 600]), [100, 100, 300, 600]);
+  for (const b of [[1, 2, 3], [300, 0, 100, 5], [0, 0, 2000, 5], 'x', undefined]) assert.equal(one(b), null, JSON.stringify(b));
+  const sp = mapTranslation({ items: [{ media_id: 'v', kind: 'video', texts: [], speech: { state: 'ok', segments: [
+    { start: 0, end: 2, orig: 'o', he: 'ה', en: 'E' }, { start: 5, end: 2, orig: 'o', he: '', en: '' }, { start: 'a', end: 3 },
+  ] } }] })!.items[0].speech!;
+  assert.deepEqual(sp.segments, [{ start: 0, end: 2, orig: 'o', he: 'ה', en: 'E' }]);
+  const old = mapTranslation({ items: [{ media_id: 'v', kind: 'video', texts: [], speech: { state: 'ok', orig: 'x' } }] })!.items[0].speech!;
+  assert.deepEqual(old.segments, []);
+});
