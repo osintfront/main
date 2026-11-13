@@ -1,4 +1,4 @@
-# Several classifications (multi-category) — design (owner's answers 2026-11-13; spec awaiting review)
+# Several classifications (multi-category) — design (owner's answers 2026-11-13, casualties part revised the same day; spec awaiting review)
 
 Project-plan row: "Several classification" — "Show 1-3 categories, for example: death by an air
 plane (Death, Airstrike)"; "Tank strike towards a village from another village (Artillery strike,
@@ -12,7 +12,8 @@ Owner: Ben. Part 4 of 5 in the agreed order (ask the map → several filters →
 2. The map icon, its colour, the legend and the sound follow the main type only.
 3. Choosing a type in the filters also finds events that carry it as a secondary type; a switch
    turns that off.
-4. A new type **Casualties (נפגעים)** exists, usable as main or secondary.
+4. Two new types exist: **Killed (הרוגים)** and **Wounded (פצועים)**. Reported deaths become the
+   main type (skull icon) and the strike becomes secondary; wounded alone is a secondary type.
 5. Nothing changes for an event without secondary types. No extra AI calls.
 
 ## Decisions
@@ -21,7 +22,8 @@ Owner: Ben. Part 4 of 5 in the agreed order (ask the map → several filters →
   *the same incident* from another side (killed **by** an airstrike; tank fire **and** foreign
   forces seen). Rule of thumb: different places → split; same place, several sides → secondary.
 - **Secondary types count in type filters by default, with a switch to turn it off (answer 1a).**
-- **New category `casualties` in this spec (answer 3b)** — own section below.
+- **Two new categories, `killed` and `wounded`, in this spec (answer 3b, revised)** — they
+  replace the single "Casualties" idea because each needs its own icon. Own section below.
 - **New events only (answer 4a).** No backfill, no re-run of the editor on old events.
 - **Stored as slugs on the event row**, not a link table: at most two values, and slugs are
   already how places (`locations[].category_slug`), filters and the registry name a type.
@@ -63,7 +65,7 @@ Owner: Ben. Part 4 of 5 in the agreed order (ask the map → several filters →
   drops the result's own `category_slug`, caps at two.
 - Prompt rule (added next to `CATEGORY_RULES` in `_shared/categoryRules.ts`, so every agent
   shares it): "Secondary types: only when the **same incident** is truly also of that kind
-  (a person killed by an airstrike → the other of assassination / casualties / airstrike; tank
+  (people killed by an airstrike → killed + airstrike, see the killed / wounded rules; tank
   fire together with foreign forces seen → force-sighting). Empty for most reports. Never repeat
   the main type. Do not use it for a different incident in another place — tag that place."
 - Writers save the column: `whatsapp-ingest` (the editor step, `placePart`), `event-agent` edit,
@@ -79,44 +81,75 @@ Owner: Ben. Part 4 of 5 in the agreed order (ask the map → several filters →
 - After a split the **original** drops every secondary type that became a sibling (otherwise the
   same airstrike is counted twice: once as the sibling, once as a secondary).
 - **Siblings start with no secondary types** (`secondary_categories` is not in `CLONE`).
+- **A main type that no place carries survives a split.** Today, when the event's own type is
+  not among the place kinds, the original takes the kind of the group it keeps — a `killed` or
+  `assassination` main would be lost. New rule: for main `killed`, `wounded` or `assassination`
+  the original keeps its main type and takes the kept group's kind as a secondary type. Siblings
+  get the plain kind of their places, as today.
 - `dedupe.ts` keeps comparing main types only.
 
-## New category: Casualties (נפגעים)
-- **Meaning:** a report whose news is people killed or wounded — tolls, hospital and rescue
-  reports, updated counts, deaths where the means is not known.
-- **Main or secondary — what the headline is about decides:**
-  - "Three killed in an airstrike on X" → main `casualties`, secondary `airstrike` (the owner's
-    example).
-  - "Airstrike on X", wounded mentioned in the body → main `airstrike`, secondary `casualties`.
-  - A targeted killing of a named person stays `assassination` (may take `casualties` or the
-    means as secondary).
-  - A place is tagged `casualties` only when the means is unknown; otherwise the place keeps the
-    kind of the attack (so reports are not split into "strike" and "casualties" for one place).
-- **Row** (migration `…_casualties_category.sql`, pattern of `20261023000034_artillery_category.sql`,
-  `on conflict (slug) do update`): slug `casualties`, name `Casualties (killed, wounded)`,
-  description as above, `translations {"he":"נפגעים"}`, sort order directly after `assassination`.
-- **Icon:** `HeartPulse` (lucide). The whitelist `CATEGORY_ICONS` has no fitting icon today
-  (`HeartHandshake` is the humanitarian type), so `HeartPulse` is added to the whitelist — one
-  import and one line. **Colour:** `#701a75` (dark magenta; the reds are all taken by other
-  types). Both are shown to the owner on the preview before the editor starts using the type.
-- **Every hard-coded list that needs the new slug** (found by searching `artillery-shelling`):
+## New categories: Killed (הרוגים) and Wounded (פצועים)
+- **Rules for the editor (owner's wording, in order):**
+  1. **Targeted killing** — a specific person was the target → main `assassination`, secondary
+     `killed` (the means, e.g. `airstrike`, may take the second slot).
+  2. **Deaths reported, not a targeted killing** → main `killed`, secondary the kinetic type
+     (airstrike, artillery-shelling, shooting-gunfire, explosion…).
+  3. **Deaths and wounded** → main `killed`; secondary the kinetic type and/or `wounded`. At most
+     two secondaries; when only one slot is free the kinetic type wins over `wounded`.
+  4. **Only wounded** → the strike (or other kinetic type) stays main, `wounded` is secondary.
+  5. No kinetic type can be told from the report (a hospital toll, "two wounded in X") → the
+     main type is `killed` if there are deaths, otherwise `wounded` — the only case where
+     `wounded` is a main type.
+  - Deaths that are not from violence (accident, illness, disaster) keep today's types.
+  - **Places are tagged with the kind of the attack, not with `killed` / `wounded`** (unless the
+    means is unknown), so one place is never split into "strike" and "killed".
+- **Where the rules live:** `_shared/categoryRules.ts` (shared by every agent), the triage
+  prompt in `whatsapp-ingest/index.ts` (it picks the main type there) and the crawler prompt in
+  `_shared/editor.ts`.
+- **Rows** (migration `…_killed_wounded_categories.sql`, pattern of
+  `20261023000034_artillery_category.sql`, `on conflict (slug) do update`), sort order directly
+  after `assassination`:
+
+  | slug | name | he | icon | colour |
+  |---|---|---|---|---|
+  | `killed` | Killed | הרוגים | `Skull` (lucide) | `#27272a` (near black) |
+  | `wounded` | Wounded | פצועים | `MedicalCross` (own icon) | `#701a75` (dark magenta) |
+
+- **Icons — why these:**
+  - `Skull` is the clearest death symbol and reads at 15 px. Added to the whitelist
+    `CATEGORY_ICONS` (one import, one line).
+  - Wounded: a **thick, equal-armed medical cross** drawn as an own icon in
+    `src/data/customIcons` (next to `Artillery`, `Quadcopter`…). At 15 px on a coloured pin it is
+    the clearest: lucide `BriefcaseMedical`, `Hospital` and `Ambulance` have small inner details
+    that blur at that size, lucide `Plus` is a thin line that reads as "add", and lucide `Cross`
+    is a Christian cross and must not be used.
+  - Colours: the reds are all taken by other types. Near black for deaths may be weak on the dark
+    map — both icons and colours are confirmed by the owner on the preview (light and dark map).
+- **Every hard-coded list that needs the two new slugs** (found by searching `artillery-shelling`):
   - `src/types/category.ts` — the slug list.
-  - `src/data/categoryRegistry.ts` — `CATEGORY_ICONS` (+`HeartPulse`) and `DEFAULT_CATEGORIES`.
-  - `src/i18n/he.ts` / `en.ts` — `category.casualties`: נפגעים / Casualties.
+  - `src/data/categoryRegistry.ts` — `CATEGORY_ICONS` (+`Skull`, +`MedicalCross`) and
+    `DEFAULT_CATEGORIES`; `src/data/customIcons` — the new icon.
+  - `src/i18n/he.ts` / `en.ts` — `category.killed`: הרוגים / Killed; `category.wounded`:
+    פצועים / Wounded.
   - `supabase/functions/_shared/eeiInput.ts` — `CATEGORY_SLUGS` (the equality test in
     `tests/eei/eeiInput.test.ts` fails until both lists match).
-  - `supabase/functions/_shared/splitEvent.ts` — `HE` (`casualties: "נפגעים"`) and `EN`.
-  - `supabase/functions/_shared/categoryRules.ts` — the guidance above.
-  - `supabase/functions/whatsapp-ingest/index.ts` — the triage prompt's list of kinds.
-  - `supabase/functions/_shared/editor.ts` — the per-place examples in `SYSTEM_DETAILED_PLACES`.
-  - `supabase/functions/_shared/ask.ts` — the hint "who was killed → assassination, casualties".
-  - `supabase/functions/_shared/dedupe.ts` — `FAMILY`: `casualties: "kinetic"` (a toll may be the
-    same incident as the strike). **Not** in `MOMENT` (tolls are repeated for hours).
-  - `api/_lib/pushFormat.ts` — emoji and Hebrew name.
+  - `supabase/functions/_shared/splitEvent.ts` — `HE` (`killed: "הרוגים"`, `wounded: "פצועים"`)
+    and `EN`.
+  - `supabase/functions/_shared/categoryRules.ts`, `whatsapp-ingest/index.ts` (triage prompt),
+    `_shared/editor.ts` (crawler prompt and the per-place examples in `SYSTEM_DETAILED_PLACES`).
+  - `supabase/functions/_shared/ask.ts` — the hint "who was killed → assassination, killed".
+  - `supabase/functions/_shared/dedupe.ts` — `FAMILY`: both `"kinetic"` (a death report may be
+    the same incident as another source's strike report). **Not** in `MOMENT` (tolls are repeated
+    and updated for hours).
+  - `api/_lib/pushFormat.ts` — emoji and Hebrew name for both.
   - `supabase/migrations/20261026000056_place_edits.sql` has a Hebrew name `case` by slug: the
-    implementer re-creates that function with the new slug in the new migration.
+    implementer re-creates that function with the new slugs in the new migration.
 - Legend, filter chips, sound menu and admin selects read the category list and need no further
-  change. Test fixtures that mention slugs stay as they are.
+  change: the legend shows the skull for events whose main type is `killed`; `wounded` appears
+  there only in the rare case it is a main type. Test fixtures that mention slugs stay as they are.
+- **Effect to expect:** strike reports with deaths now show the skull instead of the strike's
+  icon. They are still found under Airstrike / Artillery… in the filters (secondary types count
+  by default), but the legend's strike counts go down. Checked in the rollout review.
 
 ## Client model
 - `src/services/eventService.ts`: add `secondary_categories` to the selected columns and row
@@ -162,7 +195,7 @@ Owner: Ben. Part 4 of 5 in the agreed order (ask the map → several filters →
   - `EventEditorPage.tsx`: the same control in the form; the compose result pre-fills it.
   - `EventsListPage.tsx`: secondary types shown as small chips next to the inline select
     (read-only there). `eventAdminService.ts` selects the new column.
-- **i18n (he + en):** `category.casualties`, `filters.includeSecondary`, `event.alsoTypes`,
+- **i18n (he + en):** `category.killed`, `category.wounded`, `filters.includeSecondary`, `event.alsoTypes`,
   `form.secondaryTypes`, `form.addSecondaryType`, `form.secondaryLimit`.
 
 ## Push (`api/push.ts`, `api/_lib/pushFormat.ts`)
@@ -187,30 +220,33 @@ notification text keeps naming the main type only.
 - Sending secondary types to the EEI server tagger.
 
 ## Testing
-- **SQL (`supabase/tests/multi_category.sql`, style of `eei_text.sql`):** the `casualties` row
-  exists and is active; the trigger removes main / duplicates / unknown and caps at two; the RPC
+- **SQL (`supabase/tests/multi_category.sql`, style of `eei_text.sql`):** the `killed` and `wounded`
+  rows exist and are active; the trigger removes main / duplicates / unknown and caps at two; the RPC
   refuses a viewer and accepts an analyst; both views expose the column last; `ai_search_candidates`
   returns an event matched only by a secondary type, ranked below a main match.
 - **node:test:**
   - `tests/filters/eventFilters.test.ts` — secondary match on by default, off with `mainOnly`.
   - `tests/filters/filterSets.test.ts` — the same inside a set; a stored set without the field.
   - `tests/eei/` — `topicFallback` matches a secondary type; the slug-equality test passes with
-    `casualties`.
+    `killed` and `wounded`.
   - New `tests/categories/secondary.test.ts` — editor `normalise` (cap, distinct, main dropped) and
-    the split pruning rule (extracted as a pure function for the test).
+    the split pruning rule and the rule that a `killed` main survives a split (pure functions extracted for the test).
 - **Playwright, mocked (`tests/e2e/multi-category.mock.cjs`, harness of `filter-sets.mock.cjs`):**
-  an event "casualties + airstrike" shows two badges and the casualties icon; choosing Airstrike
+  an event "killed + airstrike" shows two badges and the skull icon; an event "airstrike + wounded"
+  keeps the airstrike icon; choosing Airstrike
   keeps it and the count includes it; clearing the checkbox hides it; Hebrew and English labels.
 - `npm run build` and the existing suites stay green.
 
 ## Rollout (each step shown to the owner before the next)
 1. This spec approved → implementation plan approved.
-2. Migration: Casualties category (the type appears in filters and admin selects; the icon and
-   colour are confirmed on the preview).
+2. Migration: Killed and Wounded categories (the types appear in filters and admin selects; the
+   skull and the medical cross, with their colours, are confirmed on the preview — light and
+   dark map).
 3. Migration: `secondary_categories`, trigger, views, RPC (nothing visible yet).
 4. Site: badges, filter switch, counts, EEI fallback, search box — checked on the preview with a
    few events given secondary types by hand.
 5. Admin editing.
 6. Editor and ingest functions (prompt, writers, split pruning). The owner reviews about 50 live
-   events for over-tagging and for how often the main type became Casualties.
+   events: over-tagging, deaths → main Killed with the strike as secondary, wounded only →
+   secondary, targeted killings still Assassination, and how many strike icons turned into skulls.
 7. Push, ask the map, public API.
