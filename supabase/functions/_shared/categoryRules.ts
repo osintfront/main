@@ -13,6 +13,7 @@ Category rules (they override any other hint):
 - killed: people were killed and it is not a targeted killing → main killed, secondary the kind of the attack ("Three killed in an airstrike on X" → main killed, secondary airstrike).
 - killed and wounded: main killed; secondary the kind of the attack and/or wounded ("An airstrike on X killed two and wounded five" → main killed, secondary airstrike, wounded).
 - wounded only (nobody killed): the kind of the attack stays the main type, wounded is secondary ("Airstrike on X, two wounded" → main airstrike, secondary wounded).
+- If anyone died in a violent incident (killed, dead, a body; נהרג / נהרגה / הרוגים / מת), killed is the main type (secondary for an assassination) — never Wounded alone ("A woman was killed and her children wounded in shelling on X" → main killed, secondary artillery-shelling, wounded).
 - no kind of attack known: main killed, or wounded when nobody died ("Two bodies found in X" → main killed).
 - Deaths not caused by violence (accident, illness, disaster) keep their own kind (fire, natural-disaster, infrastructure-incident…), not killed / wounded.
 - A place is tagged with the kind of the attack there, never killed / wounded, unless the means is unknown.
