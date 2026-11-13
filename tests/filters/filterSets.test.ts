@@ -179,3 +179,16 @@ test('saved sets: at most 6 are kept', () => {
   const many = Array.from({ length: 50 }, (_, i) => ({ id: `x${i}`, name: 'n', color: SET_COLORS[0], enabled: true, filter: EMPTY_SET_FILTER }));
   assert.equal(sanitizeSets(many).length, 6);
 });
+
+// ─── Secondary event types ─────────────────────────────────────────────────────
+test('sets: secondary types match unless main only; old sets get mainOnly false', () => {
+  const K = ev({ category: { slug: 'killed' }, secondaryCategories: [{ slug: 'airstrike' }] });
+  const stored = { ...set({ categories: ['airstrike'] }) } as FilterSet;
+  // deno-lint-ignore no-explicit-any
+  delete (stored.filter as any).mainOnly;
+  const [s] = sanitizeSets([stored]);
+  assert.equal(s.filter.mainOnly, false);
+  assert.equal(matchesSetFilter(K, s.filter, NOW), true);
+  assert.equal(matchesSetFilter(K, { ...s.filter, mainOnly: true }, NOW), false);
+  assert.equal(isEmptySet({ ...EMPTY_SET_FILTER, mainOnly: true }), true);
+});

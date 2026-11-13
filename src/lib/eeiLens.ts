@@ -1,5 +1,5 @@
 import type { PublicEvent } from '@/types/event';
-import { eventAreas } from './eventFilters.ts';
+import { eventAreas, eventCategorySlugs } from './eventFilters.ts';
 import { compileEei, matchesEei } from './eei.ts';
 import { SET_COLORS } from './filterSets.ts';
 
@@ -72,7 +72,7 @@ export function topicFallback(e: PublicEvent, topic: EeiTopic): boolean {
   const hasCats = topic.categories.length > 0;
   const hasQuery = topic.query.trim().length > 0;
   if (!hasCats && !hasQuery) return false;
-  if (hasCats && !topic.categories.includes(e.category.slug)) return false;
+  if (hasCats && !eventCategorySlugs(e, true).some((s) => topic.categories.includes(s))) return false;
   return !hasQuery || matchesEei(e, compiled(topic.query));
 }
 

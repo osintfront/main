@@ -227,6 +227,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     isBreaking: !!row.is_breaking,
     isVerified: !!row.is_verified,
     category,
+    secondaryCategories: [],
     translations: row.translations && typeof row.translations === 'object' ? (row.translations as PublicEvent['translations']) : {},
     reportGroup: typeof row.report_group === 'string' && row.report_group ? row.report_group : null,
     mediaKinds: Array.isArray(row.media_kinds) ? (row.media_kinds.filter((k) => k === 'image' || k === 'video' || k === 'document') as MediaKind[]) : [],

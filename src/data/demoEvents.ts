@@ -37,6 +37,7 @@ export function buildDemoEvents(): PublicEvent[] {
       isBreaking: true,
       isVerified: true,
       category: demoCategoryRef('missile-rocket-attack'),
+      secondaryCategories: [],
     },
     {
       ...base,
@@ -59,6 +60,7 @@ export function buildDemoEvents(): PublicEvent[] {
       isBreaking: false,
       isVerified: true,
       category: demoCategoryRef('fire'),
+      secondaryCategories: [],
     },
     {
       ...base,
@@ -80,6 +82,7 @@ export function buildDemoEvents(): PublicEvent[] {
       isBreaking: false,
       isVerified: false,
       category: demoCategoryRef('protest-civil-unrest'),
+      secondaryCategories: [],
     },
     {
       ...base,
@@ -101,6 +104,7 @@ export function buildDemoEvents(): PublicEvent[] {
       isBreaking: false,
       isVerified: true,
       category: demoCategoryRef('political-event'),
+      secondaryCategories: [],
     },
     {
       ...base,
@@ -122,6 +126,7 @@ export function buildDemoEvents(): PublicEvent[] {
       isBreaking: false,
       isVerified: false,
       category: demoCategoryRef('infrastructure-incident'),
+      secondaryCategories: [],
     },
   ];
 }

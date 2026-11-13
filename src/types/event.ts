@@ -107,6 +107,8 @@ export interface PublicEvent {
   isBreaking: boolean;
   isVerified: boolean;
   category: CategoryRef;
+  /** Up to two more types (e.g. Killed + Airstrike); the main type is `category`. */
+  secondaryCategories: CategoryRef[];
   translations: EventTranslations;
   /** Kinds of media attached (for the media filter). */
   mediaKinds?: MediaKind[];
@@ -161,6 +163,8 @@ export interface EventInput {
   description: string;
   originalReportText: string;
   categoryId: string | null;
+  /** Secondary type slugs (undefined = leave as they are). */
+  secondarySlugs?: string[];
   severity: Severity;
   latitude: number | null;
   longitude: number | null;

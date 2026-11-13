@@ -141,3 +141,8 @@ test('colours cycle through the set colours', () => {
   assert.equal(theatreColor(0), '#7c3aed');
   assert.equal(theatreColor(6), '#7c3aed');
 });
+
+test('keyword fallback sees secondary types', () => {
+  const K = ev({ category: { slug: 'killed' }, secondaryCategories: [{ slug: 'airstrike' }] });
+  assert.equal(topicFallback(K, { key: 't', label: '', priority: false, categories: ['airstrike'], query: '' }), true);
+});

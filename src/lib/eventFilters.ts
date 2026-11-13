@@ -34,6 +34,8 @@ export interface EventFilters {
   polygon: LatLng[] | null;
   /** Active צי"ח (EEI) ids: an event must match at least one (matched in MapPage, see lib/eei). */
   eeis: string[];
+  /** Type filter looks at the main type only (default: main or secondary). */
+  mainOnly: boolean;
 }
 
 export const EMPTY_FILTERS: EventFilters = {
@@ -50,6 +52,7 @@ export const EMPTY_FILTERS: EventFilters = {
   placeKinds: [],
   polygon: null,
   eeis: [],
+  mainOnly: false,
 };
 
 export const TIME_PRESETS: { id: TimePreset; hours: number | null }[] = [
@@ -270,6 +273,13 @@ export function eventPoints(e: PublicEvent): LatLng[] {
 }
 
 // ─── Matching ──────────────────────────────────────────────────────
+/** The event's type slugs: main first, then the secondary ones when asked. */
+export function eventCategorySlugs(e: PublicEvent, includeSecondary: boolean): string[] {
+  const main = e.category.slug;
+  if (!includeSecondary) return [main];
+  return [main, ...(e.secondaryCategories ?? []).map((c) => c.slug).filter((s) => s && s !== main)];
+}
+
 export function matchesFilters(e: PublicEvent, f: EventFilters, now = Date.now()): boolean {
   const win = timeWindow(f, now);
   if (win) {
@@ -280,7 +290,7 @@ export function matchesFilters(e: PublicEvent, f: EventFilters, now = Date.now()
     const areas = eventAreas(e);
     if (!f.areas.some((a) => areas.has(a))) return false;
   }
-  if (f.categories.length && !f.categories.includes(e.category.slug)) return false;
+  if (f.categories.length && !eventCategorySlugs(e, !f.mainOnly).some((s) => f.categories.includes(s))) return false;
   if (f.severities.length && !f.severities.includes(e.severity)) return false;
   if (f.sources.length && !f.sources.includes(sourceKind(e))) return false;
   if (f.media?.length && !mediaKinds(e).some((m) => f.media.includes(m))) return false;
