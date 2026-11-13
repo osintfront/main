@@ -7,6 +7,9 @@ async () => {
   await wait(3000);
   [...document.querySelectorAll('button')].find((b) => /Intelligence layers|שכבות מודיעין/.test((b.getAttribute('aria-label') || '') + b.textContent + (b.title || '')))?.click();
   await wait(600);
+  // The section is a dropdown: open it first.
+  const sec = document.querySelector('[data-layer-section="infra"]');
+  if (sec?.getAttribute('aria-expanded') === 'false') { sec.click(); await wait(200); }
   const before = document.querySelectorAll('.leaflet-marker-icon').length;
   document.querySelector('[data-infra-toggle="civil"]')?.click();
   await wait(2500);

@@ -515,14 +515,16 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
   // ── Panel ──
   const box = 'rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900';
-  const sectionHead = (Icon: typeof Ship, label: string, on: boolean, set: (v: boolean) => void, extra?: string, dim = false) => (
+  const sectionHead = (Icon: typeof Ship, label: string, on: boolean, set: (v: boolean) => void, extra?: string, dim = false, locked = false) => (
     <label className={`flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100${dim ? ' opacity-50' : ''}`}>
       <input type="checkbox" className="size-4 accent-sky-600" checked={on} onChange={(e) => set(e.target.checked)} />
       <Icon className="size-4 text-slate-500" aria-hidden />
-      <span className="flex-1">{label}</span>
+      <span className="flex-1">{label}{locked ? ' 🔒' : ''}</span>
       {extra ? <span className="text-[11px] font-normal text-slate-500">{extra}</span> : null}
     </label>
   );
+  // Ships and aircraft share one plan feature: a lock on both headers when the plan lacks it.
+  const shipsLocked = !hasFeature(undefined, 'ships_aircraft');
   const dayLabel = (d: SatDay) => `${d.date}${d.cloud !== null ? ` · ${T.cloud} ${d.cloud}%` : ''}`;
 
   const container = map?.getContainer() ?? null;
@@ -648,11 +650,12 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
           </section>
 
           <WeatherLayersPanel s={weather} />
-          <InfraLayersPanel s={infra}><MilitaryLayersGroup s={mil} /></InfraLayersPanel>
+          <InfraLayersPanel s={infra} />
+          <MilitaryLayersGroup s={mil} />
 
           {/* Ships */}
           <section className="space-y-2 border-b border-slate-100 py-3 dark:border-slate-800">
-            {sectionHead(Ship, T.ships, shipsOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setShipsOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), shipsOn ? `${shownShips.length} ${T.shown}` : undefined)}
+            {sectionHead(Ship, T.ships, shipsOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setShipsOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), shipsOn ? `${shownShips.length} ${T.shown}` : undefined, false, shipsLocked)}
             {shipsOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {shipErr ? <p className="text-red-600">{shipErr}</p> : !vessels.length ? <p>{T.noShips}</p> : null}
@@ -707,7 +710,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Aircraft */}
           <section className="space-y-2 pt-3">
-            {sectionHead(PlaneIcon, T.planes, planesOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setPlanesOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), planesOn ? `${shownPlanes.length} ${T.shown}` : undefined)}
+            {sectionHead(PlaneIcon, T.planes, planesOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setPlanesOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), planesOn ? `${shownPlanes.length} ${T.shown}` : undefined, false, shipsLocked)}
             {planesOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {planeErr ? <p className="text-red-600">{planeErr}</p> : null}

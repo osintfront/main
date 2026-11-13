@@ -11,6 +11,14 @@ test('status chips', () => {
   assert.equal(statusOf(null), 'collecting');
 });
 
+test('a strait no receiver hears is "no reception", not "collecting" forever', () => {
+  assert.equal(statusOf(null, 0), 'nocoverage');
+  assert.equal(statusOf(90, 0), 'nocoverage');
+  assert.equal(statusOf(null, 5), 'collecting');
+  assert.equal(statusOf(90, 5), 'normal');
+  assert.equal(statusOf(90, undefined), 'normal'); // older RPC without seen_24h
+});
+
 test('IMO check digit', () => {
   assert.equal(imoValid(9074729), true);
   assert.equal(imoValid('9074729'), true);

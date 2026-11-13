@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Check, ChevronDown, ChevronUp, Copy, ListChecks, Loader2, Share2, Sparkles, SquarePen, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
-import { authConfig } from '@/config/auth';
+import { SITE_URL } from '@/config/welcome';
 import { AREAS } from '@/lib/eventFilters';
 import { MAX_TURNS, answerShareText, buildContext, openWindow, summaryQuestion, whatsappUrl } from '@/lib/askChat';
 import { AskError, askMap, type AskAnswer } from '@/services/askService';
@@ -18,6 +18,7 @@ interface AskMapProps {
   onCite: (id: string) => void;
 }
 
+// Shared links always carry the public domain, never the *.vercel.app address the page may be served from.
 const SITE_LINE = 'osintfront.com';
 
 /** One line of the answer with its [n] citations as buttons. */
@@ -156,7 +157,7 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
   };
 
   /** max: the clipboard takes the whole answer; a share link (WhatsApp) has a length limit. */
-  const shareText = (turn: AskAnswer, max?: number) => answerShareText(turn, authConfig.siteUrl, { sources: t('ask.sources'), site: SITE_LINE }, max);
+  const shareText = (turn: AskAnswer, max?: number) => answerShareText(turn, SITE_URL, { sources: t('ask.sources'), site: SITE_LINE }, max);
   const copy = async (i: number) => setCopied({ turn: i, ok: await copyText(shareText(turns[i], Infinity)) });
   const share = async (i: number) => {
     const text = shareText(turns[i]);

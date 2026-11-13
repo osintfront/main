@@ -11,6 +11,7 @@ const CHIP: Record<Status, string> = {
   below: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
   low: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
   collecting: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  nocoverage: 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
 // Where "See it on the map" goes: the strait and its waiting areas.
 const VIEW: Record<ChokepointStat['id'], L.LatLngBoundsExpression> = {
@@ -58,7 +59,7 @@ export function ChokepointPanel({ map, lang, onMap, sanctioned, silent, regionNa
       <p className="pt-1 text-[10px] font-semibold tracking-wide text-slate-500 uppercase">{T.title}</p>
       {err ? <p className="text-red-600">—</p> : null}
       {(stats ?? []).map((c) => {
-        const st = statusOf(c.pct_normal);
+        const st = statusOf(c.pct_normal, c.seen_24h);
         const last = c.last;
         const flag = last ? shipFlag(last.mmsi) : '';
         return (
@@ -69,7 +70,7 @@ export function ChokepointPanel({ map, lang, onMap, sanctioned, silent, regionNa
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${CHIP[st]}`} data-status={st}>{T[st]}</span>
             </div>
             <p className="text-slate-600 dark:text-slate-300">
-              {c.pct_normal === null ? T.collectingDays.replace('{n}', String(c.days)) : <>≈{c.pct_normal}% {T.ofNormal}</>}
+              {st === 'nocoverage' ? T.nocoverageNote : c.pct_normal === null ? T.collectingDays.replace('{n}', String(c.days)) : <>≈{c.pct_normal}% {T.ofNormal}</>}
             </p>
             <div className="grid grid-cols-3 gap-1 text-center">
               <div><p className="font-mono font-semibold">{c.crossings_24h}</p><p className="text-[10px] text-slate-500">{T.crossings}</p></div>

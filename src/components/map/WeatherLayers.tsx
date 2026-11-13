@@ -8,6 +8,7 @@ import { Cloud, CloudRain, Pause, Play, Thermometer, Wind } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
+import { LayerSection } from './LayerSection';
 import { buildFrames, fetchGfsManifest, owmTileUrl, weatherKey, type Frame, type GfsManifest } from '@/lib/weather';
 import { WEATHER_PUBLIC_BASE, forecastLayer, pastLayer, weatherPanes } from '@/lib/weatherLayers';
 
@@ -176,19 +177,18 @@ export function WeatherLayersPanel({ s }: { s: WxState }) {
       {s.bad[k] ? <span className="text-[11px] text-amber-600">⚠️ {T.unavailable}</span> : null}
     </label>
   );
+  const active = Object.values(s.on).filter(Boolean).length;
   return (
-    <section className="space-y-2 border-b border-slate-100 py-3 dark:border-slate-800">
-      <p className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"><Cloud className="size-4 text-slate-500" aria-hidden />{T.title}</p>
-      <div className="space-y-1.5 ps-6">
-        {row('clouds', Cloud, T.clouds)}{row('rain', CloudRain, T.rain)}{row('temp', Thermometer, T.temp)}{row('wind', Wind, T.wind)}
-        {Object.values(s.on).some(Boolean) ? (
-          <label className="flex items-center gap-2 pt-1 text-xs text-slate-600 dark:text-slate-300">
-            {T.opacity}
-            <input type="range" min={0.2} max={1} step={0.05} value={s.opacity} onChange={(e) => s.setOpacity(Number(e.target.value))} className="flex-1 accent-sky-600" />
-          </label>
-        ) : null}
-      </div>
-    </section>
+    <LayerSection id="weather" icon={<Cloud className="size-4 text-slate-500" aria-hidden />} title={T.title} active={active}
+      locked={s.guest || !hasFeature(undefined, 'weather')}>
+      {row('clouds', Cloud, T.clouds)}{row('rain', CloudRain, T.rain)}{row('temp', Thermometer, T.temp)}{row('wind', Wind, T.wind)}
+      {active ? (
+        <label className="flex items-center gap-2 pt-1 text-xs text-slate-600 dark:text-slate-300">
+          {T.opacity}
+          <input type="range" min={0.2} max={1} step={0.05} value={s.opacity} onChange={(e) => s.setOpacity(Number(e.target.value))} className="flex-1 accent-sky-600" />
+        </label>
+      ) : null}
+    </LayerSection>
   );
 }
 

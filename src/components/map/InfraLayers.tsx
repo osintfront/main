@@ -7,6 +7,7 @@ import { Anchor, Plane } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
+import { LayerSection } from './LayerSection';
 import { supabase } from '@/integrations/supabase/client';
 import { INFRA_TXT, airfieldPopup, clusterIconHtml, loadInfra, portPopup, type AirfieldClass, type AirfieldProps, type PortProps } from '@/lib/infra';
 
@@ -132,7 +133,7 @@ export function useInfraLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rt
 
 type InfraState = ReturnType<typeof useInfraLayers>;
 
-export function InfraLayersPanel({ s, children }: { s: InfraState; children?: ReactNode }) {
+export function InfraLayersPanel({ s }: { s: InfraState }) {
   const { T } = s;
   const row = (k: Toggle, label: string) => {
     const failed = k === 'ports' ? s.bad.ports : s.bad.airfields;
@@ -146,15 +147,10 @@ export function InfraLayersPanel({ s, children }: { s: InfraState; children?: Re
     );
   };
   return (
-    <section className="space-y-2 border-b border-slate-100 py-3 dark:border-slate-800">
-      <p className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-        <Plane className="size-4 text-slate-500" aria-hidden /><Anchor className="-ms-1 size-4 text-slate-500" aria-hidden />{T.title}
-      </p>
-      <div className="space-y-1.5 ps-6">
-        {row('civil', T.civilToggle)}{row('military', T.militaryToggle)}{row('strip', T.stripToggle)}{row('closed', T.closedToggle)}{row('ports', T.ports)}
-        {children}
-      </div>
-    </section>
+    <LayerSection id="infra" icon={<><Plane className="size-4 text-slate-500" aria-hidden /><Anchor className="-ms-1 size-4 text-slate-500" aria-hidden /></>}
+      title={T.title} active={Object.values(s.on).filter(Boolean).length} locked={s.guest || !hasFeature(undefined, 'airfields_ports')}>
+      {row('civil', T.civilToggle)}{row('military', T.militaryToggle)}{row('strip', T.stripToggle)}{row('closed', T.closedToggle)}{row('ports', T.ports)}
+    </LayerSection>
   );
 }
 
