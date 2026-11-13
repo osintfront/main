@@ -27,6 +27,9 @@
     },
     "api/push.ts": {
       "maxDuration": 60
+    },
+    "api/transcribe.ts": {
+      "maxDuration": 120
     }
   }
 }
