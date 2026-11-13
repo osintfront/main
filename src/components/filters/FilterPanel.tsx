@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { InfoTip } from '@/components/common/InfoTip';
 import { Crosshair, Loader2, Octagon, Plus, X } from 'lucide-react';
 import { compileEei, matchesEei, type Eei } from '@/lib/eei';
 import { defaultSetName, fromEventFilters, isLocked, panelMatcher, toEventFilters, type FilterSet } from '@/lib/filterSets';
@@ -80,10 +81,13 @@ function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, info, children }: { title: string; info?: string; children: ReactNode }) {
   return (
     <section className="border-b border-slate-100 px-4 py-3 last:border-b-0 dark:border-slate-800">
-      <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</h3>
+      <h3 className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        {title}
+        {info ? <InfoTip text={info} align="start" /> : null}
+      </h3>
       {children}
     </section>
   );
@@ -162,7 +166,7 @@ function EeiSection({
     'h-10 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 sm:h-9 sm:text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white';
 
   return (
-    <Section title={t('eei.title')}>
+    <Section title={t('eei.title')} info={t('info.eei')}>
       {eeis.length ? (
         <ul className="mb-3 flex flex-wrap gap-1.5">
           {eeis.map((q) => (
@@ -495,7 +499,7 @@ export function FilterPanel({
             </label>
           </Section>
 
-          <Section title={t('filters.severity')}>
+          <Section title={t('filters.severity')} info={t('info.severity')}>
             <div className="flex flex-wrap gap-1.5">
               {SEVERITIES.map((s: Severity) => (
                 <Chip key={s} on={view.severities.includes(s)} onClick={() => set({ severities: toggle(view.severities, s) })}>

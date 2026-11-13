@@ -4,10 +4,16 @@ import { Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/i18n';
 import { SESSION_CLOCK_KEY, SESSION_MS, WARN_MS, clearSessionClock, sessionStarted, startSessionClock } from '@/lib/sessionClock';
+import { sessionAction } from '@/lib/controlRoom';
+import { useControlRoom } from '@/hooks/useControlRoom';
 
-/** Ends a sign-in after 24 hours; two minutes before, asks whether to continue. */
+/**
+ * Ends a sign-in after 24 hours; two minutes before, asks whether to continue.
+ * Control-room screen (see useControlRoom): renews by itself instead of asking.
+ */
 export function SessionTimeout() {
   const { status, signOut } = useAuth();
+  const controlRoom = useControlRoom().active;
   const { t } = useI18n();
   const navigate = useNavigate();
   const [now, setNow] = useState(() => Date.now());
@@ -40,14 +46,21 @@ export function SessionTimeout() {
   }, [status]);
 
   const left = status === 'signed_in' && started ? started + SESSION_MS - now : null;
+  const action = sessionAction(left, WARN_MS, controlRoom);
 
   useEffect(() => {
-    if (left === null || left > 0) return;
+    if (action === 'extend') {
+      const s = Date.now();
+      startSessionClock(s);
+      setStarted(s);
+      return;
+    }
+    if (action !== 'expire') return;
     clearSessionClock();
     void signOut().then(() => navigate('/login', { replace: true, state: { reason: 'expired' } }));
-  }, [left, signOut, navigate]);
+  }, [action, signOut, navigate]);
 
-  if (left === null || left > WARN_MS || left <= 0) return null;
+  if (action !== 'warn' || left === null) return null;
 
   const secs = Math.ceil(left / 1000);
   const mmss = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;

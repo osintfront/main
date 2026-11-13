@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { featureLimit, usePlanVersion } from '@/lib/plans';
+import { useControlRoom } from '@/hooks/useControlRoom';
 
 /**
  * Plan idle sign-out (plan_features 'idle_logout_min'): after that many minutes with no
  * activity in any tab, the visitor is signed out. Free: 30 min, Pro: 12 h, Max: never.
  * The last activity time is shared by every open tab (localStorage).
+ * A control-room screen never signs out for being idle.
  */
 const KEY = 'ofm.lastActive';
 const EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
@@ -29,7 +31,8 @@ function lastActive(): number {
 export function IdleSignOut() {
   const { status, profile, signOut } = useAuth();
   usePlanVersion();
-  const limit = status === 'signed_in' && profile ? featureLimit('idle_logout_min', profile) : null;
+  const controlRoom = useControlRoom().active;
+  const limit = status === 'signed_in' && profile && !controlRoom ? featureLimit('idle_logout_min', profile) : null;
 
   useEffect(() => {
     if (!limit) return;

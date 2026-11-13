@@ -3,8 +3,9 @@
 // Aircraft sections. Starts open when one of its layers is already on.
 import { useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { InfoTip } from '@/components/common/InfoTip';
 
-export function LayerSection({ id, icon, title, active, locked, children, last = false }: {
+export function LayerSection({ id, icon, title, active, locked, info, children, last = false }: {
   /** data-layer-section on the header (tests open the section through it). */
   id: string;
   icon: ReactNode;
@@ -13,19 +14,24 @@ export function LayerSection({ id, icon, title, active, locked, children, last =
   active: number;
   /** The user's plan lacks the group: a lock in the header. */
   locked?: boolean;
+  /** One or two lines on what the group shows: an (i) beside the header. */
+  info?: string;
   children: ReactNode;
   last?: boolean;
 }) {
   const [open, setOpen] = useState(active > 0);
   return (
     <section className={`space-y-2 py-3${last ? '' : ' border-b border-slate-100 dark:border-slate-800'}`}>
-      <button type="button" data-layer-section={id} aria-expanded={open} onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 text-start text-sm font-semibold text-slate-800 dark:text-slate-100">
-        {icon}
-        <span className="flex-1">{title}{locked ? ' 🔒' : ''}</span>
-        {active > 0 ? <span className="rounded-full bg-sky-100 px-1.5 text-[11px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">{active}</span> : null}
-        <ChevronDown className={`size-4 text-slate-400 transition-transform${open ? ' rotate-180' : ''}`} aria-hidden />
-      </button>
+      <div className="flex items-center gap-1">
+        <button type="button" data-layer-section={id} aria-expanded={open} onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-start text-sm font-semibold text-slate-800 dark:text-slate-100">
+          {icon}
+          <span className="flex-1">{title}{locked ? ' 🔒' : ''}</span>
+          {active > 0 ? <span className="rounded-full bg-sky-100 px-1.5 text-[11px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">{active}</span> : null}
+          <ChevronDown className={`size-4 text-slate-400 transition-transform${open ? ' rotate-180' : ''}`} aria-hidden />
+        </button>
+        {info ? <InfoTip text={info} /> : null}
+      </div>
       {open ? <div className="space-y-1.5 ps-6">{children}</div> : null}
     </section>
   );

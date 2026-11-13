@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { LayerSection } from './LayerSection';
+import { useI18n } from '@/i18n';
 import { buildFrames, fetchGfsManifest, owmTileUrl, weatherKey, type Frame, type GfsManifest } from '@/lib/weather';
 import { WEATHER_PUBLIC_BASE, forecastLayer, pastLayer, weatherPanes } from '@/lib/weatherLayers';
 
@@ -169,6 +170,7 @@ type WxState = ReturnType<typeof useWeatherLayers>;
 
 export function WeatherLayersPanel({ s }: { s: WxState }) {
   const { T } = s;
+  const { t } = useI18n();
   const row = (k: Toggle, Icon: typeof Cloud, label: string) => (
     <label key={k} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
       <input type="checkbox" className="size-4 accent-sky-600" data-weather-toggle={k} checked={s.on[k]} onChange={(e) => s.toggle(k, e.target.checked)} />
@@ -179,7 +181,7 @@ export function WeatherLayersPanel({ s }: { s: WxState }) {
   );
   const active = Object.values(s.on).filter(Boolean).length;
   return (
-    <LayerSection id="weather" icon={<Cloud className="size-4 text-slate-500" aria-hidden />} title={T.title} active={active}
+    <LayerSection id="weather" icon={<Cloud className="size-4 text-slate-500" aria-hidden />} title={T.title} info={t('info.weather')} active={active}
       locked={s.guest || !hasFeature(undefined, 'weather')}>
       {row('clouds', Cloud, T.clouds)}{row('rain', CloudRain, T.rain)}{row('temp', Thermometer, T.temp)}{row('wind', Wind, T.wind)}
       {active ? (

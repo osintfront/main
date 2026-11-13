@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { LayerSection } from './LayerSection';
+import { useI18n } from '@/i18n';
 import { supabase } from '@/integrations/supabase/client';
 import { INFRA_TXT, airfieldPopup, clusterIconHtml, loadInfra, portPopup, type AirfieldClass, type AirfieldProps, type PortProps } from '@/lib/infra';
 
@@ -135,6 +136,7 @@ type InfraState = ReturnType<typeof useInfraLayers>;
 
 export function InfraLayersPanel({ s }: { s: InfraState }) {
   const { T } = s;
+  const { t } = useI18n();
   const row = (k: Toggle, label: string) => {
     const failed = k === 'ports' ? s.bad.ports : s.bad.airfields;
     return (
@@ -148,7 +150,7 @@ export function InfraLayersPanel({ s }: { s: InfraState }) {
   };
   return (
     <LayerSection id="infra" icon={<><Plane className="size-4 text-slate-500" aria-hidden /><Anchor className="-ms-1 size-4 text-slate-500" aria-hidden /></>}
-      title={T.title} active={Object.values(s.on).filter(Boolean).length} locked={s.guest || !hasFeature(undefined, 'airfields_ports')}>
+      title={T.title} info={t('info.infra')} active={Object.values(s.on).filter(Boolean).length} locked={s.guest || !hasFeature(undefined, 'airfields_ports')}>
       {row('civil', T.civilToggle)}{row('military', T.militaryToggle)}{row('strip', T.stripToggle)}{row('closed', T.closedToggle)}{row('ports', T.ports)}
     </LayerSection>
   );

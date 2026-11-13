@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { LayerSection } from './LayerSection';
+import { useI18n } from '@/i18n';
 import { supabase } from '@/integrations/supabase/client';
 import { clusterIconHtml, isNotBuilt, loadInfra } from '@/lib/infra';
 import { MilitaryMarkers, foreignShown } from '@/lib/militaryMarkers';
@@ -136,6 +137,7 @@ function Swatch({ k, size = 16 }: { k: MilKind; size?: number }) {
 /** The "Military bases" toggles: their own collapsible section of the Intelligence panel. */
 export function MilitaryLayersGroup({ s }: { s: MilState }) {
   const { T } = s;
+  const { t } = useI18n();
   const row = (k: MilKind) => {
     const st = k === 'minor' ? s.status.minor : s.status.main;
     return (
@@ -152,7 +154,7 @@ export function MilitaryLayersGroup({ s }: { s: MilState }) {
     );
   };
   return (
-    <LayerSection id="military" icon={<Shield className="size-4 text-slate-500" aria-hidden />} title={T.title}
+    <LayerSection id="military" icon={<Shield className="size-4 text-slate-500" aria-hidden />} title={T.title} info={t('info.military')}
       active={KINDS.filter((k) => s.on[k]).length + (s.foreignOnly ? 1 : 0)} locked={s.guest || !hasFeature(undefined, 'military_assets')}>
       {(['base', 'naval', 'range', 'minor'] as MilKind[]).map(row)}
       <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">

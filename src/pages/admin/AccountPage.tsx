@@ -7,6 +7,9 @@ import { RoleBadge, UserStatusBadge } from '@/components/common/Badges';
 import { Alert } from '@/components/common/Feedback';
 import { Button, TextField } from '@/components/common/Form';
 import { PasswordForm } from '@/components/auth/PasswordForm';
+import { Lock, MonitorCheck } from 'lucide-react';
+import { useControlRoom } from '@/hooks/useControlRoom';
+import { openGate } from '@/components/plans/GateDialog';
 
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -91,8 +94,41 @@ export function AccountPage() {
       </Card>
 
       <Card title={t('account.security')}>
-        <p className="text-sm text-slate-600 dark:text-slate-400">{t('account.mfaPrepared')}</p>
+        <ControlRoomSetting />
+        <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">{t('account.mfaPrepared')}</p>
       </Card>
+    </div>
+  );
+}
+
+/** Control-room screen: keep this browser signed in (Max / Intel / staff); others get the upgrade window. */
+function ControlRoomSetting() {
+  const { t } = useI18n();
+  const room = useControlRoom();
+  return (
+    <div data-control-room>
+      <div className="flex items-start gap-3">
+        <MonitorCheck className="mt-0.5 size-5 shrink-0 text-slate-500" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{t('account.controlRoom')}</p>
+          <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">{t('account.controlRoomBody')}</p>
+          {room.allowed ? (
+            <>
+              <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-100">
+                <input type="checkbox" className="size-4 accent-sky-600" data-control-room-toggle checked={room.on} onChange={(e) => room.set(e.target.checked)} />
+                {t('account.controlRoomOn')}
+              </label>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('account.controlRoomDevices')}</p>
+            </>
+          ) : (
+            <button type="button" data-control-room-locked onClick={() => openGate('upgrade', undefined, 'plan', 'max')}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+              <Lock className="size-3.5" aria-hidden />
+              {t('account.controlRoomLocked')}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

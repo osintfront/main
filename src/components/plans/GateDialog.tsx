@@ -4,7 +4,7 @@ import { Lock } from 'lucide-react';
 import { track } from '@vercel/analytics';
 import { useI18n } from '@/i18n';
 import type { UseReason } from '@/lib/featureUse';
-import { minPlanFor, PLAN_LABEL, type FeatureKey } from '@/lib/plans';
+import { minPlanFor, PLAN_LABEL, type EffectivePlan, type FeatureKey } from '@/lib/plans';
 
 /**
  * One window for every locked feature: guests are invited to sign up; signed-in users whose
@@ -13,14 +13,15 @@ import { minPlanFor, PLAN_LABEL, type FeatureKey } from '@/lib/plans';
  */
 export type GateKind = 'signup' | 'upgrade';
 /** quota = today's uses ran out; plan = the feature is not in the plan (names the plan that has it). */
-interface Gate { kind: GateKind; feature?: FeatureKey; why: 'quota' | 'plan' }
+/** plan = name this plan in the window (for a feature with no plan_features row of its own). */
+interface Gate { kind: GateKind; feature?: FeatureKey; why: 'quota' | 'plan'; plan?: EffectivePlan }
 let current: Gate | null = null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
 /** Open the window. Pass the feature so it can say which plan has it. */
-export function openGate(kind: GateKind, feature?: FeatureKey, why: 'quota' | 'plan' = feature ? 'plan' : 'quota') {
-  current = { kind, feature, why };
+export function openGate(kind: GateKind, feature?: FeatureKey, why: 'quota' | 'plan' = feature ? 'plan' : 'quota', plan?: EffectivePlan) {
+  current = { kind, feature, why, plan };
   try { track(kind === 'signup' ? 'gate_signup_shown' : 'gate_upgrade_shown', { feature: feature ?? '', why }); } catch { /* blocked */ }
   emit();
 }
@@ -40,7 +41,7 @@ export function GateHost() {
   const gate = useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => current, () => null);
   const kind = gate?.kind ?? null;
   const { t } = useI18n();
-  const need = gate?.feature ? minPlanFor(gate.feature) : null;
+  const need = gate?.plan ?? (gate?.feature ? minPlanFor(gate.feature) : null);
   const planName = need && need !== 'guest' && need !== 'free' ? PLAN_LABEL[need] : 'Pro';
   const body = kind === 'signup' ? t('gate.signupBody') : gate?.why === 'plan' ? t('gate.planBody', { plan: planName }) : t('gate.upgradeBody');
   const title = kind === 'signup' ? t('gate.signupTitle') : gate?.why === 'plan' ? t('gate.planTitle', { plan: planName }) : t('gate.upgradeTitle');

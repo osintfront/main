@@ -1,5 +1,6 @@
-import { useState, type ClipboardEvent } from 'react';
-import { ChevronDown, ChevronUp, FileText, Languages, Loader2, Lock } from 'lucide-react';
+import { useEffect, useRef, useState, type ClipboardEvent, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, ChevronDown, ChevronUp, FileText, Languages, Link2, Loader2, Lock, Mail, Send, Share2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import type { PublicEvent } from '@/types/event';
 import { LinkifiedText } from '@/components/common/LinkifiedText';
@@ -13,6 +14,8 @@ import { previewText } from '@/utils/text';
 import { localizedTitle } from '@/lib/localizedTitle';
 import { linkSegments, type EventTerm } from '@/lib/deepTerms';
 import { TermText } from './TermText';
+import { SHARE_TARGETS, shareSheetData, shareTargetUrl, type ShareTarget } from '@/lib/eventShare';
+import { copyText } from '@/lib/clipboard';
 
 const SITE = 'https://osintfront.com';
 
@@ -23,12 +26,17 @@ const SITE = 'https://osintfront.com';
  * (guest and Free shares).
  */
 export function whatsappShareUrl(event: PublicEvent, lang: string, expanded: ExpandedByLang | null, opts: { mark?: string; guest?: boolean } = {}): string {
+  return shareTargetUrl('whatsapp', eventShare(event, lang, expanded, opts));
+}
+
+/** The share of an event for any app: headline, the WhatsApp text (bold headline) and the /e/<id> link. */
+export function eventShare(event: PublicEvent, lang: string, expanded: ExpandedByLang | null, opts: { mark?: string; guest?: boolean } = {}) {
   const { title, summary } = eventTexts(event, lang);
   const x = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
   const body = opts.guest ? '' : x?.details ? x.details : summary;
   const link = `${SITE}/e/${event.id}${opts.guest ? '?g=1' : ''}`;
   const text = [`*${title}*`, body, link, opts.mark].filter(Boolean).join('\n\n');
-  return `https://wa.me/?text=${encodeURIComponent(text.slice(0, 3500))}`;
+  return { title, text, link };
 }
 
 function WhatsAppIcon() {
@@ -74,6 +82,30 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<'expand' | 'source' | null>(null);
   const [failed, setFailed] = useState<false | 'failed' | 'quota' | 'budget'>(false);
+  // The menu opens in a layer of its own (portal, fixed position): a card or the feed would clip it.
+  const [shareMenu, setShareMenu] = useState<CSSProperties | false>(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const shareRef = useRef<HTMLSpanElement>(null);
+  const menuRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!shareMenu) return;
+    const onDown = (e: PointerEvent) => {
+      const n = e.target as Node;
+      if (!shareRef.current?.contains(n) && !menuRef.current?.contains(n)) setShareMenu(false);
+    };
+    const close = () => setShareMenu(false);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setShareMenu(false);
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [shareMenu]);
 
   const showSource = async () => {
     if (view === 'source') return setView('summary');
@@ -114,12 +146,40 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
 
   // Share: open to everyone. Guest and Free shares carry the site's line and a sign-up link;
   // a guest's link previews as a blurred card (no photo, no summary).
-  const share = () => {
+  // The system share sheet (every installed app) where the browser has one; otherwise a menu.
+  const shareData = () => {
     const plan = myPlan();
     const guest = plan === 'guest';
     const mark = guest || plan === 'free' ? t('share.mark') : undefined;
-    window.open(whatsappShareUrl(event, lang, expanded ?? cachedExpansion(event), { mark, guest }), '_blank', 'noopener');
+    return eventShare(event, lang, expanded ?? cachedExpansion(event), { mark, guest });
   };
+  const share = async () => {
+    if (shareMenu) return setShareMenu(false);
+    setLinkCopied(false);
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share(shareSheetData(shareData()));
+        return;
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'AbortError') return; // closed the sheet
+      }
+    }
+    const r = shareRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const MENU_H = 200; // five rows
+    const vw = document.documentElement.clientWidth;
+    const pos: CSSProperties = { position: 'fixed', zIndex: 4000 };
+    if (r.top >= MENU_H + 8 || r.top > window.innerHeight - r.bottom) pos.bottom = window.innerHeight - r.top + 4;
+    else pos.top = r.bottom + 4;
+    if (document.documentElement.dir === 'rtl') pos.right = Math.max(8, vw - r.right);
+    else pos.left = Math.max(8, Math.min(r.left, vw - 168));
+    setShareMenu(pos);
+  };
+  const shareTo = (target: ShareTarget) => {
+    setShareMenu(false);
+    window.open(shareTargetUrl(target, shareData()), target === 'email' ? '_self' : '_blank', 'noopener');
+  };
+  const copyLink = async () => setLinkCopied(await copyText(shareData().link));
   // No copying the text on plans without it.
   const onCopy = (e: ClipboardEvent) => {
     if (canCopy) return;
@@ -197,16 +257,37 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
           {busy === 'source' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : view === 'source' ? <Languages className="size-3.5" aria-hidden /> : <FileText className="size-3.5" aria-hidden />}
           {view === 'source' ? t('text.backToSummary') : t('text.source')}
         </button>
-        <button
-          type="button"
-          onClick={share}
-          className={btn + ' text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10'}
-          aria-label={t('text.shareWhatsapp')}
-          title={t('text.shareWhatsapp')}
-        >
-          <WhatsAppIcon />
-          {t('text.share')}
-        </button>
+        <span ref={shareRef} className="relative inline-flex">
+          <button
+            type="button"
+            data-event-share
+            onClick={() => void share()}
+            className={btn + ' text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10'}
+            aria-haspopup="menu"
+            aria-expanded={!!shareMenu}
+          >
+            <Share2 className="size-3.5" aria-hidden />
+            {t('text.share')}
+          </button>
+          {shareMenu ? createPortal(
+            <span ref={menuRef} role="menu" aria-label={t('text.shareTo')} data-share-menu style={shareMenu} dir={lang === 'he' ? 'rtl' : 'ltr'}
+              className="flex min-w-40 flex-col rounded-lg bg-white p-1 shadow-lg ring-1 ring-slate-900/10 dark:bg-slate-800 dark:ring-white/10">
+              {SHARE_TARGETS.map((target) => (
+                <button key={target} type="button" role="menuitem" data-share-target={target} onClick={() => shareTo(target)}
+                  className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700">
+                  {target === 'whatsapp' ? <WhatsAppIcon /> : target === 'telegram' ? <Send className="size-3.5" aria-hidden /> : target === 'email' ? <Mail className="size-3.5" aria-hidden /> : <span className="w-3.5 text-center text-[13px] font-bold leading-none" aria-hidden>𝕏</span>}
+                  {t(`share.${target}`)}
+                </button>
+              ))}
+              <button type="button" role="menuitem" data-share-target="copy" onClick={() => void copyLink()}
+                className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700">
+                {linkCopied ? <Check className="size-3.5 text-emerald-600" aria-hidden /> : <Link2 className="size-3.5" aria-hidden />}
+                {linkCopied ? t('text.shareCopied') : t('text.shareCopy')}
+              </button>
+            </span>,
+            document.body,
+          ) : null}
+        </span>
         {failed ? <span className="text-xs text-red-600 dark:text-red-400">{t(failed === 'quota' ? 'ai.quota' : failed === 'budget' ? 'ai.budget' : 'text.expandFailed')}</span> : null}
       </div>
     </div>

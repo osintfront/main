@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { copyText } from '@/lib/clipboard';
 import { Check, ChevronDown, ChevronUp, Copy, ListChecks, Loader2, Share2, Sparkles, SquarePen, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { SITE_URL } from '@/config/welcome';
@@ -49,29 +50,6 @@ function AnswerLine({ line, ids, onCite }: { line: string; ids: string[]; onCite
   }
   if (last < line.length) parts.push(line.slice(last));
   return <p className={line.trim().startsWith('•') ? 'ps-1' : 'font-semibold'}>{parts}</p>;
-}
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    // Older browsers / blocked clipboard API: copy through a hidden text box.
-    try {
-      const box = document.createElement('textarea');
-      box.value = text;
-      box.setAttribute('readonly', '');
-      box.style.position = 'fixed';
-      box.style.opacity = '0';
-      document.body.appendChild(box);
-      box.select();
-      const ok = document.execCommand('copy');
-      box.remove();
-      return ok;
-    } catch {
-      return false;
-    }
-  }
 }
 
 const actionBtn =
