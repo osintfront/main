@@ -60,7 +60,8 @@ export function DeepEntryDialog({ target, onClose, onOpenEvent, onChanged }: {
     try {
       const e = await fetchEntry(id, force);
       if (!alive.current) return;
-      if (!e) return fail(new DeepError('not_in_plan'));
+      // No entry: removed meanwhile (the reader has the plan) or the plan lacks the feature.
+      if (!e) return fail(new DeepError(hasFeature(undefined, 'deep_analysis') ? 'no_entry' : 'not_in_plan'));
       setEntry(e);
       setView('entry');
     } catch (err) {
@@ -232,7 +233,7 @@ export function DeepEntryDialog({ target, onClose, onOpenEvent, onChanged }: {
                 <section className="mt-4">
                   <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t('deep.sources')}</h3>
                   <ol className="list-decimal space-y-0.5 ps-5 text-[13px]">
-                    {entry.sources.map((s) => {
+                    {entry.sources.filter((s) => s.from !== 'event' || hasFeature(undefined, 'source_link')).map((s) => {
                       const href = safeExternalUrl(s.url);
                       return (
                         <li key={s.url}>

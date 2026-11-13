@@ -54,6 +54,7 @@ let heronEntry = null;
 const terms = () => [
   { key: 'ted cruz', name: 'Ted Cruz', kind: 'person', surfaces: ['Ted Cruz'], entry: 'E1' },
   { key: 'heron', name: 'IAI Heron', kind: 'weapon', surfaces: ['Heron'], entry: heronEntry },
+  { key: 'radwan', name: 'Radwan Force', kind: 'org', surfaces: ['Radwan'], entry: 'GONE' },
 ];
 const FEATURES = ['live_map', 'feed', 'event_open', 'event_summary', 'source_link', 'media', 'archive_days', 'feed_search', 'copy_text', 'share_daily'];
 const planRows = [
@@ -107,6 +108,7 @@ async function routeAll(page) {
     if (u.pathname === '/rest/v1/rpc/deep_entry') {
       calls.deepEntry++;
       const id = JSON.parse(req.postData() || '{}').p_id;
+      if (id === 'GONE') return json(null);
       return json(id === 'E1' ? ENTRY('E1', 'Ted Cruz') : ENTRY(id, 'IAI Heron'));
     }
     if (u.pathname === '/rest/v1/rpc/deep_my_quota') return json({ enabled: true, staff: PLAN === 'staff', used: 0, limit: PLAN === 'staff' ? null : 3, budget_left: true });
@@ -141,8 +143,8 @@ async function routeAll(page) {
   const phone = DEVICE === 'phone';
   const out = { lang: LANG, device: DEVICE, plan: PLAN };
   const T = LANG === 'he'
-    ? { details: /^פרטי האירוע$/, noEntry: 'אין עדיין ערך', write: 'כתוב עכשיו', left: 'נותרו 3 מתוך 3 היום', quota: 'ניצלת היום', budget: 'התקציב היומי', failed: 'לא ניתן היה לכתוב', background: 'רקע', analyze: 'נתח „Radwan”' }
-    : { details: /^Event details$/, noEntry: 'No entry yet', write: 'Write it now', left: '3 of 3 left today', quota: "You have used today's", budget: "Today's budget", failed: 'could not be written', background: 'Background', analyze: 'Analyze “Radwan”' };
+    ? { details: /^פרטי האירוע$/, noEntry: 'אין עדיין ערך', write: 'כתוב עכשיו', left: 'נותרו 3 מתוך 3 היום', quota: 'ניצלת היום', budget: 'התקציב היומי', failed: 'לא ניתן היה לכתוב', background: 'רקע', analyze: 'נתח „moved”' }
+    : { details: /^Event details$/, noEntry: 'No entry yet', write: 'Write it now', left: '3 of 3 left today', quota: "You have used today's", budget: "Today's budget", failed: 'could not be written', background: 'Background', analyze: 'Analyze “moved”' };
 
   async function open() {
     const ctx = await browser.newContext({ viewport: phone ? { width: 390, height: 844 } : { width: 1280, height: 800 }, hasTouch: phone, isMobile: phone });
@@ -244,32 +246,41 @@ async function routeAll(page) {
         await details.locator('#event-details-title').click({ button: 'right', position: { x: 200, y: 8 } }).catch(() => {});
         await page.waitForTimeout(400);
         out.c6_headlineMenu = (await page.locator('[data-analyze-menu] [role="menuitem"]').count()) === 1;
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+        out.p_escMenuOnly = (await page.locator('[data-analyze-menu]').count()) === 0 && (await details.count()) === 1;
         await details.locator('header').click({ position: { x: 10, y: 10 } }).catch(() => {});
         await page.waitForTimeout(300);
         // Analyze a selection in the summary
         await page.evaluate(() => {
-          const p = [...document.querySelectorAll('[aria-labelledby="event-details-title"] p')].find((x) => x.textContent.includes('Radwan'));
-          const node = [...p.childNodes].find((n) => n.nodeType === 3 && n.textContent.includes('Radwan'));
-          const i = node.textContent.indexOf('Radwan');
+          const p = [...document.querySelectorAll('[aria-labelledby="event-details-title"] p')].find((x) => x.textContent.includes('moved'));
+          const node = [...p.childNodes].find((n) => n.nodeType === 3 && n.textContent.includes('moved'));
+          const i = node.textContent.indexOf('moved');
           const r = document.createRange();
           r.setStart(node, i);
-          r.setEnd(node, i + 6);
+          r.setEnd(node, i + 5);
           const s = window.getSelection();
           s.removeAllRanges();
           s.addRange(r);
         });
-        const p = details.locator('p', { hasText: 'Radwan' }).first();
+        const p = details.locator('p', { hasText: 'moved' }).first();
         await p.click({ button: 'right', position: { x: 5, y: 5 } }).catch(() => {});
         await page.waitForTimeout(400);
         const item = page.locator('[data-analyze-menu] [role="menuitem"]');
         out.c6_menu = (await item.count()) === 1 && (await item.innerText()).includes(T.analyze);
         if (out.c6_menu) await item.click();
         await page.waitForTimeout(6500);
-        out.c6_analyze = calls.analyze.length >= 1 && calls.analyze[0] === 'Radwan';
+        out.c6_analyze = calls.analyze.length >= 1 && calls.analyze[0] === 'moved';
       } else {
         await page.keyboard.press('Escape');
         await page.waitForTimeout(300);
         out.c2_closedOnly = (await dlg(page).count()) === 0 && (await details.count()) === 1;
+        // a removed entry: a plain message, not the upgrade window
+        await details.locator('[data-term="radwan"]').click();
+        await dlg(page).locator('[data-deep-state="message"]').waitFor({ timeout: 5000 });
+        out.p_removedNoGate = (await page.locator('[data-gate]').count()) === 0;
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
         // 3. write a new entry
         await details.locator('[data-term="heron"]').click();
         await dlg(page).locator('[data-deep-state="unwritten"]').waitFor({ timeout: 5000 });

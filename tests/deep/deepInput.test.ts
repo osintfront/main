@@ -176,3 +176,19 @@ test('the new Wikimedia thumbnail host is accepted', () => {
 test('names without explanations in brackets', () => {
   assert.match(deepSystemPrompt(), /name only/i);
 });
+
+// ─── Polish (deferred minors) ────────────────────────────────────────────────────
+test('only real names can merge a write into another entry; extra aliases never do', async () => {
+  const { namePlan } = await import('../../supabase/functions/_shared/deepInput.ts');
+  // Opus lists "Hezbollah" as an alias of Radwan Force: no merge into the Hezbollah entry, alias skipped.
+  assert.deepEqual(namePlan(['Radwan Force', 'כוח רדואן'], ['Hezbollah', 'Radwan Unit'], { hezbollah: 'H' }, null), { mergeInto: null, add: ['radwan force', 'כוח רדואן', 'radwan unit'] });
+  // The clicked name already belongs to an entry: merge.
+  assert.equal(namePlan(['Ted Cruz', 'Cruz'], [], { 'ted cruz': 'E1' }, null).mergeInto, 'E1');
+});
+
+test('allowed source urls compare after normalising', async () => {
+  const { cleanEntry: ce } = await import('../../supabase/functions/_shared/deepInput.ts');
+  const e = ce({ kind: 'org', name_en: 'X', summary_en: 'Y', sources: [{ url: 'https://A.Example/caf%C3%A9/' }] }, { web: ['https://a.example/café'], events: [] });
+  assert.ok(e && e !== 'none');
+  assert.equal(e.sources.length, 1);
+});

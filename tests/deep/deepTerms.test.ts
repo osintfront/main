@@ -91,3 +91,8 @@ test('mapEntry accepts the new Wikimedia thumbnail host', () => {
   const e = mapEntry({ id: 'E', kind: 'person', image: { url: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/a.jpg', page: 'https://commons.wikimedia.org/wiki/File:A.jpg', credit: 'X', license: 'Public domain' } })!;
   assert.ok(e.image);
 });
+
+test('mapEntry keeps where a source came from', () => {
+  const e = mapEntry({ id: 'E', kind: 'org', sources: [{ title: 'T', url: 'https://t.me/x/1', from: 'event' }, { title: 'W', url: 'https://w.example', from: 'web' }] })!;
+  assert.deepEqual(e.sources.map((s) => s.from), ['event', 'web']);
+});

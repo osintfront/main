@@ -94,7 +94,21 @@ function httpUrl(v: unknown): URL | null {
     return null;
   }
 }
-const sameUrl = (s: string) => s.replace(/#.*$/, "").replace(/\/$/, "");
+/** One spelling of a link for comparing: parsed (host lower case, encoding normal), no #part, no trailing slash. */
+const sameUrl = (s: string) => {
+  let v = s;
+  try {
+    v = new URL(s.trim()).href;
+  } catch {
+    /* compare as given */
+  }
+  try {
+    v = decodeURI(v);
+  } catch {
+    /* keep encoded */
+  }
+  return v.replace(/#.*$/, "").replace(/\/$/, "");
+};
 
 function cleanAliases(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -267,4 +281,12 @@ export function overAfterClaim(s: { staff: boolean; spentUsd: number; budgetUsd:
   if (s.all > DEEP_LIMITS.inFlight) return "busy";
   if (!s.staff && s.budgetUsd != null && s.spentUsd + s.readers * DEEP_LIMITS.reserveUsd > s.budgetUsd) return "budget";
   return null;
+}
+
+/** Names for an entry: only its own names and the clicked forms may join it to an existing entry; extra aliases
+ *  from the model are added only when nobody owns them (an alias never pulls the write into another entry). */
+export function namePlan(names: string[], aliases: string[], owners: Record<string, string>, self: string | null = null): { mergeInto: string | null; add: string[] } {
+  const main = aliasPlan(names, owners, self);
+  const extra = aliasPlan(aliases, owners, self).add.filter((a) => !main.add.includes(a));
+  return { mergeInto: main.mergeInto, add: [...main.add, ...extra] };
 }

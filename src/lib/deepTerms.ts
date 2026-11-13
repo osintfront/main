@@ -88,7 +88,7 @@ export function selectionTerm(raw: string): string | null {
 export interface DeepImage { url: string; page: string; credit: string; license: string; licenseUrl: string | null }
 export interface DeepEntry {
   id: string; kind: TermKind; nameHe: string; nameEn: string; nameOrig: string; aliases: string[];
-  summaryHe: string; summaryEn: string; sections: { key: string; he: string; en: string }[]; sources: { title: string; url: string }[];
+  summaryHe: string; summaryEn: string; sections: { key: string; he: string; en: string }[]; sources: { title: string; url: string; from: 'web' | 'event' }[];
   image: DeepImage | null; events: string[]; version: number; updatedAt: string; editedAt: string | null;
 }
 
@@ -120,7 +120,7 @@ export function mapEntry(row: unknown): DeepEntry | null {
       .map((s) => ({ key: s.key as string, he: str(s.he, 1200), en: str(s.en, 1200) })),
     sources: arr(r.sources)
       .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object' && typeof (s as { url?: unknown }).url === 'string')
-      .map((s) => ({ title: str(s.title, 160), url: s.url as string })),
+      .map((s) => ({ title: str(s.title, 160), url: s.url as string, from: s.from === 'event' ? ('event' as const) : ('web' as const) })),
     image: mapImage(r.image),
     events: arr(r.events).filter((e): e is string => typeof e === 'string'),
     version: Number(r.version) || 1,

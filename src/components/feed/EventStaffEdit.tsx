@@ -82,6 +82,9 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
   };
 
   const [secondary, setSecondary] = useState<string[]>((event.secondaryCategories ?? []).map((c) => c.slug));
+  // The event was reloaded (after a save or a refresh): show its current list.
+  const secondaryKey = (event.secondaryCategories ?? []).map((c) => c.slug).join(',');
+  useEffect(() => setSecondary(secondaryKey ? secondaryKey.split(',') : []), [secondaryKey]);
   const changeSecondary = async (slugs: string[]) => {
     const prev = secondary;
     setSecondary(slugs);

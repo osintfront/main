@@ -162,6 +162,20 @@ async function routeAll(page) {
     out.c1_oneSecondary = (await card(page, 'A').locator('[data-secondary-type="airstrike"]').count()) === 1;
     out.c1_noneOnC = (await card(page, 'C').locator('[data-secondary-type]').count()) === 0;
 
+    // the phone's bottom sheet shows the secondary types too
+    if (phone) {
+      await card(page, 'A').locator('h3').first().click(); // flies to its pin
+      await page.waitForTimeout(2000);
+      await showMap(page);
+      if (!(await page.locator('[data-mobile-sheet]').count())) {
+        await page.locator('.leaflet-marker-icon:has(svg.lucide-skull)').first().click({ force: true }).catch(() => {});
+        await page.waitForTimeout(800);
+      }
+      out.p_sheetSecondary = (await page.locator('[data-mobile-sheet] [data-secondary-type="airstrike"]').count()) >= 1;
+      await page.keyboard.press('Escape');
+      await showFeed(page);
+    }
+
     // 6. legend: main types only
     await showMap(page);
     const legendBtn = page.getByRole('button', { name: LANG === 'he' ? /מקרא/ : /legend/i }).first();
