@@ -11,6 +11,8 @@ import { hasFeature, myPlan, usePlanVersion } from '@/lib/plans';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { previewText } from '@/utils/text';
 import { localizedTitle } from '@/lib/localizedTitle';
+import type { EventTerm } from '@/lib/deepTerms';
+import { TermText } from './TermText';
 
 const SITE = 'https://osintfront.com';
 
@@ -50,7 +52,15 @@ export function eventTexts(event: PublicEvent, lang: string) {
  *  "Expand" — the full report + religious meaning + other implications (written once by the agent);
  *  "Source text" — the original report, with a button back to the translated summary.
  */
-export function EventText({ event, compact = false }: { event: PublicEvent; compact?: boolean }) {
+export function EventText({ event, compact = false, terms, usedTerms, onTerm }: {
+  event: PublicEvent;
+  compact?: boolean;
+  /** Deep analysis (details window only): term links in the summary and the expansion. */
+  terms?: EventTerm[];
+  /** Keys already linked above (the headline): each term links once in the window. */
+  usedTerms?: Set<string>;
+  onTerm?: (t: EventTerm) => void;
+}) {
   const { t, lang } = useI18n();
   const { profile } = useAuth();
   usePlanVersion();
@@ -116,6 +126,9 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
     openGate(profile ? 'upgrade' : 'signup', 'copy_text');
   };
 
+  // One fresh set per render: summary first, then the expansion (a term links once).
+  const used = new Set(usedTerms ?? []);
+  const linked = (s: string) => (terms && onTerm ? <TermText text={s} terms={terms} used={used} onTerm={onTerm} /> : s);
   const raw = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
   // "None" answers are not shown.
   const real = (v: string) => (/^\s*(אין|none|n\/a|no)\.?\s*$/i.test(v ?? '') ? '' : v);
@@ -137,7 +150,7 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
         </p>
       ) : summary ? (
         <p className={cn('text-slate-600 dark:text-slate-300', compact ? 'text-[13px] leading-relaxed' : 'text-[15px] leading-relaxed text-slate-800 dark:text-slate-200')} dir="auto">
-          {summary}
+          {linked(summary)}
         </p>
       ) : !hasSummary ? (
         <button
@@ -152,17 +165,17 @@ export function EventText({ event, compact = false }: { event: PublicEvent; comp
 
       {open && x && view === 'summary' ? (
         <div className="mt-2 space-y-2 border-s-2 border-sky-200 ps-3 text-[13px] leading-relaxed text-slate-700 dark:border-sky-500/40 dark:text-slate-200" dir="auto">
-          {x.details ? <p className="whitespace-pre-line">{x.details}</p> : null}
+          {x.details ? <p className="whitespace-pre-line">{linked(x.details)}</p> : null}
           {x.religious ? (
             <p className="whitespace-pre-line">
               <strong className="font-semibold">{t('text.religious')}: </strong>
-              {x.religious}
+              {linked(x.religious)}
             </p>
           ) : null}
           {x.implications ? (
             <p className="whitespace-pre-line">
               <strong className="font-semibold">{t('text.implications')}: </strong>
-              {x.implications}
+              {linked(x.implications)}
             </p>
           ) : null}
         </div>
