@@ -1,0 +1,4 @@
+# Enough for the offline tests (no torch, no network).
+numpy>=1.26
+pillow>=10
+rasterio>=1.3.9
