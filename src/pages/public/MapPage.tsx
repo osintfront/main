@@ -29,7 +29,7 @@ import { FilterPanel } from '@/components/filters/FilterPanel';
 import type { DrawMode, MoveTarget } from '@/components/map/MapView';
 import { pinTarget, type PinRef } from '@/lib/pinTarget';
 import { useArchiveRange } from '@/hooks/useArchiveRange';
-import { EMPTY_FILTERS, activeFilterCount, loadFilters, saveFilters, isOnMap, matchesFilters, needsArchive, pointInPolygon, type EventFilters, type LatLng } from '@/lib/eventFilters';
+import { EMPTY_FILTERS, activeFilterCount, archiveFilters, loadFilters, saveFilters, isOnMap, matchesFilters, needsArchive, pointInPolygon, type EventFilters, type LatLng } from '@/lib/eventFilters';
 import type { HfcAlert } from '@/types/hfcAlert';
 import { SlidersHorizontal } from 'lucide-react';
 import { PHONE_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
@@ -197,7 +197,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   }, [filters, soundPrefs.scope, soundPrefs.mutedCategories, lang]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [drawMode, setDrawMode] = useState<DrawMode | null>(null);
-  const effectiveFilters = useMemo(() => (isArchive ? { ...filters, preset: 'live' as const } : filters), [filters, isArchive]);
+  const effectiveFilters = useMemo(() => (isArchive ? archiveFilters(filters) : filters), [filters, isArchive]);
   // Filter sets: several named filters; while one is in force they replace the general filter.
   // Live map only (not the archive page). Sets past the plan's limit are kept but locked.
   usePlanVersion(); // re-render when the plan rows load
@@ -268,7 +268,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     for (const e of extra) if (!ids.has(e.id)) (ids.add(e.id), out.push(e));
     return out;
   }, [events, older.events, ask]);
-  const filterCount = activeFilterCount(effectiveFilters);
+  // The archive has no time filter: it is not counted there.
+  const filterCount = activeFilterCount(isArchive ? { ...effectiveFilters, preset: 'live' } : effectiveFilters);
   // צי"ח: saved keyword queries; an event passes if it matches any query that is on.
   const { eeis, add: addEei, remove: removeEei } = useEeis();
   const eeiMatchers = useMemo(

@@ -89,6 +89,11 @@ export function timeWindow(f: EventFilters, now = Date.now()): { from: number; t
   return { from: now - hours * 3600_000, to: now + 60_000 };
 }
 
+/** The archive page shows one chosen day: the time filter is dropped there, every other filter stays. */
+export function archiveFilters(f: EventFilters): EventFilters {
+  return { ...f, preset: 'custom', from: '', to: '' };
+}
+
 // ─── Areas ─────────────────────────────────────────────────────────
 /** bbox = [south, west, north, east] — rough box, used only when the country text is unknown. */
 export interface AreaDef {
