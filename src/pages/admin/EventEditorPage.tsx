@@ -32,6 +32,7 @@ import { Alert, Spinner } from '@/components/common/Feedback';
 import { Button, SelectField, TextAreaField, TextField, ToggleField } from '@/components/common/Form';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { useToast } from '@/components/common/Toast';
+import { saveSecondary } from '@/lib/secondarySave';
 import { LocationPicker } from '@/components/admin/events/LocationPicker';
 
 // ── datetime-local helpers (browser local time ⇄ ISO) ──────────────
@@ -181,6 +182,8 @@ export function EventEditorPage() {
     splitParts(base, categories, (c) => categoryLabel(c.slug, c.name), (count) => t('compose.andMore', { count }));
 
   /** Validate for the target status, then save (create or update). */
+  // The event saved but its secondary types did not: say so (the save itself still counts).
+  const warnSecondary = () => toast.error(t('form.secondaryFailed'));
   const run = async (label: string, target: EventStatus, extra?: { rejectionReason?: string; skipValidation?: boolean }) => {
     if (busy) return;
     if (!extra?.skipValidation) {
@@ -200,7 +203,7 @@ export function EventEditorPage() {
         if (parts.length > 1) {
           for (const part of parts) {
             const ev = await createEvent(part, target, notes);
-            if (part.secondarySlugs?.length) await setEventSecondaryCategories(ev.id, part.secondarySlugs);
+            if (part.secondarySlugs?.length) await saveSecondary(() => setEventSecondaryCategories(ev.id, part.secondarySlugs!), warnSecondary);
             if (linkMedia.length) await attachComposeMedia(ev.id, linkMedia, tgPost);
           }
           toast.success(t('compose.splitDone', { count: parts.length }));
@@ -210,7 +213,7 @@ export function EventEditorPage() {
         // One part: it carries the place relabel and the secondary type the split rules added.
         const one = parts[0] ?? input;
         const created = await createEvent(one, target, notes);
-        if (one.secondarySlugs?.length) await setEventSecondaryCategories(created.id, one.secondarySlugs);
+        if (one.secondarySlugs?.length) await saveSecondary(() => setEventSecondaryCategories(created.id, one.secondarySlugs!), warnSecondary);
         if (linkMedia.length) await attachComposeMedia(created.id, linkMedia, tgPost);
         toast.success(t(target === 'published' ? 'form.toastPublished' : target === 'pending_review' ? 'form.toastSubmitted' : 'form.toastDraft'));
         navigate(`/admin/events/${created.id}`, { replace: true });
@@ -225,8 +228,7 @@ export function EventEditorPage() {
       if (editable) await saveInternalNotes(event.id, notes).catch(() => undefined);
       const nextSecondary = input.secondarySlugs ?? [];
       if (editable && nextSecondary.join(',') !== (event.secondarySlugs ?? []).join(',')) {
-        await setEventSecondaryCategories(event.id, nextSecondary);
-        updated.secondarySlugs = nextSecondary;
+        if (await saveSecondary(() => setEventSecondaryCategories(event.id, nextSecondary), warnSecondary)) updated.secondarySlugs = nextSecondary;
       }
       setEvent(updated);
       setInput(eventToInput(updated));

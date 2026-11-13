@@ -925,6 +925,7 @@ export const en = {
   'form.toastSubmitted': 'Submitted for review.',
   'form.toastPublished': 'Published — it is now on the public map.',
   'form.toastSaved': 'Changes saved.',
+  'form.secondaryFailed': 'The event was saved, but its secondary types were not. Try saving them again.',
   'form.toastRejected': 'Event rejected.',
   'form.toastArchived': 'Event archived.',
   'form.toastDeleted': 'Event deleted.',

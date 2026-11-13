@@ -39,6 +39,7 @@ import { askMap } from "../_shared/ask.ts";
 import { cleanHistory, cleanIds } from "../_shared/askInput.ts";
 import { eeiBudget, eeiSpentToday, parseEei, saveEei, tagTheatre } from "../_shared/eei.ts";
 import { LIMITS as EEI_LIMITS, parseCacheKey, runParse } from "../_shared/eeiInput.ts";
+import { afterEdit } from "../_shared/afterEdit.ts";
 import { dedupeRecent, dropRepeats } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { saveEventTerms } from "../_shared/eventTerms.ts";
@@ -325,11 +326,12 @@ async function edit(id: string) {
   // The text the person published (they may have edited it), else the original report.
   const text = foreignShare(`${ev.title} ${ev.description}`) > 0.4 ? `${ev.title}\n\n${ev.description}` : ev.original_report_text || `${ev.title}\n\n${ev.description}`;
   const r = await editReport({ text, mode: "whatsapp", categories: cats, detailedPlaces: true, maxPlaces: 30, origin: { name: ev.source_name ?? "", url: ev.source_url, sentAt: ev.occurred_at } });
-  const update: Record<string, unknown> = {
-    ai_suggestions: { ...ai, editor_model: r.model, countries: r.countries },
-  };
+  // A person may have corrected the event while the AI was writing: read its flags again (afterEdit).
+  const { data: fresh } = await db.from("events").select("ai_suggestions,coordinates_manually_corrected").eq("id", id).maybeSingle();
+  const now = afterEdit(fresh, { editor_model: r.model, countries: r.countries });
+  const update: Record<string, unknown> = { ai_suggestions: now.ai };
   // Text a person corrected by hand (edit_event_text) stays exactly as they wrote it.
-  if (!ai?.manual_text) {
+  if (now.writeText) {
     update.translations = { ...asTr(ev.translations), ...translationsFor(r) };
     if (r.title) update.title = r.title.slice(0, 200);
     if (r.summary) update.description = formatDescription(r);
@@ -337,9 +339,9 @@ async function edit(id: string) {
   if (!ev.country && mainCountry(r)) update.country = mainCountry(r);
   // Secondary types set by hand (set_event_secondary_categories) stay; so do those of a split
   // event (the split already pruned them; a re-run would bring back a sibling's kind).
-  if (!ai?.manual_secondary && !ai?.split_from && !ai?.split_into) update.secondary_categories = r.secondary_category_slugs;
+  if (now.writeSecondary) update.secondary_categories = r.secondary_category_slugs;
   // A place a person corrected by hand stays; otherwise the editor's places replace the old ones.
-  if (!ev.coordinates_manually_corrected) {
+  if (now.writePlaces) {
     update.locations = locationsForDb(r, 30);
     const pt = mainPoint(r);
     if (pt) Object.assign(update, { latitude: pt.lat, longitude: pt.lng, location_name: pt.name.slice(0, 200), location_precision: pt.precision });
@@ -347,7 +349,7 @@ async function edit(id: string) {
   const { error } = await db.from("events").update(update).eq("id", id);
   if (error) return json({ error: error.message }, 500);
   // Deep analysis: the names it mentions — not when its text was corrected by hand (the marks would not fit it).
-  if (!ai?.manual_text) {
+  if (now.writeText) {
     try { await saveEventTerms(db, id, r.terms ?? []); } catch { /* never fails the edit */ }
   }
   const { data: after } = await db.from("events").select("locations").eq("id", id).maybeSingle();

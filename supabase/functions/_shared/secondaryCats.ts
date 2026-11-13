@@ -42,3 +42,16 @@ export function afterSplit(a: { own: string | null; secondary: string[]; groups:
   }
   return { keepSlug, main: keepSlug, secondary: rest.filter((s) => s !== keepSlug), relabelPlaces: false };
 }
+
+/**
+ * The editor's main type next to the one triage chose. Killed / Wounded / Assassination from the editor
+ * wins the main place (the agreed rules), and triage's type joins the secondary types first. When triage
+ * already chose one of those, it stays and the editor's becomes secondary. Otherwise nothing changes.
+ */
+export function withEditorMain(rowMain: string | null, editorMain: string | null, editorSecondary: string[], allowed: Iterable<string>): { main: string | null; secondary: string[] } {
+  const ok = new Set(allowed);
+  const sticky = !!editorMain && ok.has(editorMain) && STICKY_MAIN.includes(editorMain) && editorMain !== rowMain;
+  if (!sticky) return { main: rowMain, secondary: cleanSecondary(editorSecondary, ok, rowMain) };
+  if (rowMain && STICKY_MAIN.includes(rowMain)) return { main: rowMain, secondary: cleanSecondary([editorMain, ...editorSecondary], ok, rowMain) };
+  return { main: editorMain, secondary: cleanSecondary([rowMain, ...editorSecondary], ok, editorMain) };
+}
