@@ -70,17 +70,20 @@ def to_reflectance(dn: np.ndarray, baseline: str | None, harmonize: bool) -> np.
 
 
 def pick_scene(candidates: Iterable[Scene], read_fn: Callable[[Scene], BoxStats], max_cloud: float = 10.0,
-               fixed_date: bool = False) -> tuple[Scene, float]:
+               fixed_date: bool = False, max_checks: int = 15) -> tuple[Scene, float]:
     """Choose the picture. Returns (scene, box cloud %), or raises NoScene.
 
     candidates: newest first. read_fn measures the box in one candidate (SCL band).
     Without a date: the newest whose box cloud is at most max_cloud; otherwise the least cloudy.
     With a date (candidates are that day's tiles): the best one that day, whatever its cloud.
     A box with more than 2 % empty pixels, or not wholly inside the tile, is skipped (an
-    overlapping tile of the same pass usually covers it).
+    overlapping tile of the same pass usually covers it). At most max_checks boxes are measured
+    (each costs two small remote reads).
     """
     best: tuple[Scene, float] | None = None
-    for s in candidates:
+    for n, s in enumerate(candidates):
+        if n >= max_checks:
+            break
         try:
             st = read_fn(s)
         except SourceError as e:

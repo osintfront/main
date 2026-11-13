@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import socket
 import sys
 import threading
@@ -59,6 +60,14 @@ def load_env() -> dict[str, str]:
     return env
 
 
+_SIGNED = re.compile(r"\?[^\s'\"]*(?:sig|token|signature)=[^\s'\"]*", re.I)
+
+
+def scrub(text: str) -> str:
+    """Error text is stored on the job (staff and the requester can read it): drop signed-link query strings."""
+    return _SIGNED.sub("?…", text)[:1900]
+
+
 def classify(e: BaseException) -> str:
     if isinstance(e, NoScene):
         return "no_scene"
@@ -97,7 +106,7 @@ def run_job(job: dict, sb, cfg: Config, source, engine_for, process_fn=process) 
         else:
             log.error("job %s failed (%s, attempt %s): %s\n%s", jid, code, attempt, e, traceback.format_exc())
         try:
-            sb.rpc("satsr_finish", {"p_id": jid, "p_status": status, "p_result": {"error_code": code, "error": str(e)[:1900]}})
+            sb.rpc("satsr_finish", {"p_id": jid, "p_status": status, "p_result": {"error_code": code, "error": scrub(str(e))}})
         except Exception as e2:  # noqa: BLE001
             log.error("could not record failure: %s", e2)
         return status

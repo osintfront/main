@@ -111,6 +111,14 @@ class LoopTest(unittest.TestCase):
         self.assertEqual(db.finishes(), [])
         self.assertEqual(db.uploads, [])
 
+    def test_signed_links_scrubbed_from_errors(self):
+        db = FakeDB(job(3))
+        url = "https://x.blob.core.windows.net/a/B04.tif?st=2026&se=2026&sp=rl&sig=SECRETSIG%3D"
+        worker.run_once(db, "me", {}, CFG, None, engine_for, raising(SourceError(f"'/vsicurl/{url}' not recognized")))
+        err = db.finishes()[0]["p_result"]["error"]
+        self.assertNotIn("SECRETSIG", err)
+        self.assertIn("B04.tif?…", err)
+
     def test_housekeeping_deletes_expired_files(self):
         db = FakeDB()
         db.expired = [[f"j{i}/tci_sr.png" for i in range(50)], ["k/tci_lr.png"]]

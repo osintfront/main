@@ -96,7 +96,8 @@ export function useSatEnhance(map: L.Map | null, date: string | null, active: bo
   const start = useCallback(async () => {
     setMsg(null);
     if (!profile) return openGate('signup', 'sat_enhance');
-    const q = quota ?? (await fetchSatsrQuota());
+    // Always ask again: the plan or the sign-in may have changed since the panel last loaded it.
+    const q = (await fetchSatsrQuota()) ?? quota;
     if (q) setQuota(q);
     if (!q?.signedIn) return openGate('signup', 'sat_enhance');
     if (!q.enabled) return openGate('upgrade', 'sat_enhance', 'plan');
@@ -171,8 +172,15 @@ export function useSatEnhance(map: L.Map | null, date: string | null, active: bo
   const shownProduct: SatsrProduct | null = products.includes(product) ? product : products[0] ?? null;
   const current = jobs.find((j) => j.requestId === (awaiting ?? lastReq)) ?? null;
 
+  // Polling replaces the job objects every 10 s: effects below key on stable values, so the
+  // overlay is not rebuilt (and its links not signed again) while another job is on its way.
+  const shownJobId = shown?.jobId ?? null;
+  const boundsKey = shown?.bounds ? JSON.stringify(shown.bounds) : null;
+  const paths = shown && shownProduct ? shown.products?.[shownProduct] : null;
+  const srPath = paths?.sr ?? null;
+  const lrPath = paths?.lr ?? null;
+
   // A result picked from the list that is off screen: go there.
-  const shownJobId = shown?.jobId;
   useEffect(() => {
     if (!map || !shown?.bounds) return;
     const b = L.latLngBounds(shown.bounds);
@@ -181,14 +189,13 @@ export function useSatEnhance(map: L.Map | null, date: string | null, active: bo
 
   // Signed links for the shown product (private bucket, 1 hour).
   useEffect(() => {
-    const paths = shown && shownProduct ? shown.products?.[shownProduct] : null;
-    if (!shown || !shownProduct || !paths?.sr || !paths.lr) return setUrls(null);
+    if (!srPath || !lrPath) return setUrls(null);
     let alive = true;
-    void Promise.all([resultUrl(paths.sr), resultUrl(paths.lr)]).then(([sr, lr]) => {
-      if (alive) setUrls({ key: `${shown.jobId}:${shownProduct}`, sr, lr });
+    void Promise.all([resultUrl(srPath), resultUrl(lrPath)]).then(([sr, lr]) => {
+      if (alive) setUrls({ key: `${srPath}|${lrPath}`, sr, lr });
     });
     return () => { alive = false; };
-  }, [shown, shownProduct]);
+  }, [srPath, lrPath]);
 
   // The overlays: original (pixelated, 10 m) in pane A, enhanced in pane B.
   const panesRef = useRef<{ a: HTMLElement; b: HTMLElement } | null>(null);
@@ -197,8 +204,8 @@ export function useSatEnhance(map: L.Map | null, date: string | null, active: bo
     if (map && !panesRef.current) panesRef.current = srPanes(map);
   }, [map]);
   useEffect(() => {
-    if (!map || !shown?.bounds || !urls?.sr || !urls.lr) return;
-    const b = L.latLngBounds(shown.bounds);
+    if (!map || !boundsKey || !urls?.sr || !urls.lr) return;
+    const b = L.latLngBounds(JSON.parse(boundsKey) as [[number, number], [number, number]]);
     const lr = L.imageOverlay(urls.lr, b, { pane: PANE_BEFORE, opacity, interactive: false, className: 'ofm-sr-before' });
     const sr = L.imageOverlay(urls.sr, b, { pane: PANE_AFTER, opacity, interactive: false, className: 'ofm-sr-after', attribution: 'Copernicus Sentinel · SEN2SR' });
     if (view !== 'after') {
@@ -213,7 +220,7 @@ export function useSatEnhance(map: L.Map | null, date: string | null, active: bo
       sr.remove();
       layersRef.current = null;
     };
-  }, [map, shown?.bounds, urls, view]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, boundsKey, urls, view]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     layersRef.current?.lr.setOpacity(opacity);
     layersRef.current?.sr.setOpacity(opacity);
@@ -224,7 +231,7 @@ export function useSatEnhance(map: L.Map | null, date: string | null, active: bo
     const panes = panesRef.current;
     if (!map || !panes) return;
     const clear = () => { panes.a.style.clipPath = ''; panes.b.style.clipPath = ''; };
-    if (!shown || view !== 'swipe') return clear();
+    if (!shownJobId || view !== 'swipe') return clear();
     const update = () => {
       const size = map.getSize();
       const c = swipeClips(size.x, size.y, swipe, (p) => {
@@ -240,7 +247,7 @@ export function useSatEnhance(map: L.Map | null, date: string | null, active: bo
       map.off('move zoom zoomend resize viewreset rotate', update);
       clear();
     };
-  }, [map, shown, view, swipe]);
+  }, [map, shownJobId, view, swipe]);
 
   const download = useCallback(async (which: SatsrWhich) => {
     const path = shown && shownProduct ? shown.products?.[shownProduct]?.[which] : null;

@@ -48,6 +48,11 @@ class PickTest(unittest.TestCase):
         self.assertEqual((s.id, c), ("S1", 55))
         self.assertEqual(len(seen), 2)
 
+    def test_check_limit(self):
+        (s, c), seen = self.run_pick([BoxStats(50 - i, 0, True) for i in range(6)], max_cloud=10, max_checks=3)
+        self.assertEqual(seen, ["S0", "S1", "S2"])
+        self.assertEqual((s.id, c), ("S2", 48))
+
     def test_empty_is_no_scene(self):
         with self.assertRaises(NoScene):
             pick_scene([], lambda s: BoxStats(0, 0, True))
