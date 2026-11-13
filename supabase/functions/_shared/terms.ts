@@ -28,6 +28,7 @@ export function normTerm(s: unknown): string {
 export const TERM_RULES = `
 Terms (the "terms" field): mark the names a reader may want explained — people with a public role (leaders, officials, commanders, spokesmen), named weapons / systems / platforms, organisations / units / militias, places of standing significance (a strait, a base, a facility — not the town where the incident happened) and military terms a reader may not know.
 You must never mark: the dead, wounded, detained, witnesses or any private person; countries; generic words ("army", "a drone"); the outlet that reported.
+A name that holds another name worth marking (a unit or branch of an organisation, a title with a person's name): mark both, each as its own item — e.g. "כוחות היבשה של משמרות המהפכה" (IRGC Ground Forces) and "משמרות המהפכה" (IRGC).
 "he" / "en": the name exactly as written in the Hebrew / English headline or summary. "name": the usual full English name. kind: person, weapon, org, place or term. Usually none to three.`;
 
 export const TERMS_PROP = {

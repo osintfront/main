@@ -47,5 +47,5 @@ test('limits, duplicates, rubbish', () => {
 test('tool property and rules', () => {
   const p = JSON.stringify(TERMS_PROP);
   for (const k of TERM_KINDS) assert.ok(p.includes(k), k);
-  for (const w of ['public role', 'never', 'private', 'exactly as written']) assert.ok(TERM_RULES.includes(w), w);
+  for (const w of ['public role', 'never', 'private', 'exactly as written', 'mark both']) assert.ok(TERM_RULES.includes(w), w);
 });
