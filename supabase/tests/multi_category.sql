@@ -22,9 +22,9 @@ begin
   end if;
 
   insert into auth.users (id, email, aud, role, email_confirmed_at) values
-    (ed, 'mc-editor@e2e.test', 'authenticated', 'authenticated', now()),
+    (ed, 'mc-analyst@e2e.test', 'authenticated', 'authenticated', now()),
     (vw, 'mc-viewer@e2e.test', 'authenticated', 'authenticated', now());
-  update public.profiles set status = 'active', role = 'editor', plan = 'pro' where id = ed;
+  update public.profiles set status = 'active', role = 'analyst', plan = 'pro' where id = ed;
   update public.profiles set status = 'active', role = 'viewer', plan = 'pro' where id = vw;
 
   -- 2. cleaning on insert
@@ -110,6 +110,7 @@ begin
   end;
   reset role;
   if n <> 0 then raise exception 'check 7b: anon reads % archived_events rows', n; end if;
+  perform set_config('request.jwt.claims', '', true); -- back to the service context for the inserts below
 
   -- 8. ask-the-map candidates: a secondary match counts, a main match ranks higher
   insert into public.events (title, occurred_at, published_at, created_by, status, country, category_id)
