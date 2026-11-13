@@ -58,3 +58,15 @@ test('internal calls (no user) are never counted', async () => {
   await runParse(d, { uid: null, limitless: false });
   assert.deepEqual(log, ['parse']);
 });
+
+test('the tagger skips theatres no current list holds', async () => {
+  const { inCurrentLists } = await import('../../supabase/functions/_shared/eeiInput.ts');
+  const rows = [{ hash: 'a' }, { hash: 'b' }, { hash: 'c' }];
+  const lists = [
+    { list: { theatres: [{ hash: 'a' }, { hash: 'x' }] } },
+    { list: null },
+    { list: { theatres: [{ hash: 'c' }, {}] } },
+  ];
+  assert.deepEqual(inCurrentLists(rows, lists).map((r) => r.hash), ['a', 'c']);
+  assert.deepEqual(inCurrentLists(rows, []), []);
+});

@@ -183,6 +183,10 @@ const errors = [];
   const reload = async (page) => { await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForTimeout(3000); };
   const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `eei-${LANG}-${DEVICE}-${PLAN}-${name}.png`) });
   const has = (list, ...names) => names.every((n) => list.some((x) => x.includes(n)));
+  // Phone: every EEI control is at least 36 px tall and wide (a finger, not a mouse).
+  const small = async (d) => phone ? d.locator('button:visible, input[type="checkbox"]:visible, [role="switch"]:visible').evaluateAll((els) =>
+    els.map((el) => { const r = (el.closest('label') || el).getBoundingClientRect(); return { k: el.getAttribute('data-eei-action') || el.getAttribute('aria-label') || el.textContent.trim().slice(0, 20), w: Math.round(r.width), h: Math.round(r.height) }; })
+      .filter((x) => x.w > 0 && (x.w < 36 || x.h < 36))) : [];
 
   try {
     if (PLAN === 'pro') {
@@ -196,6 +200,7 @@ const errors = [];
       const prio = PARSED.theatres.flatMap((t) => t.topics).filter((t) => t.priority).length;
       out.c1_stars = (await d.locator('[data-eei-action="priority"][aria-pressed="true"]').count()) === prio;
       await shot(page, 'preview');
+      out.c15_smallPreview = await small(d);
       // 2. rename k03, delete k02, save
       const iran = d.locator('[data-eei-theatre="h1"]');
       await iran.locator('[data-eei-topic="k03"] input').fill('Israeli government talk');
@@ -205,6 +210,7 @@ const errors = [];
       const sent = saves[saves.length - 1].list.theatres[0].topics.map((t) => t.label);
       out.c2_saved = sent.includes('Israeli government talk') && !sent.some((l) => l.includes('הורמוז'));
       out.c2_noClientId = !('id' in saves[saves.length - 1].list.theatres[0]);
+      out.c15_smallList = await small(d);
       // 4a. no marks yet → fallback: talks, missile, readiness, protest, exceptional
       let tl = await titles(page);
       // (the missile event fits "possible strikes" by its category, whose name contains "attack")
@@ -305,6 +311,7 @@ const errors = [];
   const bad = Object.entries(out).filter(([, v]) => v === false);
   if (out.c1_theatres !== undefined && out.c1_theatres !== 7) bad.push(['c1_theatres', out.c1_theatres]);
   if (out.c3_cards !== undefined && out.c3_cards !== 6) bad.push(['c3_cards', out.c3_cards]);
+  for (const k of ['c15_smallPreview', 'c15_smallList']) if (out[k] && out[k].length) bad.push([k, out[k]]);
   if (out.consoleErrors.length) bad.push(['consoleErrors', out.consoleErrors]);
   if (out.FAILED) bad.push(['FAILED', out.FAILED]);
   console.log(JSON.stringify(out, null, 1));

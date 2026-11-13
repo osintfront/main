@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { pollWhileVisible } from '@/lib/visiblePoll';
 import { EMPTY_VIEW, lastAt, mergeTags, sanitizeEeiView, theatresOn, type EeiList, type EeiTags, type EeiView } from '@/lib/eeiLens';
 import { clearEei, fetchMyList, fetchMyTags, saveEei } from '@/services/eeiService';
 
@@ -93,8 +94,8 @@ export function useEeiList(enabled: boolean, refreshKey: unknown) {
   }, [anyOn, pull, refreshKey, hashes]);
   useEffect(() => {
     if (!anyOn) return;
-    const id = window.setInterval(() => void pull(), 60_000);
-    return () => window.clearInterval(id);
+    // Not while the tab is hidden; coming back reads at once.
+    return pollWhileVisible(() => void pull(), 60_000);
   }, [anyOn, pull]);
 
   const save = useCallback(async (text: string, next: EeiList) => {

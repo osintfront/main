@@ -389,3 +389,14 @@ export async function runParse<T extends { theatres: unknown[] }>(
     throw e;
   }
 }
+
+/** Only the theatres some user's current list holds (an edited list's old theatres are not tagged any more). */
+export function inCurrentLists<T extends { hash: string }>(rows: T[], lists: { list: unknown }[]): T[] {
+  const held = new Set<string>();
+  for (const l of lists) {
+    const ths = (l.list as { theatres?: unknown } | null)?.theatres;
+    if (!Array.isArray(ths)) continue;
+    for (const th of ths) if (typeof (th as { hash?: unknown })?.hash === "string") held.add((th as { hash: string }).hash);
+  }
+  return rows.filter((r) => held.has(r.hash));
+}
