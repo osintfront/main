@@ -28,7 +28,7 @@ test('names in Hebrew and English', () => {
 
 test('every other list knows both', () => {
   for (const f of ['src/types/category.ts', 'api/_lib/pushFormat.ts', 'supabase/functions/_shared/eeiInput.ts',
-    'supabase/functions/_shared/splitEvent.ts', 'supabase/functions/_shared/dedupe.ts']) {
+    'supabase/functions/_shared/splitEvent.ts', 'supabase/functions/_shared/dedupeMatch.ts']) {
     const s = read(f);
     assert.match(s, /\bkilled\b/, f);
     assert.match(s, /\bwounded\b/, f);
