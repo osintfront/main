@@ -17,4 +17,6 @@ Category rules (they override any other hint):
 - Deaths not caused by violence (accident, illness, disaster) keep their own kind (fire, natural-disaster, infrastructure-incident…), not killed / wounded.
 - A place is tagged with the kind of the attack there, never killed / wounded, unless the means is unknown.
 
-Secondary types (secondary_category_slugs): other kinds of the SAME incident, at most two — e.g. the strike behind the dead, or forces seen at the strike site. Empty for most reports. Never the main type. Never a different incident in another place (that is a separate place with its own kind, and the report is split).`;
+Secondary types (secondary_category_slugs): other kinds of the SAME incident, at most two — e.g. the strike behind the dead, or forces seen at the strike site. Empty for most reports. Never the main type. Never a different incident in another place (that is a separate place with its own kind, and the report is split).
+- A report that is a party's claim or announcement (a military, a group or its spokesman says it hit / destroyed something) → add statements as a secondary type; the attack itself stays the main type ("IRGC: an American radar in Bahrain was destroyed" → main missile-rocket-attack, secondary military-activity, statements).
+- airstrike only when aircraft or drones struck. A target hit by missiles or rockets is not an airstrike.`;
