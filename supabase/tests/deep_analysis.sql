@@ -60,6 +60,10 @@ begin
   r := public.event_terms_for(ev);
   reset role;
   if jsonb_array_length(r) <> 1 or (r->0->>'entry')::uuid is distinct from en then raise exception 'stored mark: %', r; end if;
+  set local role anon;
+  r := public.event_terms_for(ev);
+  reset role;
+  if jsonb_array_length(r) <> 1 then raise exception 'guest gets no marks: %', r; end if;
 
   insert into public.events (title, occurred_at, published_at, created_by, status, country, category_id)
   values ('Another Heron flight', now() - interval '2 hours', now() - interval '2 hours', an, 'published', 'Lebanon', cat) returning id into ev2;

@@ -54,6 +54,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
   const [deep, setDeep] = useState<DeepTarget | null>(null);
   const [analyze, setAnalyze] = useState<{ text: string; x: number; y: number } | null>(null);
   const textArea = useRef<HTMLDivElement>(null);
+  const headArea = useRef<HTMLHeadingElement>(null);
   const loadTerms = (force = false) => fetchEventTerms(event.id, force).then(setTerms);
   useEffect(() => {
     setTerms([]);
@@ -70,7 +71,8 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
   linkSegments(title, terms, headlineUsed);
   const selected = () => {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !textArea.current || !sel.anchorNode || !textArea.current.contains(sel.anchorNode)) return null;
+    const node = sel?.anchorNode;
+    if (!sel || sel.isCollapsed || !node || !(textArea.current?.contains(node) || headArea.current?.contains(node))) return null;
     return selectionTerm(sel.toString());
   };
   const onContextMenu = (e: ReactMouseEvent) => {
@@ -143,7 +145,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
               <SecondaryBadges categories={event.secondaryCategories} />
               <SeverityBadge severity={event.severity} />
             </div>
-            <h2 id="event-details-title" onContextMenu={onContextMenu} className="mt-2 text-lg font-bold leading-snug text-slate-900 sm:text-xl dark:text-white" dir="auto">
+            <h2 id="event-details-title" ref={headArea} onContextMenu={onContextMenu} className="mt-2 text-lg font-bold leading-snug text-slate-900 sm:text-xl dark:text-white" dir="auto">
               <TermText text={title} terms={terms} onTerm={onTerm} />
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">

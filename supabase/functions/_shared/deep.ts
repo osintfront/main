@@ -8,7 +8,7 @@
 import { callClaude, isTransient } from "./editor.ts";
 import { costUsd } from "./usage.ts";
 import {
-  aliasPlan, cleanEntry, DEEP_LIMITS, DEEP_TOOL, deepSystemPrompt, deepUserMessage, pickImage, searchUrls,
+  aliasPlan, cleanEntry, DEEP_LIMITS, DEEP_TOOL, deepSystemPrompt, deepUserMessage, pickImage, searchUrls, turnTimeout,
   type CleanEntry, type DeepEvent, type DeepImage,
 } from "./deepInput.ts";
 import { normTerm } from "./terms.ts";
@@ -85,10 +85,12 @@ async function ourEvents(db: Db, names: string[]): Promise<DeepEvent[]> {
 }
 
 /** One Opus turn with the 150-second limit; a transient failure is retried once after 5 s. */
-async function turn(body: Record<string, unknown>, purpose: string): Promise<any> {
+async function turn(body: Record<string, unknown>, purpose: string, startedAt: number): Promise<any> {
   const once = () => {
+    const ms = turnTimeout(startedAt, Date.now());
+    if (ms < 5000) return Promise.reject(new Error("deep write out of time"));
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("deep call timed out")), DEEP_LIMITS.timeoutMs); });
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("deep call timed out")), ms); });
     return Promise.race([callClaude(DEEP_MODEL, body, purpose), timeout]).finally(() => clearTimeout(timer));
   };
   try {
@@ -118,6 +120,7 @@ async function refund(db: Db, job: WriteJob) {
 
 export async function writeEntry(db: Db, job: WriteJob): Promise<void> {
   const purpose = job.staff ? "deep_entry_staff" : "deep_entry";
+  const startedAt = Date.now();
   let entryId: string | null = null;
   let fail: "failed" | "no_entry" | null = "failed";
   try {
@@ -139,12 +142,12 @@ export async function writeEntry(db: Db, job: WriteJob): Promise<void> {
     const messages: any[] = [{ role: "user", content: deepUserMessage({ names, kind: job.kind ?? old?.kind ?? null, sentence: job.sentence, events }) }];
     const answers: any[] = [];
     let cost = 0;
-    let out = await turn({ ...base, messages, tool_choice: { type: "auto" } }, purpose);
+    let out = await turn({ ...base, messages, tool_choice: { type: "auto" } }, purpose, startedAt);
     answers.push(out);
     cost += costUsd(DEEP_MODEL, out.usage ?? {});
     if (out.stop_reason === "pause_turn") {
       messages.push({ role: "assistant", content: out.content });
-      out = await turn({ ...base, messages, tool_choice: { type: "auto" } }, purpose);
+      out = await turn({ ...base, messages, tool_choice: { type: "auto" } }, purpose, startedAt);
       answers.push(out);
       cost += costUsd(DEEP_MODEL, out.usage ?? {});
     }
@@ -152,7 +155,7 @@ export async function writeEntry(db: Db, job: WriteJob): Promise<void> {
     if (!call) {
       messages.push({ role: "assistant", content: out.content });
       messages.push({ role: "user", content: "Now answer with the deep_entry tool." });
-      out = await turn({ ...base, messages, tool_choice: { type: "tool", name: "deep_entry" } }, purpose);
+      out = await turn({ ...base, messages, tool_choice: { type: "tool", name: "deep_entry" } }, purpose, startedAt);
       answers.push(out);
       cost += costUsd(DEEP_MODEL, out.usage ?? {});
       call = (out.content ?? []).find((b: any) => b.type === "tool_use" && b.name === "deep_entry");

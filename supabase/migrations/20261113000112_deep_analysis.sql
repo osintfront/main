@@ -146,12 +146,12 @@ revoke all on function public.deep_allowed(uuid), public.deep_claim(text, uuid, 
 
 -- ── The browser's calls ────────────────────────────────────────────────────────────
 /** The event's terms: stored marks (with their entry when one exists), then existing entries whose
- *  alias (4+ characters) appears in the event's text. Only for readers of the summary. At most 12. */
+ *  alias (4+ characters) appears in the event's text. Names only, for anyone who sees the event
+ *  (guests too: their headline shows the links with a lock). At most 12. */
 create or replace function public.event_terms_for(p_event uuid)
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare e record; v_txt text; v_out jsonb := '[]'::jsonb; v_seen uuid[] := '{}'; r record;
 begin
-  if not public.my_feature('event_summary') then return '[]'::jsonb; end if;
   select id, title, description, translations into e from public.events
   where id = p_event and status in ('published', 'archived') and deleted_at is null;
   if e.id is null then return '[]'::jsonb; end if;

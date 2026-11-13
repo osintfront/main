@@ -6,7 +6,7 @@ import { normTerm, TERM_KINDS, type TermKind } from "./terms.ts";
 
 export const DEEP_LIMITS = {
   aliases: 16, alias: 60, name: 80, summary: 500, section: 1200, sources: 10, events: 20, eventsDays: 180,
-  searches: 4, maxTokens: 6000, timeoutMs: 150000, leaseMin: 4, inFlight: 2, reserveUsd: 0.5, selMin: 2, selMax: 80,
+  searches: 4, maxTokens: 6000, timeoutMs: 150000, writeMs: 200000, leaseMin: 4, inFlight: 2, reserveUsd: 0.5, selMin: 2, selMax: 80,
 } as const;
 
 export const SECTION_KEYS = ["background", "capabilities", "operators", "use", "significance"] as const;
@@ -242,4 +242,22 @@ export function nextStep(s: {
   if (!s.staff && s.budgetUsd != null && s.spentUsd + s.readersInFlight * DEEP_LIMITS.reserveUsd >= s.budgetUsd) return "budget";
   if (s.inFlight >= DEEP_LIMITS.inFlight) return "busy";
   return "start";
+}
+
+/** Time left for the next Opus turn: at most 150 s, and the whole write ends 200 s after it began (lease: 4 min). */
+export function turnTimeout(startedAt: number, now: number): number {
+  return Math.max(0, Math.min(DEEP_LIMITS.timeoutMs, startedAt + DEEP_LIMITS.writeMs - now));
+}
+
+/** A lease that ran out with no answer (the worker was stopped): the write is dead. */
+export function staleJob(row: { busy_until: string | null; fail_reason: string | null; entry_id: string | null } | null, now: number): boolean {
+  if (!row?.busy_until) return false;
+  return new Date(row.busy_until).getTime() <= now;
+}
+
+/** After taking the lease, re-count (the check before it is not atomic): over the cap or the readers' budget? */
+export function overAfterClaim(s: { staff: boolean; spentUsd: number; budgetUsd: number | null; all: number; readers: number }): "busy" | "budget" | null {
+  if (s.all > DEEP_LIMITS.inFlight) return "busy";
+  if (!s.staff && s.budgetUsd != null && s.spentUsd + s.readers * DEEP_LIMITS.reserveUsd > s.budgetUsd) return "budget";
+  return null;
 }

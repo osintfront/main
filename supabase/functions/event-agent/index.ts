@@ -43,7 +43,7 @@ import { dedupeRecent, dropRepeats } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { saveEventTerms } from "../_shared/eventTerms.ts";
 import { jobState, ownersOf, writeEntry } from "../_shared/deep.ts";
-import { aliasPlan, cleanPatch, DEEP_LIMITS, nextStep } from "../_shared/deepInput.ts";
+import { aliasPlan, cleanPatch, DEEP_LIMITS, nextStep, overAfterClaim, staleJob } from "../_shared/deepInput.ts";
 import { normTerm } from "../_shared/terms.ts";
 import { TRANSLATE_API_URL, translateBriefChain } from "../_shared/translate.ts";
 import { AGENT_EXCLUDED_CATEGORIES } from "../_shared/categoryRules.ts";
@@ -85,6 +85,14 @@ async function deepStep(o: {
   key: string; uid: string | null; staff: boolean; internal: boolean; poll: boolean; entryId: string | null;
   names: string[]; kind: string | null; sentence: string; refreshId?: string;
 }) {
+  // A write whose worker was stopped (lease ran out, no answer): give its use back and mark it failed.
+  const { data: row } = await db.from("deep_jobs").select("busy_until,fail_reason,entry_id,started_by").eq("key", o.key).maybeSingle();
+  if (staleJob(row, Date.now())) {
+    const { data: gone } = await db.from("deep_jobs")
+      .update({ busy_until: null, fail_reason: "failed", retry_after: new Date(Date.now() + 3600_000).toISOString() })
+      .eq("key", o.key).eq("busy_until", row!.busy_until).select("key");
+    if (gone?.length && row!.started_by) await db.rpc("refund_feature", { p_uid: row!.started_by, p_key: "deep_analysis" });
+  }
   const st = await jobState(db, o.key);
   if (o.refreshId && o.poll && !st.leaseHeld && !st.failReason) {
     const { data: e } = await db.from("deep_entries").select("version").eq("id", o.refreshId).maybeSingle();
@@ -114,6 +122,17 @@ async function deepStep(o: {
   if (!token) {
     if (o.uid) await db.rpc("refund_feature", { p_uid: o.uid, p_key: "deep_analysis" });
     return json({ pending: true }, 202);
+  }
+  // The checks above are not atomic with the claim: count again, now including this write.
+  const [{ data: spent2 }, { data: flight2 }] = await Promise.all([db.rpc("deep_spent_today"), db.rpc("deep_in_flight")]);
+  const over = overAfterClaim({
+    staff: o.staff, spentUsd: Number(spent2 ?? 0) || 0, budgetUsd: setting?.value == null || !Number.isFinite(b) ? null : b,
+    all: Number(flight2?.all ?? 0) || 0, readers: Number(flight2?.readers ?? 0) || 0,
+  });
+  if (over) {
+    await db.rpc("deep_done", { p_key: o.key, p_token: token, p_entry: null, p_fail: null });
+    if (o.uid) await db.rpc("refund_feature", { p_uid: o.uid, p_key: "deep_analysis" });
+    return json({ error: over }, 429);
   }
   const job = writeEntry(db, { key: o.key, token, uid: o.uid, staff: o.staff, names: o.names, kind: o.kind, sentence: o.sentence, refreshId: o.refreshId });
   const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;

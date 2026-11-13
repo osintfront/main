@@ -126,3 +126,33 @@ test('nextStep', () => {
   assert.equal(s({ staff: true, inFlight: 2 }), 'busy');
   assert.equal(s({ staff: true, spentUsd: 99, entryId: 'E' }), 'serve');
 });
+
+// ─── Final review fixes ──────────────────────────────────────────────────────────
+test('one deadline for the whole write, inside the lease', async () => {
+  const { turnTimeout, DEEP_LIMITS: L } = await import('../../supabase/functions/_shared/deepInput.ts');
+  assert.ok(L.writeMs < L.leaseMin * 60_000);
+  assert.equal(turnTimeout(0, 0), L.timeoutMs);
+  assert.equal(turnTimeout(0, L.writeMs - 10_000), 10_000);
+  assert.equal(turnTimeout(0, L.writeMs + 1), 0);
+});
+
+test('a lease that ran out without an answer is a dead write', async () => {
+  const { staleJob } = await import('../../supabase/functions/_shared/deepInput.ts');
+  const now = Date.parse('2026-11-13T10:00:00Z');
+  assert.equal(staleJob({ busy_until: '2026-11-13T09:59:00Z', fail_reason: null, entry_id: null }, now), true);
+  assert.equal(staleJob({ busy_until: '2026-11-13T10:01:00Z', fail_reason: null, entry_id: null }, now), false);
+  assert.equal(staleJob({ busy_until: null, fail_reason: null, entry_id: null }, now), false);
+  assert.equal(staleJob(null, now), false);
+});
+
+test('after taking the lease: still within the cap and the budget?', async () => {
+  const { overAfterClaim } = await import('../../supabase/functions/_shared/deepInput.ts');
+  const base = { staff: false, spentUsd: 0, budgetUsd: 5, all: 1, readers: 1 };
+  assert.equal(overAfterClaim(base), null);
+  assert.equal(overAfterClaim({ ...base, all: 3, readers: 3 }), 'busy');
+  assert.equal(overAfterClaim({ ...base, spentUsd: 4.6, all: 2, readers: 2 }), 'budget');
+  assert.equal(overAfterClaim({ ...base, spentUsd: 4.5, all: 1, readers: 1 }), null);
+  assert.equal(overAfterClaim({ ...base, staff: true, spentUsd: 99, all: 2, readers: 2 }), null);
+  assert.equal(overAfterClaim({ ...base, staff: true, all: 3, readers: 0 }), 'busy');
+  assert.equal(overAfterClaim({ ...base, budgetUsd: null, spentUsd: 99 }), null);
+});

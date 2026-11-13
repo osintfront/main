@@ -227,7 +227,26 @@ async function routeAll(page) {
         await dlg(page).locator('[data-deep-action="remove"]').click();
         await page.waitForTimeout(800);
         out.c6_removeConfirm = (out.confirms || 0) === before + 2 && calls.remove === 1 && (await dlg(page).count()) === 0;
-        // Analyze a selection
+        // Analyze a word selected in the headline
+        await page.evaluate(() => {
+          const h = document.querySelector('#event-details-title');
+          const walker = document.createTreeWalker(h, NodeFilter.SHOW_TEXT);
+          let node;
+          while ((node = walker.nextNode()) && !node.textContent.includes('president'));
+          const i = node.textContent.indexOf('president');
+          const r = document.createRange();
+          r.setStart(node, i);
+          r.setEnd(node, i + 9);
+          const s = window.getSelection();
+          s.removeAllRanges();
+          s.addRange(r);
+        });
+        await details.locator('#event-details-title').click({ button: 'right', position: { x: 200, y: 8 } }).catch(() => {});
+        await page.waitForTimeout(400);
+        out.c6_headlineMenu = (await page.locator('[data-analyze-menu] [role="menuitem"]').count()) === 1;
+        await details.locator('header').click({ position: { x: 10, y: 10 } }).catch(() => {});
+        await page.waitForTimeout(300);
+        // Analyze a selection in the summary
         await page.evaluate(() => {
           const p = [...document.querySelectorAll('[aria-labelledby="event-details-title"] p')].find((x) => x.textContent.includes('Radwan'));
           const node = [...p.childNodes].find((n) => n.nodeType === 3 && n.textContent.includes('Radwan'));

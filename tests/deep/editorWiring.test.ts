@@ -16,3 +16,15 @@ test('editor wiring', () => {
 test('writers store the marks', () => {
   for (const f of ['whatsapp-ingest/index.ts', 'intel-crawler/index.ts', 'event-agent/index.ts']) assert.ok(read(f).includes('saveEventTerms('), f);
 });
+
+test('guests get the event marks too (locked links on the headline)', () => {
+  const m = readFileSync('supabase/migrations/20261113000112_deep_analysis.sql', 'utf8');
+  const body = m.slice(m.indexOf('function public.event_terms_for'), m.indexOf('function public.deep_entry('));
+  assert.ok(!body.includes("my_feature('event_summary')"));
+});
+
+test('event-agent expires a dead write and re-checks after the claim', () => {
+  const s = read('event-agent/index.ts');
+  assert.ok(s.includes('staleJob('));
+  assert.ok(s.includes('overAfterClaim('));
+});
