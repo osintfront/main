@@ -8,7 +8,7 @@ import type { TranslationKey } from '@/i18n/en';
 import { shekels } from '@/content/packages';
 import { cn } from '@/utils/cn';
 import {
-  cancelSubscription,
+  adminCancel,
   loadBillingOptions,
   loadOrder,
   nameOk,
@@ -243,7 +243,8 @@ function Banner({ tone, icon, title, children }: { tone: 'ok' | 'bad' | 'wait'; 
 }
 
 interface Attention {
-  cancellations: { subscription_id: string; email: string; name: string; plan: string; state: string; canceled_at: string; payer_phone: string | null }[];
+  open?: boolean;
+  cancellations: { subscription_id: string; email: string; name: string; plan: string; state: string; canceled_at: string; payer_phone: string | null; direct_debit_id?: string | null }[];
   events: { event_key: string; kind: string; outcome: string; note: string | null; email: string | null; received_at: string }[];
   recent: { at: string; email: string; plan: string; period: string; kind: string; status: string; amount: number; sandbox: boolean; reason: string | null }[];
 }
@@ -260,6 +261,8 @@ export function BillingAdminPanel() {
   const { profile } = useAuth();
   const [data, setData] = useState<Attention | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [cancelEmail, setCancelEmail] = useState('');
+  const [cancelMsg, setCancelMsg] = useState<string | null>(null);
   const load = useCallback(async () => {
     if (!supabase) return;
     const { data: d, error } = await supabase.rpc('billing_attention');
@@ -275,6 +278,21 @@ export function BillingAdminPanel() {
     await supabase?.rpc('billing_mark_cancel_done', { p_subscription: id });
     await load();
   };
+  const cancelFor = async () => {
+    const email = cancelEmail.trim();
+    if (!email) return;
+    if (!window.confirm(`לבטל את המנוי החודשי של ${email}? לא יתווספו לו חודשים, והגישה תישאר עד סוף החודש ששולם.`)) return;
+    const r = await adminCancel(email);
+    setCancelMsg(
+      r.ok ? `בוטל ✓ — הגישה נשארת עד ${r.until ? when(r.until) : 'סוף החודש ששולם'}. עכשיו לעצור את הוראת הקבע ב-Grow (מופיע למטה).`
+      : r.reason === 'no_such_user' ? 'לא נמצא משתמש עם המייל הזה.'
+      : r.reason === 'no_subscription' ? 'למשתמש הזה אין מנוי פעיל.'
+      : r.reason === 'yearly_does_not_renew' ? 'זה מנוי שנתי — הוא לא מתחדש לבד. להחזר כספי: לפי מדיניות הביטול, ב-Grow.'
+      : `שגיאה: ${r.reason ?? ''}`,
+    );
+    if (r.ok) setCancelEmail('');
+    await load();
+  };
   const when = (iso: string) => new Date(iso).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'short', timeStyle: 'short' });
 
   return (
@@ -284,6 +302,19 @@ export function BillingAdminPanel() {
         <button type="button" onClick={() => void load()} className="rounded-lg px-3 py-1 text-xs font-semibold ring-1 ring-amber-400">רענון</button>
       </div>
       {err ? <p className="mt-2 text-red-700">{err}</p> : null}
+      {data ? (
+        <p className="mt-2 text-slate-700 dark:text-slate-300">
+          מכירה באתר: {data.open ? <b className="text-emerald-700">פתוחה לכולם ב-/packages</b> : <b>סגורה — רק בודקים, בדף הזה</b>}
+        </p>
+      ) : null}
+
+      <h3 className="mt-4 font-bold text-slate-900 dark:text-white">לקוח ביקש לבטל מנוי</h3>
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        <input value={cancelEmail} onChange={(e) => setCancelEmail(e.target.value)} dir="ltr" placeholder="customer@email.com"
+          className="min-h-10 flex-1 rounded-lg border border-amber-300 bg-white px-3 dark:bg-slate-900" />
+        <button type="button" onClick={() => void cancelFor()} className="min-h-10 rounded-lg bg-red-600 px-4 text-xs font-bold text-white">בטל מנוי ללקוח</button>
+      </div>
+      {cancelMsg ? <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{cancelMsg}</p> : null}
 
       <h3 className="mt-4 font-bold text-slate-900 dark:text-white">ביטולים שצריך לעצור ב-Grow</h3>
       {data?.cancellations.length ? (
@@ -292,8 +323,9 @@ export function BillingAdminPanel() {
             <li key={c.subscription_id} className="flex flex-col gap-2 rounded-xl bg-white p-3 sm:flex-row sm:items-center dark:bg-slate-900">
               <span className="flex-1">
                 <b>{c.name || c.email}</b> · {c.plan} · {c.payer_phone ?? ''} · בוטל {when(c.canceled_at)}
+                {c.direct_debit_id ? <> · הוראת קבע <b dir="ltr">{c.direct_debit_id}</b></> : null}
                 <br />
-                <span className="text-xs text-slate-600 dark:text-slate-400">ב-Grow: עסקאות → הוראות קבע → לחפש לפי הטלפון → ביטול. אחר כך ללחוץ כאן.</span>
+                <span className="text-xs text-slate-600 dark:text-slate-400">ב-Grow: הוראות קבע → לחפש לפי המספר או הטלפון → ביטול. אחר כך ללחוץ כאן.</span>
               </span>
               <button type="button" onClick={() => void done(c.subscription_id)} className="min-h-9 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">ביטלתי ב-Grow ✓</button>
             </li>
@@ -338,14 +370,13 @@ export function BillingAdminPanel() {
   );
 }
 
-/** The user's subscription: next charge / end date, failed charge, cancel button. */
-export function SubscriptionPanel({ opts, reload }: { opts: BillingOptions | null; reload: () => Promise<void> }) {
+/**
+ * The user's subscription: until when, failed charge, and how to cancel. Customers cancel by writing to us
+ * (the cancel-subscription page); a super admin cancels it in the payments panel within 3 business days.
+ */
+export function SubscriptionPanel({ opts }: { opts: BillingOptions | null }) {
   const { t } = useI18n();
-  const { refreshProfile } = useAuth();
   const date = useDate();
-  const [confirm, setConfirm] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
   const sub = opts?.subscription;
   if (!sub) return null;
   const plan = LABEL[sub.plan];
@@ -359,45 +390,15 @@ export function SubscriptionPanel({ opts, reload }: { opts: BillingOptions | nul
     : soon ? t('bill.sub.renewSoon', { date: end })
     : t('bill.sub.yearly', { plan, date: end });
 
-  const doCancel = async () => {
-    setBusy(true);
-    const r = await cancelSubscription();
-    setBusy(false);
-    setConfirm(false);
-    if (r.ok) {
-      setMsg(t('bill.canceled', { date: end }));
-      await refreshProfile();
-      await reload();
-    } else setMsg(t('bill.err.generic'));
-  };
-
   return (
     <section className={cn('mx-auto mt-6 max-w-3xl rounded-2xl bg-white p-5 shadow-sm ring-1 dark:bg-slate-900',
       sub.status === 'past_due' ? 'ring-red-300 dark:ring-red-500/40' : 'ring-slate-900/10 dark:ring-white/10')}>
       <h2 className="text-base font-bold text-slate-900 dark:text-white">{t('bill.sub.title')}</h2>
       <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{line}</p>
-      {msg ? <p role="status" className="mt-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">{msg}</p> : null}
-      {sub.period === 'monthly' && sub.status !== 'canceled' ? (
-        confirm ? (
-          <div className="mt-3 flex flex-col gap-2 rounded-xl bg-slate-50 p-3 sm:flex-row sm:items-center dark:bg-slate-800">
-            <p className="flex-1 text-sm text-slate-800 dark:text-slate-100">{t('bill.cancelConfirm', { date: end })}</p>
-            <div className="flex gap-2">
-              <button type="button" disabled={busy} onClick={doCancel} className="min-h-10 rounded-lg bg-red-600 px-4 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60">
-                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : t('bill.cancelYes')}
-              </button>
-              <button type="button" disabled={busy} onClick={() => setConfirm(false)} className="min-h-10 rounded-lg px-4 text-sm font-semibold text-slate-700 ring-1 ring-slate-300 dark:text-slate-200 dark:ring-slate-600">
-                {t('bill.cancelNo')}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button type="button" onClick={() => setConfirm(true)} className="mt-3 text-sm font-semibold text-red-700 underline hover:text-red-800 dark:text-red-400">
-            {t('bill.cancel')}
-          </button>
-        )
-      ) : sub.period === 'yearly' ? (
+      {sub.status !== 'canceled' ? (
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          {t('bill.yearlyCancel')} <Link to="/contact" className="font-semibold text-sky-700 underline dark:text-sky-400">{t('pk.contactCta')}</Link>
+          {t(sub.period === 'monthly' ? 'bill.cancelHow' : 'bill.yearlyCancel')}{' '}
+          <Link to="/cancel-subscription" className="font-semibold text-sky-700 underline dark:text-sky-400">{t('bill.cancel')}</Link>
         </p>
       ) : null}
     </section>
