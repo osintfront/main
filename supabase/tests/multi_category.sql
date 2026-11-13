@@ -29,7 +29,7 @@ begin
 
   -- 2. cleaning on insert
   insert into public.events (title, occurred_at, published_at, created_by, status, country, latitude, longitude, category_id, secondary_categories)
-  values ('mc killed', now() - interval '1 hour', now() - interval '1 hour', ed, 'published', 'Lebanon', 33.27, 35.2, c_killed,
+  values ('mc killed mczqa mczqb', now() - interval '1 hour', now() - interval '1 hour', ed, 'published', 'Lebanon', 33.27, 35.2, c_killed,
           '{airstrike,killed,airstrike,nope,other,uav}') returning id, secondary_categories into e2, got;
   if got is distinct from '{airstrike,uav}'::text[] then raise exception 'check 2: %', got; end if;
 
@@ -97,12 +97,26 @@ begin
   reset role;
   if got is distinct from '{airstrike,uav}'::text[] then raise exception 'check 7: member sees %', got; end if;
 
+  -- 7b. the archive stays members-only: a non-member (no profile) reads no archive rows
+  perform set_config('request.jwt.claims', json_build_object('sub', gen_random_uuid(), 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  select count(*) into n from public.archived_events;
+  reset role;
+  if n <> 0 then raise exception 'check 7b: non-member reads % archived_events rows', n; end if;
+  set local role anon;
+  begin
+    select count(*) into n from public.archived_events;
+  exception when insufficient_privilege then n := 0; -- not granted to anon at all: also closed
+  end;
+  reset role;
+  if n <> 0 then raise exception 'check 7b: anon reads % archived_events rows', n; end if;
+
   -- 8. ask-the-map candidates: a secondary match counts, a main match ranks higher
   insert into public.events (title, occurred_at, published_at, created_by, status, country, category_id)
-  values ('mc uav', now() - interval '2 hours', now() - interval '2 hours', ed, 'published', 'Lebanon', c_uav) returning id into e_uav;
-  select count(*) into n from public.ai_search_candidates(now() - interval '1 day', null, '{}', '{}', '{uav}', '{}', 200) s where s.id = e2;
+  values ('mc uav mczqa mczqb', now() - interval '2 hours', now() - interval '2 hours', ed, 'published', 'Lebanon', c_uav) returning id into e_uav;
+  select count(*) into n from public.ai_search_candidates(now() - interval '1 day', null, '{}', '{}', '{uav}', '{mczqa,mczqb}', 200) s where s.id = e2;
   if n <> 1 then raise exception 'check 8: secondary match missing'; end if;
-  select s.id into first_id from public.ai_search_candidates(now() - interval '1 day', null, '{}', '{}', '{uav}', '{}', 200) s
+  select s.id into first_id from public.ai_search_candidates(now() - interval '1 day', null, '{}', '{}', '{uav}', '{mczqa,mczqb}', 200) s
    where s.id in (e2, e_uav) order by s.score desc, s.occurred_at desc limit 1;
   if first_id <> e_uav then raise exception 'check 8: main match not first'; end if;
 

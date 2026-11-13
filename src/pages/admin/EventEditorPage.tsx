@@ -207,8 +207,10 @@ export function EventEditorPage() {
           navigate('/admin/events', { replace: true });
           return;
         }
-        const created = await createEvent(input, target, notes);
-        if (input.secondarySlugs?.length) await setEventSecondaryCategories(created.id, input.secondarySlugs);
+        // One part: it carries the place relabel and the secondary type the split rules added.
+        const one = parts[0] ?? input;
+        const created = await createEvent(one, target, notes);
+        if (one.secondarySlugs?.length) await setEventSecondaryCategories(created.id, one.secondarySlugs);
         if (linkMedia.length) await attachComposeMedia(created.id, linkMedia, tgPost);
         toast.success(t(target === 'published' ? 'form.toastPublished' : target === 'pending_review' ? 'form.toastSubmitted' : 'form.toastDraft'));
         navigate(`/admin/events/${created.id}`, { replace: true });

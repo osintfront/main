@@ -23,6 +23,7 @@ import { createMarkerIcon } from './markerIcon';
 import { MapContextMenu, type ContextTarget } from './MapContextMenu';
 import { WeatherCard, type WeatherAt } from './WeatherCard';
 import { DEFAULT_CATEGORIES } from '@/data/categoryRegistry';
+import { placeKind } from '@/lib/placeKind';
 import { buildPopupContent } from './popupContent';
 import { IconButton } from '@/components/common/IconButton';
 import { IntelLayers } from './IntelLayers';
@@ -496,7 +497,8 @@ export function MapView({
       const markers: L.Marker[] = [];
       places.forEach((place) => {
         // A place of a detailed report may have its own kind (airstrike / shelling / …).
-        const own = place.categorySlug && place.categorySlug !== event.category.slug ? DEFAULT_CATEGORIES.find((c) => c.slug === place.categorySlug) : undefined;
+        const ownSlug = placeKind(event.category.slug, place.categorySlug);
+        const own = ownSlug ? DEFAULT_CATEGORIES.find((c) => c.slug === ownSlug) : undefined;
         const marker = L.marker([place.lat, place.lng], {
           icon: createMarkerIcon({
             iconName: own?.icon ?? event.category.icon,

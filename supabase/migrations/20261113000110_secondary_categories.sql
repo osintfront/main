@@ -130,6 +130,8 @@ create or replace view public.archived_events as
    from events e
      left join event_categories c on c.id = e.category_id and c.is_active
   where e.status = 'archived'::event_status and e.expired_at is not null and e.deleted_at is null
+    and (select is_member())
+    and ((select my_archive_days()) is null or e.occurred_at > (now() - make_interval(days => (select my_archive_days()))));
 
 -- ── Hand-set secondary types (admin). The editor's re-runs leave them alone (manual_secondary). ──
 create or replace function public.set_event_secondary_categories(p_id uuid, p_slugs text[])

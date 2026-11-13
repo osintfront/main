@@ -186,8 +186,9 @@ async function edit(id: string) {
     if (r.summary) update.description = formatDescription(r);
   }
   if (!ev.country && mainCountry(r)) update.country = mainCountry(r);
-  // Secondary types set by hand (set_event_secondary_categories) stay.
-  if (!ai?.manual_secondary) update.secondary_categories = r.secondary_category_slugs;
+  // Secondary types set by hand (set_event_secondary_categories) stay; so do those of a split
+  // event (the split already pruned them; a re-run would bring back a sibling's kind).
+  if (!ai?.manual_secondary && !ai?.split_from && !ai?.split_into) update.secondary_categories = r.secondary_category_slugs;
   // A place a person corrected by hand stays; otherwise the editor's places replace the old ones.
   if (!ev.coordinates_manually_corrected) {
     update.locations = locationsForDb(r, 30);
