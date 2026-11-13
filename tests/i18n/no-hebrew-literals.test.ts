@@ -18,6 +18,7 @@ const FILES = [
   'src/components/filters/FilterSetsBar.tsx',
   'src/components/filters/FilterSetHeader.tsx',
   'src/components/filters/EeiPanel.tsx',
+  'src/components/admin/SecondaryTypesField.tsx',
 ];
 
 const HEBREW = /[֐-׿]/;

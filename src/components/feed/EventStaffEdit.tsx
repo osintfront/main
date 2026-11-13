@@ -3,7 +3,8 @@ import { MapPin, Move, Pencil, Search, Tag } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { usePermissions } from '@/hooks/usePermissions';
 import { fetchCategories } from '@/services/categoryService';
-import { moveEventPin, setEventCategory, setEventSeverity } from '@/services/eventAdminService';
+import { moveEventPin, setEventCategory, setEventSecondaryCategories, setEventSeverity } from '@/services/eventAdminService';
+import { SecondaryTypesField } from '@/components/admin/SecondaryTypesField';
 import { friendlyError } from '@/services/serviceError';
 import type { EventCategory } from '@/types/category';
 import type { PublicEvent } from '@/types/event';
@@ -74,6 +75,22 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
       done();
     } catch (err) {
       setCategoryId(event.category.id ?? '');
+      toast.error(friendlyError(err, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const [secondary, setSecondary] = useState<string[]>((event.secondaryCategories ?? []).map((c) => c.slug));
+  const changeSecondary = async (slugs: string[]) => {
+    const prev = secondary;
+    setSecondary(slugs);
+    setBusy(true);
+    try {
+      await setEventSecondaryCategories(event.id, slugs);
+      done();
+    } catch (err) {
+      setSecondary(prev);
       toast.error(friendlyError(err, t));
     } finally {
       setBusy(false);
@@ -163,6 +180,15 @@ export function EventStaffEdit({ event, onChanged, onMovePin }: EventStaffEditPr
             {t('move.button')}
           </button>
         ) : null}
+      </div>
+      <div className="mt-2">
+        <SecondaryTypesField
+          value={secondary}
+          mainSlug={active.find((c) => c.id === categoryId)?.slug ?? event.category.slug}
+          categories={categories}
+          onChange={(s) => void changeSecondary(s)}
+          disabled={busy || !categories.length}
+        />
       </div>
       {event.locationName ? (
         <p className="mt-2 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">

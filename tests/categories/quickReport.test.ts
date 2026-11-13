@@ -34,3 +34,11 @@ test('two kinds under an Airstrike report: as today', () => {
   assert.deepEqual(parts.map((p) => p.categoryId), ['id-airstrike', 'id-artillery-shelling']);
   assert.deepEqual(parts.map((p) => p.secondarySlugs), [[], []]);
 });
+
+test('quick compose copies the secondary types', async () => {
+  const { applyCompose } = await import('../../src/lib/quickReport.ts');
+  // deno-lint-ignore no-explicit-any
+  const r: any = { title: 'T', description: '', categoryId: null, categorySlug: null, secondarySlugs: ['airstrike'], severity: 'high', isBreaking: false, country: '', region: '', city: '', locationName: '', latitude: null, longitude: null, precision: null, locations: [] };
+  assert.deepEqual(applyCompose(emptyEventInput(), r, 'x', CATS).secondarySlugs, ['airstrike']);
+  assert.deepEqual(applyCompose(emptyEventInput(), { ...r, secondarySlugs: undefined }, 'x', CATS).secondarySlugs, []);
+});

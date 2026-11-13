@@ -63,6 +63,7 @@ export function applyCompose(prev: EventInput, r: ComposeResult, text: string, c
     title: r.title || prev.title,
     description: r.description || prev.description,
     categoryId: r.categoryId && categories.some((c) => c.id === r.categoryId) ? r.categoryId : prev.categoryId,
+    secondarySlugs: Array.isArray(r.secondarySlugs) ? r.secondarySlugs.filter((s) => typeof s === 'string').slice(0, 2) : [],
     severity: r.severity || prev.severity,
     isBreaking: r.isBreaking,
     country: r.country || prev.country,

@@ -123,6 +123,8 @@ export interface AdminEvent {
   description: string;
   originalReportText: string;
   categoryId: string | null;
+  /** Secondary type slugs (at most two). */
+  secondarySlugs: string[];
   status: EventStatus;
   severity: Severity;
   latitude: number | null;
