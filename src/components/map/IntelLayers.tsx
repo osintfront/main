@@ -12,6 +12,8 @@ import { WeatherLayersPanel, WeatherOverlay, useWeatherLayers } from './WeatherL
 import { InfraLayersPanel, InfraLegend, useInfraLayers } from './InfraLayers';
 import { MilitaryLayersGroup, MilitaryLegendItems, useMilitaryLayers } from './MilitaryLayers';
 import { ChokepointPanel } from './ChokepointPanel';
+import { SatEnhanceOverlay, SatEnhancePanel, useSatEnhance } from './SatEnhance';
+import { enhanceDate } from '@/lib/satEnhance';
 import { CHOKEPOINT_TXT, fetchSilentVessels, loadSanctions, sanctionOf, type Sanction } from '@/lib/ships';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -118,6 +120,8 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
   const [key, setKey] = useState<{ k: string; sentinel2: boolean } | null>(null);
   const [swipe, setSwipe] = useState(0.5);
   const [zoom, setZoom] = useState(map?.getZoom() ?? 0);
+  // Enhance ×4: the satellite layer's Sentinel-2 day (the "after" day when comparing), else the newest clear picture.
+  const satsr = useSatEnhance(map, enhanceDate(satOn, src, dayB), open);
 
   useEffect(() => {
     if (!map) return;
@@ -555,6 +559,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
     <>
       {mapLegend}
       <WeatherOverlay s={weather} />
+      <SatEnhanceOverlay s={satsr} />
       <InfraLegend s={infra} extra={mil.any}><MilitaryLegendItems s={mil} /></InfraLegend>
       {container && satOn && mode === 'compare'
         ? createPortal(
@@ -596,6 +601,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
           {/* Satellite */}
           <section className="space-y-2 border-b border-slate-100 pb-3 dark:border-slate-800">
             {sectionHead(Satellite, T.sat, satOn, (v) => void toggleSat(v), satExtra, !profile)}
+            <SatEnhancePanel s={satsr} />
             {satOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 <select className={`${box} w-full`} value={src} onChange={(e) => setSrc(e.target.value as SatSource)} aria-label={T.source}>

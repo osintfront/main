@@ -23,6 +23,7 @@ const FILES = [
   'src/components/feed/DeepEntryDialog.tsx',
   'src/components/common/InfoTip.tsx',
   'src/pages/admin/AccountPage.tsx',
+  'src/components/map/SatEnhance.tsx',
 ];
 
 const HEBREW = /[֐-׿]/;
