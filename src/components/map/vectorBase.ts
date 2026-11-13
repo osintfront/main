@@ -1,7 +1,7 @@
 import L from 'leaflet';
 
 /**
- * OpenFreeMap "Liberty" vector map, drawn in the browser by MapLibre GL.
+ * OpenFreeMap vector maps (Liberty, Positron light, Dark), drawn in the browser by MapLibre GL.
  *
  * MapLibre is large (~250 KB gzipped), so it is downloaded only when a visitor picks this style:
  * this layer is a light placeholder that imports it on first add.
@@ -13,7 +13,12 @@ import L from 'leaflet';
  *
  * Fires `basefail` if MapLibre or the style cannot load, so the caller can fall back.
  */
-export const OPENFREEMAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+export const OPENFREEMAP_STYLES = {
+  liberty: 'https://tiles.openfreemap.org/styles/liberty',
+  positron: 'https://tiles.openfreemap.org/styles/positron',
+  dark: 'https://tiles.openfreemap.org/styles/dark',
+} as const;
+export type OpenFreeMapStyle = keyof typeof OPENFREEMAP_STYLES;
 export const OPENFREEMAP_ATTRIBUTION =
   '<a href="https://openfreemap.org">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org/">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
@@ -30,7 +35,10 @@ export class VectorBaseLayer extends L.Layer {
   private locked = false;
   private prevOwn: ((b: number) => void) | undefined;
 
-  constructor(private readonly lang: string) {
+  constructor(
+    private readonly lang: string,
+    private readonly styleName: OpenFreeMapStyle = 'liberty',
+  ) {
     super({ attribution: OPENFREEMAP_ATTRIBUTION } as L.LayerOptions);
   }
 
@@ -76,7 +84,7 @@ export class VectorBaseLayer extends L.Layer {
         import('maplibre-gl/dist/maplibre-gl.css'),
       ]);
       if (this.removed) return;
-      const layer = maplibreGL({ style: OPENFREEMAP_STYLE, attributionControl: false });
+      const layer = maplibreGL({ style: OPENFREEMAP_STYLES[this.styleName], attributionControl: false });
       layer.addTo(map);
       this.inner = layer;
       const gl = layer.getMaplibreMap();

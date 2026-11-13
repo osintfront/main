@@ -4,16 +4,17 @@ import { VectorBaseLayer } from './vectorBase';
 
 /**
  * Map styles a visitor can pick: the standard map, OpenStreetMap-based layers, Esri satellite
- * imagery (plain or with place names), CARTO light/dark, and the OpenFreeMap vector map.
+ * imagery (plain or with place names), and OpenFreeMap vector maps (light, dark, detailed).
+ * CARTO's free raster tiles now answer "API KEY REQUIRED", so the light/dark maps use
+ * OpenFreeMap's copies of the same CARTO designs (Positron, Dark Matter) instead.
  */
 export const BASE_STYLES = ['standard', 'topo', 'cyclosm', 'satellite', 'hybrid', 'light', 'dark', 'vector'] as const;
 export type BaseStyle = (typeof BASE_STYLES)[number];
 
 const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-const CARTO = `${OSM} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
 const ESRI_IMAGERY = 'Imagery &copy; Esri, Maxar, Earthstar Geographics';
 
-type RasterStyle = Exclude<BaseStyle, 'standard' | 'hybrid' | 'vector'>;
+type RasterStyle = Exclude<BaseStyle, 'standard' | 'hybrid' | 'vector' | 'light' | 'dark'>;
 
 /** Extra styles (same in light and dark: they are detailed maps, inverting them hurts). */
 const STYLE_SPECS: Record<RasterStyle, TileLayerSpec> = {
@@ -32,18 +33,6 @@ const STYLE_SPECS: Record<RasterStyle, TileLayerSpec> = {
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: ESRI_IMAGERY,
-    maxZoom: 19,
-  },
-  light: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: CARTO,
-    subdomains: 'abcd',
-    maxZoom: 19,
-  },
-  dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: CARTO,
-    subdomains: 'abcd',
     maxZoom: 19,
   },
 };
@@ -101,7 +90,9 @@ export function createBaseLayer(
   style: BaseStyle = 'standard',
   lang = 'en',
 ): L.Layer {
-  if (style === 'vector') return new VectorBaseLayer(lang);
+  if (style === 'vector') return new VectorBaseLayer(lang, 'liberty');
+  if (style === 'light') return new VectorBaseLayer(lang, 'positron');
+  if (style === 'dark') return new VectorBaseLayer(lang, 'dark');
   if (style === 'hybrid') {
     // A feature group passes its tiles' load/error events up, so the fallback check still works.
     return L.featureGroup([tileLayer(STYLE_SPECS.satellite, false), tileLayer(ESRI_LABELS, false)]);
