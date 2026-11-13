@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import { TILE_PROVIDERS, mapConfig, type MapTheme, type TileLayerSpec, type TileProviderId } from '@/config/map';
 import { VectorBaseLayer } from './vectorBase';
+import { firesRequests, type FireRequest } from '@/lib/firesLayer';
 
 /**
  * Map styles a visitor can pick: the standard map, OpenStreetMap-based layers, Esri satellite
@@ -109,15 +110,14 @@ export function createBaseLayer(
 
 /**
  * NASA FIRMS active fires (VIIRS thermal anomalies) from NASA GIBS — free, no key.
- * Two days (yesterday + today, UTC) so the night's and the day's passes both show.
+ * Two days (yesterday + today, UTC) so the night's and the day's passes both show, from
+ * NOAA-20, NOAA-21 and Suomi NPP (see src/lib/firesLayer.ts).
  */
 export function createFiresLayer(date: string | null = null): L.Layer {
-  // A chosen day (the satellite picture's): that day and the one before; else the last two days.
-  const base = date ? Date.parse(`${date}T12:00:00Z`) : Date.now();
-  const day = (offset: number) => new Date(base - offset * 86400_000).toISOString().slice(0, 10);
-  const wms = (time: string) =>
+  // One WMS layer per satellite and day: a satellite with no data must not blank the others.
+  const wms = ({ layer, time }: FireRequest) =>
     L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi', {
-      layers: 'VIIRS_NOAA20_Thermal_Anomalies_375m_All,VIIRS_SNPP_Thermal_Anomalies_375m_All',
+      layers: layer,
       format: 'image/png',
       transparent: true,
       version: '1.1.1',
@@ -125,7 +125,7 @@ export function createFiresLayer(date: string | null = null): L.Layer {
       time, // extra WMS parameter (the day)
       zIndex: 350,
     } as L.WMSOptions);
-  return L.layerGroup([wms(day(1)), wms(day(0))]);
+  return L.layerGroup(firesRequests(date).map(wms));
 }
 
 const FIRES_KEY = 'ofm.mapFires';
