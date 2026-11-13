@@ -375,28 +375,32 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
     if (baseLayerRef.current) map.removeLayer(baseLayerRef.current);
-    const layer = createBaseLayer(theme, undefined, baseStyle);
+    const layer = createBaseLayer(theme, undefined, baseStyle, lang);
     layer.addTo(map);
     baseLayerRef.current = layer;
     // A style whose tile server refuses us shows an empty map: fall back to the standard map.
     if (baseStyle === 'standard') return;
     let loaded = 0;
     let failed = 0;
+    const fallBack = () => {
+      setStyleFailed(baseStyle);
+      setBaseStyle('standard');
+    };
     const onLoad = () => (loaded += 1);
     const onError = () => {
       failed += 1;
-      if (failed >= 6 && loaded === 0) {
-        setStyleFailed(baseStyle);
-        setBaseStyle('standard');
-      }
+      if (failed >= 6 && loaded === 0) fallBack();
     };
     layer.on('tileload', onLoad);
     layer.on('tileerror', onError);
+    // The vector map reports a failed download / style in one go.
+    layer.on('basefail', fallBack);
     return () => {
       layer.off('tileload', onLoad);
       layer.off('tileerror', onError);
+      layer.off('basefail', fallBack);
     };
-  }, [theme, baseStyle]);
+  }, [theme, baseStyle, lang]);
 
   // 2a. Zoom to a set of points (search results).
   const fitKey = fitTo?.key ?? 0;
