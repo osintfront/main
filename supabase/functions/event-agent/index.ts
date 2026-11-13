@@ -22,7 +22,7 @@
 //                                term marked on the event, or start writing it (Opus + web search, in the
 //                                background; poll again). New entries count against the plan's daily uses.
 //   {action:"deep_write", event_id, text, lang, poll?}  staff (or cron secret) — "Analyze" a selected text.
-//   {action:"deep_refresh", entry_id, poll?}  staff — rewrite an entry (old content kept one step back).
+//   {action:"deep_refresh", entry_id, poll?}  staff (or cron secret) — rewrite an entry (old content kept one step back).
 //   {action:"deep_update", entry_id, patch}   staff — hand edit of an entry (names, texts, sections, sources, picture).
 //   {action:"deep_remove", entry_id}          staff — remove an entry and its names.
 //   {action:"classify_channels"} cron secret — region of public Telegram channels without one (batch of 120).
@@ -719,7 +719,7 @@ async function handle(req: Request): Promise<Response> {
   }
   if (action === "deep_write" || action === "deep_refresh" || action === "deep_update" || action === "deep_remove") {
     // Signed-in active users whose plan has deep_analysis (staff always); "Analyze" also with the cron secret.
-    const internal = action === "deep_write" && typeof body?.text === "string" && await cronOk(req);
+    const internal = (action === "deep_refresh" || (action === "deep_write" && typeof body?.text === "string")) && await cronOk(req);
     let uid: string | null = null;
     let staff = internal;
     if (!internal) {

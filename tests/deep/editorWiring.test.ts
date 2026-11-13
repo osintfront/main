@@ -28,3 +28,7 @@ test('event-agent expires a dead write and re-checks after the claim', () => {
   assert.ok(s.includes('staleJob('));
   assert.ok(s.includes('overAfterClaim('));
 });
+
+test('the cron secret may also refresh an entry (internal checks)', () => {
+  assert.ok(read('event-agent/index.ts').includes('(action === "deep_refresh" || (action === "deep_write" && typeof body?.text === "string")) && await cronOk(req)'));
+});
