@@ -48,6 +48,7 @@ import { compileEei, matchesEei } from '@/lib/eei';
 import { useAuth } from '@/hooks/useAuth';
 import { AskMap } from '@/components/map/AskMap';
 import type { AskAnswer } from '@/services/askService';
+import { turnToShow } from '@/lib/askChat';
 import { OfiFab } from '@/components/ofi/OfiFab';
 
 type MobilePane = 'map' | 'feed';
@@ -248,8 +249,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const handleAskTurns = useCallback(
     (turns: AskAnswer[]) => {
       setAskTurns(turns);
-      setAskSelected(Math.max(turns.length - 1, 0));
-      fitAsk(turns[turns.length - 1]);
+      // A follow-up that found nothing keeps the map on the last answer with events (not a blank map).
+      const show = turnToShow(turns);
+      setAskSelected(show);
+      fitAsk(turns[show]);
     },
     [fitAsk],
   );

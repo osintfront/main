@@ -3,7 +3,7 @@ import { Check, ChevronDown, ChevronUp, Copy, ListChecks, Loader2, Share2, Spark
 import { useI18n } from '@/i18n';
 import { authConfig } from '@/config/auth';
 import { AREAS } from '@/lib/eventFilters';
-import { MAX_TURNS, answerShareText, buildContext, summaryQuestion, whatsappUrl } from '@/lib/askChat';
+import { MAX_TURNS, answerShareText, buildContext, openWindow, summaryQuestion, whatsappUrl } from '@/lib/askChat';
 import { AskError, askMap, type AskAnswer } from '@/services/askService';
 import { cn } from '@/utils/cn';
 
@@ -90,6 +90,8 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
   const [extra, setExtra] = useState('');
   /** Feedback under a turn after Copy: which turn, and whether it worked. */
   const [copied, setCopied] = useState<{ turn: number; ok: boolean } | null>(null);
+  // The WhatsApp window was blocked: ok = the text was copied instead.
+  const [shareNote, setShareNote] = useState<{ turn: number; ok: boolean } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const citeRef = useRef(onCite);
   citeRef.current = onCite;
@@ -158,18 +160,25 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
   const copy = async (i: number) => setCopied({ turn: i, ok: await copyText(shareText(turns[i], Infinity)) });
   const share = async (i: number) => {
     const text = shareText(turns[i]);
+    setShareNote(null);
+    const whatsapp = async () => {
+      if (openWindow(whatsappUrl(text))) return;
+      // Blocked popup: copy the text so it can be pasted by hand, and say so.
+      setShareNote({ turn: i, ok: await copyText(shareText(turns[i], Infinity)) });
+    };
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share({ text });
       } catch (err) {
         // The person closed the share sheet: nothing to do. Anything else: fall back to WhatsApp.
-        if ((err as { name?: string })?.name !== 'AbortError') window.open(whatsappUrl(text), '_blank', 'noopener');
+        if ((err as { name?: string })?.name !== 'AbortError') await whatsapp();
       }
-    } else window.open(whatsappUrl(text), '_blank', 'noopener');
+    } else await whatsapp();
   };
 
   const newChat = () => {
     setCopied(null);
+    setShareNote(null);
     setError(null);
     setQ('');
     setSummaryOpen(false);
@@ -282,6 +291,11 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
                   {t('ask.share')}
                 </button>
               </div>
+              {shareNote?.turn === i ? (
+                <p data-ask-share-note role="status" className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                  {t(shareNote.ok ? 'ask.shareBlockedCopied' : 'ask.shareBlocked')}
+                </p>
+              ) : null}
             </div>
           ))}
           <p className="px-2 text-[11px] text-slate-400">{t('ask.disclaimer')}</p>

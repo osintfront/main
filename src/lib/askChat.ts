@@ -89,3 +89,24 @@ export function summaryQuestion(area: string, extra: string, lang: 'he' | 'en'):
 export function whatsappUrl(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
+
+/**
+ * Open a link in a new tab; false when the browser blocked the popup. Opened without 'noopener' (which
+ * always answers null, so a block could not be seen); the opener link is cut right after instead.
+ */
+export function openWindow(url: string, win: { open(url: string, target: string): { opener: unknown } | null } = window as never): boolean {
+  const w = win.open(url, '_blank');
+  if (!w) return false;
+  try {
+    w.opener = null;
+  } catch {
+    /* cross-origin: nothing to cut */
+  }
+  return true;
+}
+
+/** Which answer the map shows after a new one: the newest, or — when it found nothing — the last one that did. */
+export function turnToShow(turns: { events: unknown[] }[]): number {
+  for (let i = turns.length - 1; i >= 0; i--) if (turns[i].events.length) return i;
+  return Math.max(turns.length - 1, 0);
+}

@@ -9,7 +9,7 @@
 // step resolves what it refers to, and the answer step sees the conversation too.
 // A request to summarise ("סכם את לבנון ב-24 שעות") is answered in summary mode: titled blocks.
 import { callClaude, CHEAP_MODELS, isTransient, OPUS_MODELS } from "./editor.ts";
-import { type AskCtx, cacheKey, historyMessages, NO_CTX } from "./askInput.ts";
+import { type AskCtx, cacheKey, historyMessages, longSource, NO_CTX } from "./askInput.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -188,12 +188,14 @@ Pick ALL categories that could hold the answer (e.g. launch sites → missile-ro
   });
   if (error) throw new Error(error.message);
   let list = (rows ?? []) as any[];
+  let prevCount = 0;
   // A follow-up that names no place ("who was killed there?") is about the events already shown.
   if (ctx.prevIds.length && !strs(p.places, 20).length && !strs(p.countries, 8).length) {
     const have = new Set(list.map((r) => r.id));
     const slugOf = new Map<string, string>((cats ?? []).map((c: any) => [c.id, c.slug]));
     const prev = (await previousEvents(db, ctx.prevIds, slugOf)).filter((r) => !have.has(r.id));
     list = [...prev, ...list].slice(0, 120);
+    prevCount = Math.min(prev.length, list.length);
   }
   if (!list.length) {
     return { mode, answer: lang === "en" ? "No matching events were found in the database for this question and time range." : "לא נמצאו במאגר אירועים שעונים על השאלה בטווח הזמן הזה.", ids: [], lang, since, until, candidates: 0 };
@@ -205,7 +207,7 @@ Pick ALL categories that could hold the answer (e.g. launch sites → missile-ro
   const orig = new Map<string, string>((origs ?? []).map((o: any) => [o.id, String(o.original_report_text ?? "")]));
   const lines = list.map((r, i) => {
     const places = Array.isArray(r.locations) ? r.locations.map((l: any) => l?.name).filter(Boolean).slice(0, 6).join(", ") : "";
-    const src = (orig.get(r.id) ?? "").replace(/\s+/g, " ").slice(0, i < 40 ? 900 : 250);
+    const src = (orig.get(r.id) ?? "").replace(/\s+/g, " ").slice(0, longSource(i, prevCount) ? 900 : 250);
     return `[${i + 1}] ${ilTime(r.occurred_at)} | ${r.category_slug ?? "-"} | ${r.country ?? "-"} | ${r.location_name ?? "-"}${places && places !== r.location_name ? ` (${places})` : ""} | ${r.title} — ${String(r.description ?? "").replace(/\s+/g, " ").slice(0, 400)}${src ? ` ‖ מקור: ${src}` : ""}`;
   }).join("\n");
   const ans = await tool<{ answer?: string; items?: unknown }>(OPUS_MODELS, {
