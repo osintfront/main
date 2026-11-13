@@ -1,4 +1,7 @@
 import L from 'leaflet';
+// MapLibre draws Hebrew/Arabic letters left-to-right (reversed) without this add-on. The package
+// only exports its source entry, so the built file is taken by path; Vite copies it to /assets.
+import rtlPluginUrl from '../../../node_modules/@mapbox/mapbox-gl-rtl-text/dist/mapbox-gl-rtl-text.js?url';
 
 /**
  * OpenFreeMap vector maps (Liberty, Positron light, Dark), drawn in the browser by MapLibre GL.
@@ -27,6 +30,16 @@ type Rotatable = L.Map & { setBearing?: (b: number) => void; getBearing?: () => 
 /** MapLibre expression for a label in the site's language, falling back to Latin, then local. */
 export function labelExpression(lang: string): unknown[] {
   return ['coalesce', ['get', `name:${lang}`], ['get', 'name:latin'], ['get', 'name']];
+}
+
+/** Once per page: MapLibre refuses a second registration. Loaded only when RTL text appears. */
+let rtlRequested = false;
+function ensureRtlPlugin(maplibre: { setRTLTextPlugin: (url: string, lazy: boolean) => Promise<void> }) {
+  if (rtlRequested) return;
+  rtlRequested = true;
+  maplibre.setRTLTextPlugin(new URL(rtlPluginUrl, window.location.href).href, true).catch((err) => {
+    console.warn('[map] right-to-left label support could not load', err);
+  });
 }
 
 export class VectorBaseLayer extends L.Layer {
@@ -79,10 +92,12 @@ export class VectorBaseLayer extends L.Layer {
 
   private async load(map: L.Map) {
     try {
-      const [{ maplibreGL }] = await Promise.all([
+      const [{ maplibreGL }, maplibre] = await Promise.all([
         import('@maplibre/maplibre-gl-leaflet'),
+        import('maplibre-gl'),
         import('maplibre-gl/dist/maplibre-gl.css'),
       ]);
+      ensureRtlPlugin(maplibre);
       if (this.removed) return;
       const layer = maplibreGL({ style: OPENFREEMAP_STYLES[this.styleName], attributionControl: false });
       layer.addTo(map);
