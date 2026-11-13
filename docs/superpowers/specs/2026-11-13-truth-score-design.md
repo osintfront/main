@@ -1,4 +1,4 @@
-# Truth score (source-confirmation %) — design (approved by the owner 2026-11-13: "מאשר הכל")
+# Truth score (source-confirmation %) — design (decisions 1–13 approved by the owner 2026-11-13; requirements 8–9 added after that — build NOT approved yet)
 
 Owner's request (ציון אמיתות): every event / news item carries a percentage. In his words:
 1. Heavy weight for official channels — IDF Spokesperson, CENTCOM and similar government / military sources.
@@ -10,6 +10,13 @@ Owner's request (ציון אמיתות): every event / news item carries a perce
 6. (added the same day) Visual evidence counts: footage (תיעודים) and photos attached to the
    event raise the score; the same picture reposted by many channels counts once; an old picture
    seen before on another event gives nothing and lowers the score.
+8. (added later; build held until approved) **Track record of the source.** Some channels are
+   usually right, and most of the owner's own channels are very reliable. A source gets a
+   reliability level from its history, from a trust tier staff set, and — for the channels the
+   owner chose himself — "trusted" by default. One report from a trusted channel with a good
+   record must land around 40–50, not 12–18.
+9. (added later) **Size of the channel.** Subscribers give a small, capped, log-scaled bonus that
+   can never outweigh the track record.
 7. (added after approval) "Official" must cover the official channels of **every country we
    cover**, not only Israel and the US — see "Official sources by country".
 
@@ -57,6 +64,20 @@ he approved all of them (last section). He then added requirement 7. Plan:
   bytes) or 146 (same picture hash) had already appeared on a different event more than 24 hours
   earlier — about 1%. 61 pictures appear on three or more events (logos, portraits, file photos).
   Terrain geolocation (`geoloc_jobs`) has no accepted results at the moment.
+- **Track record and size — what the data can and cannot say (measured, ~25 days).** 129
+  Telegram channels were the first reporter of at least one event; **75 have 20 or more events,
+  58 have 50 or more**, and those 75 cover 99% of all events. For a typical channel **45% of its
+  first reports were later joined by another independent source** (a tenth of the channels: under
+  22%; the top tenth: over 67%); only about 7% were later carried by a mainstream outlet. Two
+  cautions follow. First, nobody reaches "92% confirmed": the honest wording is the channel's
+  rate next to the average. Second, the rate rewards channels that report big news and is low
+  for good village-level channels (Al Jazeera Palestine: 17%) — so the automatic record is given
+  a modest weight and the staff tier the larger one. We store **no "this was wrong" signal**
+  today except what staff do by hand. **Subscriber counts are not stored anywhere**
+  (`telegram_channels` has no such column); the public `t.me/s/<channel>` page shows the number
+  and we already read that page. X follower counts are not available (X is off).
+  Of the 96 active channels, 65 sit in folders the owner made (VIC, ישראליים, ערביים, סוריה …)
+  and 30 in Telegram's own "Unread"; the WhatsApp group "החזית הצפונית" produced 76 events.
 - `intel-crawler` is **switched off** (`app_settings.intel_crawler.enabled = false`; the last row
   in `intel_items` is from 2026-11-10). The design does not depend on it.
 - Today's "verified" tick: trigger `events_auto_verify` (migration 28) sets `is_verified` when
@@ -250,6 +271,53 @@ he approved all of them (last section). He then added requirement 7. Plan:
     **"no official source yet"** mark. Staff can write a gap note per country ("no Telegram
     channel exists", "looked on 14 Nov, nothing reliable") and tick "checked", so a known gap
     stops looking like forgotten work.
+- **Track record and trust (requirement 8) — applies to origins of class `partisan` or `unknown`
+  only.** Officials, mainstream outlets and state media keep their class points.
+  - **Trust tier (staff, per outlet):** `trusted`, `normal`, `doubtful`, or not set.
+  - **The owner's own channels default to `trusted`:** every Telegram channel in a folder he made
+    (any `telegram_channels.folder` except empty and "Unread") and the WhatsApp group
+    "החזית הצפונית" (key `wa:<group name>`). A tier set by hand always wins over the default.
+  - **Automatic record (per outlet, recomputed once a day in SQL, last 60 days):** over the
+    events the outlet reported **first** and that are at least 6 hours old — `strong` = an
+    approved official or mainstream outlet later appeared among the sources (or its citation was
+    confirmed); `joined` = some other outlet appeared; `bad` = staff marked the event Disputed,
+    staff rejected or removed it, or the outlet's own citation was not found. Smoothed rate
+    `r = (strong + 0.6·(joined − strong) − 2·bad + 30·m) / (n + 30)`, `m` = the same rate over
+    all channels. Fewer than **30** events → "no record yet" (neutral). `good` when `r ≥ m + 0.10`,
+    `poor` when `r ≤ m − 0.15` or `bad / n ≥ 0.05`, else `average`. The 30 phantom events in the
+    formula are what keeps a channel with a few lucky or unlucky reports near the average.
+  - **Points for the best origin (replacing 18 / 12 for these origins):**
+
+    | Tier | no record / average | good record | poor record |
+    |---|---|---|---|
+    | `trusted` (set by hand or the owner's own) | 38 | 43 | 30, and the admin screen flags the clash |
+    | not set, or `normal` | partisan 18 · unknown 12 (as before) | 28 | 8 |
+    | `doubtful` | 6 | 6 | 6 |
+
+  - **As an additional origin (part C):** a trusted origin gives +8 where others give +5 / +4 / +3
+    (ceiling 12 unchanged).
+  - **One-side ceiling:** 45, or **55 when at least one origin is trusted**.
+- **Channel size (requirement 9, part H).** Subscribers of the best origin's largest channel,
+  only when that origin is `partisan` / `unknown`: under 10,000 → 0; 10,000–49,999 → +1;
+  50,000–199,999 → +2; 200,000 and more → **+3 (the ceiling)**. Nothing for a `doubtful` outlet
+  or one with a `poor` record. Three points against a swing of up to 37 from tier and record:
+  size can never carry a channel past its record. The count is read from the channel's public
+  Telegram page once a week (free), stored on `telegram_channels`.
+- **New example scores:**
+
+  | Example | Before | Now |
+  |---|---|---|
+  | One unknown channel, no record | 12 | 12 |
+  | One of the owner's channels, no record yet | 12–18 | **38** |
+  | One of the owner's channels, good record | 12–18 | **43** |
+  | … and 120K subscribers | 12–18 | **45** |
+  | … and a new video | 26 | **53** |
+  | Two trusted channels of one side, good record | 23 | 43+8 = **51** |
+  | Three trusted channels of one side + video | 35 | 43+12+8 = 63 → ceiling **55** |
+  | A channel nobody tiered, good record | 18 | **28** |
+  | A channel marked doubtful | 18 | **6** |
+  | Mainstream outlet alone / IDF alone (unchanged) | 42 / 55 | 42 / 55 |
+  | IDF + one trusted channel of the other side, two languages | 76 | 55+8+12+4 = **79** |
 - **No decay with time.** The score changes only when the sources, a citation result, the tick or
   the override change. Why: half of our events are small local reports nobody else will ever
   repeat; lowering them by the clock would punish them for being local. An archived event keeps
@@ -370,7 +438,14 @@ for removed pictures, cron — run by the owner).
 - `event_media`: two new indexes, on `(sha256)` and on `(phash)` (today's index is per event),
   and a small `after insert or update of event_id, sha256, phash or delete` trigger that only
   writes the event's id into `truth_dirty` (and nothing when `compute` is off).
-- All seven: RLS on, no policies (service role; staff through functions).
+- `truth_outlets` gains `trust_tier` (`trusted` | `normal` | `doubtful` | null) and `tier_by`,
+  `tier_at`. `truth_source_keys` gains `curated boolean` (the owner's own channel) and
+  `subscribers int`, both copied from `telegram_channels` by the daily refresh.
+- `truth_outlet_stats` — `outlet_key primary key`, `n`, `strong`, `joined`, `bad`, `rate`,
+  `mean` (the all-channel rate at that time), `record` (`none` | `good` | `average` | `poor`),
+  `computed_at`.
+- `telegram_channels` gains `subscribers int`, `subscribers_at timestamptz`.
+- All eight: RLS on, no policies (service role; staff through functions).
 - `events`, new columns: `truth_score smallint` (5–99 or null), `truth_why jsonb`, `truth_at`,
   `truth_override smallint` (0–100), `truth_override_note text`, `truth_override_by uuid`,
   `truth_override_at`.
@@ -415,6 +490,11 @@ for removed pictures, cron — run by the owner).
     `truth_recompute` writes the row only when the score or the "why" really changed; (2) when
     `citation_check` is on, there are due pairs and budget is left, calls `event-agent`
     `{action:"truth_check"}` (the `eei_tick` pattern). Otherwise nothing.
+  - `truth_refresh_stats()` — once a day from the tick: recomputes `truth_outlet_stats` (one
+    grouped query over 60 days of events) and copies `curated` and `subscribers` into
+    `truth_source_keys`. `truth_admin_compare(p_hours)` — for the calibration report: the band
+    counts and the average score of the same events **with** track record and size and
+    **without** them (the formula takes a switch for that), and the 20 events that move most.
   - Staff functions for the admin screen: list / save an outlet (class, side, country, status),
     attach a key to an outlet, "sources seen in the last 7 days with no outlet" (by number of
     events), score distribution, `truth_country_coverage()` (the per-country row described
@@ -484,6 +564,10 @@ Details window:
   ✓ 1 more independent source                                  +5
   ✓ Reported by both sides (Israel, Lebanon)                  +12
   ✓ 2 languages (Hebrew, Arabic)                               +4
+  ✓ Trusted channel with a good record — 61% of its reports
+     were later confirmed by other sources (average 45%)       +43
+     (or: "✓ Channel trusted by the desk" · "⚠ Channel with a weak record — 19% (average 45%)")
+  · Large channel: 120K subscribers                             +2
   ✓ New video footage, from 2 independent sources              +11
      (or: "✓ New photos" · "✓ Footage checked: matches the place")
   ⚠ Picture seen before, on an event from 3 Nov ↗               −6
@@ -526,7 +610,7 @@ Details window:
 - Reading what a report says (denials, "X denies", conflicting casualty numbers) — the score
   counts sources, not content. Staff "Disputed" covers the cases that matter.
 - Lowering a big claim that nobody repeated after some hours; time decay of any kind.
-- A reliability history per channel (how often it was right); learning weights from staff ticks.
+- Learning weights from staff ticks; X follower counts; a per-topic or per-region record.
 - Scores in push, shared text, daily summaries, "Ask the map" and the public API.
 - Changing or removing the "verified" tick and `events_auto_verify`.
 - Backfill of old events; checking citations of archived events.
@@ -545,7 +629,7 @@ Details window:
   `match` +4, `mismatch` as old, a blank-frame `phash` is not a match, a media insert only writes
   `truth_dirty` and the tick recomputes once; the trigger does nothing with `compute` off and for drafts; `truth_recompute` queues
   no editor run and no push; the views give null to a guest, the score to Free; `truth_details` is null
-  for Free, without links for Pro, full for staff; `anon` / `authenticated` cannot read the seven
+  for Free, without links for Pro, full for staff; `anon` / `authenticated` cannot read the eight
   tables; budget reached → the tick does not call out.
 - Unit, `node:test` (`tests/truth/`): `truth.test.ts` — text key equals the worker's for the same
   text, script → language, claim window, candidate ranking, the decision order with fake readers
@@ -571,7 +655,8 @@ Details window:
    suggestion (≈ $0.02) and approve or fix the busiest 50 channels.
 4. Merge to `main` (functions deploy by themselves, flags off). Deploy check: nothing changed.
 5. `compute` on — **silent**: staff see scores, readers do not. Two days.
-6. Distribution report + the 40 events (among them every event with an *old* picture, for the
+6. Distribution report — **the same events scored with and without track record and size**
+   (`truth_admin_compare`) — + the 40 events (among them every event with an *old* picture, for the
    owner to judge whether −6 is right); tune weights; "recompute last 48 hours".
 7. `citation_check` on; after one day report: pairs checked, found / not found / not checkable,
    cost. The owner reads 20 results.
@@ -599,12 +684,27 @@ Details window:
   "why" line says "footage attached", not "footage confirms", and why the +4 exists only when
   someone or something really checked it. Old pictures are caught only if we have seen the very
   same file before; a clip re-cut from an older war passes as new.
+- **"Trusted" is the owner's word, shown as the system's.** Most of his channels are aligned
+  with one side; a lone claim from one of them will now read 38–45. The "why" line says
+  "trusted by the desk", the one-side ceiling still holds at 55, and an official source stays
+  above. The record is a measure of "others also reported it", not of truth; it is weak for
+  local channels and blind to things nobody ever corrected.
 - **Gaming.** Someone could write "according to Reuters" to borrow credit: it earns nothing until
   found at Reuters, and costs 8 points when it is not.
 - **"Not found" can be our miss.** A statement made on air only, or deleted, or a feed that lags.
   The repeat checks and the small penalty (−8, not a collapse) keep this from doing real harm.
 - **Database load.** The project overloaded once (October). The trigger is a handful of key
   lookups and the tick is bounded (20 pairs, 4 reads); step 5 is where this is watched.
+
+## Open decisions — round 2 (requirements 8–9; recommended default in bold)
+14. **Points for a trusted channel.** **38, and 43 with a good record** (official stays at 55,
+    a lone mainstream outlet at 42). Or higher, up to 50.
+15. **Which channels are "the owner's own".** **Every channel in a folder he made (not "Unread")
+    + the WhatsApp group** — 65 of the 96 active channels today. Or only named folders (VIC …).
+16. **Weight of the automatic record.** **Modest (+5 on trusted, +10 / −10 on others)**, because
+    it measures "others also reported it". Or stronger once staff start marking wrong reports.
+17. **Size.** **At most +3**, from 10K subscribers up.
+18. **One-side ceiling with a trusted channel.** **55.** Or keep 45.
 
 ## Decisions (approved by owner 13 Nov 2026)
 The thirteen open decisions were approved as recommended ("מאשר הכל"):

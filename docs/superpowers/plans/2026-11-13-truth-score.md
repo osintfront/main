@@ -8,7 +8,7 @@
 
 **Tech Stack:** Postgres (Supabase) plpgsql, PGlite 0.5 for local SQL tests, Supabase Edge Functions on Deno, Haiku 5.5 (`CHEAP_MODELS`) for the one optional citation-match call, React 19 + TypeScript + Tailwind 4, `node:test` with `node --experimental-strip-types --test`, Playwright against a local build with a faked Supabase.
 
-**Spec:** `docs/superpowers/specs/2026-11-13-truth-score-design.md` (approved 2026-11-13; all 13 decisions as recommended, plus requirement 7 — officials of every covered country). Read it first; this plan does not repeat its reasoning.
+**Spec:** `docs/superpowers/specs/2026-11-13-truth-score-design.md` (decisions 1–13 approved 2026-11-13, plus requirement 7 — officials of every covered country; requirements 8–9 — track record, trust tier, channel size — added afterwards with open decisions 14–18). **The build has not been approved: do not start Task 1 until the owner approves round 2.** Tasks 5A, 7A and 11A carry the round-2 work. Read it first; this plan does not repeat its reasoning.
 
 ## Global Constraints
 
@@ -22,11 +22,14 @@
    "others":{"steps":[5,4,3],"cap":12},
    "variety":{"opposing":12,"different":6,"langs":4,"cap":16},
    "media":{"video":8,"photo":5,"next":3,"next_opposing":4,"match":4,"cap":12},
+   "trust":{"trusted":38,"trusted_good":43,"trusted_poor":30,"good":28,"poor":8,"doubtful":6,"other_step":8,"one_side_cap":55},
+   "size":{"steps":[[10000,1],[50000,2],[200000,3]],"cap":3},
+   "record":{"min_n":30,"prior":30,"joined":0.6,"bad":2,"good_above":0.10,"poor_below":0.15,"bad_share":0.05,"days":60,"min_age_hours":6},
    "cite_not_found":-8,"media_old":-6,"one_side_cap":45,"staff_floor":90,"min":5,"max":99,
    "opposing":[["israel","axis"],["israel","arab"],["west","axis"]]}
   ```
 - Classes `official` | `mainstream` | `state_media` | `partisan` | `unknown`. Sides `israel` | `west` | `axis` | `arab` | `neutral` | `unknown`. Languages `he` | `ar` | `fa` | `en` | `other`. Outlet `status` `approved` | `suggested` | `to_check` — **only `approved` rows count; any other row scores as `unknown`.** The AI never writes `class` or `status`.
-- Source key: `tg:<username lower>` from `t.me` / `telegram.me` links (with or without `/s/`), `x:<handle lower>` from `x.com` / `twitter.com`, `web:<host>` otherwise (host lower, without a leading `www.`, `m.`, `english.`, `arabic.`, `edition.`, `en.`), `name:<truth_norm(name before " / ")>` when there is no link.
+- Source key: `tg:<username lower>` from `t.me` / `telegram.me` links (with or without `/s/`), `x:<handle lower>` from `x.com` / `twitter.com`, `web:<host>` otherwise (host lower, without a leading `www.`, `m.`, `english.`, `arabic.`, `edition.`, `en.`), `name:<truth_norm(name before " / ")>` when there is no link. A name starting `WhatsApp – <group>` gives `wa:<truth_norm(group)>` whatever the link.
 - Citation check values (exact): window = 12 h before the citing post to 20 min after; 6 candidates to the model; 3 Telegram pages back at most; page cache 10 min per outlet; 8 s per read, 4 reads at once; 20 pairs per run; retries at +30 min and +2 h, then final; only published events younger than 24 h; highest severity first. Model call: `CHEAP_MODELS`, purpose `truth_cite`, `max_tokens: 50`, logged with the event id, **not** inside `runAsReader`.
 - Media values (exact): *old* = same `sha256` or same `phash` on another event whose row is more than 24 h older; *shared* = within 24 h; *stock* = on 3 or more other events; a `phash` with fewer than 8 or more than 56 bits set is compared by `sha256` only; geolocation match radius 5 km.
 - Bands: 5–34 grey, 35–59 amber, 60–79 light green, 80–99 green; staff "Disputed" (override 10) red. "Initial report" = published < `initial_minutes` ago and score < 35.
@@ -194,6 +197,19 @@
 - [ ] **Step 2: Run** `… --test tests/truth/media.test.ts` → FAIL. **Step 3: Implement.** **Step 4: Run** all five files → PASS; word rule grep on 126 prints nothing.
 - [ ] **Step 5: Commit** `feat(truth): footage in the formula — new, shared, old, stock, checked`.
 
+### Task 5A: The formula — trust tier, track record, size
+
+**Files:**
+- Modify: `supabase/migrations/20261114000126_truth_core.sql`, `supabase/migrations/20261114000127_truth_seed.sql`
+- Test: `tests/truth/trust.test.ts`
+
+**Interfaces:**
+- Produces: columns `truth_outlets.trust_tier`, `tier_by`, `tier_at`; `truth_source_keys.curated boolean not null default false`, `subscribers int`; table `truth_outlet_stats` (spec's columns; RLS on). `truth_origins` adds to every origin `tier` (`trust_tier`, else `'trusted'` when any of its keys is `curated`, else null), `record` (from `truth_outlet_stats`, `'none'` when missing), `rate`, `mean`, `subs` (largest `subscribers` among its keys). `truth_calc`: for a best origin of class `partisan` / `unknown` part A comes from `weights.trust` by the spec's table; a trusted origin in part C gives `other_step`; one-side ceiling = `trust.one_side_cap` when any origin is trusted; part H (size) by `size.steps` for the best origin only, 0 when `doubtful` or `poor`. `p_flags.plain = true` switches all of this off (tier, record and size ignored) — used by the comparison report. `why.parts` `best` gains `tier`, `record`, `rate`, `mean`; new part `{ k: 'size', subs, pts }`. Seed: key `wa:החזית הצפונית` with `curated = true`.
+
+- [ ] **Step 1: Failing tests** — one per row of the spec's "New example scores" table with the exact numbers (`12`, `38`, `43`, `45`, `53`, `51`, `55` with a `cap` part `to: 55`, `28`, `6`, `42`, `55`, `79`). And: a hand-set `normal` on a curated channel → `18`, not 38; trusted + `poor` → `30`; `doubtful` with 500K subscribers → `6`; `poor` with 500K → `8`; subscribers 9,999 → +0, 10,000 → +1, 50,000 → +2, 5,000,000 → +3; size is not added for an official or mainstream best origin; with `plain: true` every case above returns what Tasks 4–5 alone give (18 for a partisan and 12 for an unknown best origin, steps 5 / 4 / 3, ceiling 45, no size part); record `none` behaves as `average`; all Task 4 and Task 5 tests still pass unchanged.
+- [ ] **Step 2: Run** `… --test tests/truth/trust.test.ts` → FAIL. **Step 3: Implement.** **Step 4: Run** all `tests/truth/*.test.ts` → PASS; word rule grep.
+- [ ] **Step 5: Commit** `feat(truth): trust tier, track record and channel size in the formula`.
+
 ## Phase 2 — Database wiring (files only; nothing applied)
 
 ### Task 6: Event columns, picture lookup, trigger, queue, tick
@@ -240,6 +256,24 @@
 - [ ] **Step 2: Write the functions (128), then 129 and 130.** Read the two live view definitions with one read-only `execute_sql`.
 - [ ] **Step 3:** word rule grep on 128, 129 and the test file prints nothing; 130 is the only file with those words.
 - [ ] **Step 4: Commit** `feat(truth): reader and staff functions, country coverage, views, owner-run file`.
+
+### Task 7A: Track record and size — the daily refresh and the comparison
+
+**Files:**
+- Modify: `supabase/migrations/20261114000128_truth_wiring.sql`, `supabase/tests/truth_score.sql`
+- Create: `tests/truth/record.test.ts`, and in migration 126 the pure helper below
+
+**Interfaces:**
+- Produces:
+  - In 126 (pure, locally tested): `truth_record(p_n int, p_strong int, p_joined int, p_bad int, p_mean numeric, p_weights jsonb) returns jsonb` → `{ rate, record }` by the spec's formula and thresholds.
+  - In 128: `telegram_channels.subscribers int`, `subscribers_at timestamptz`. `truth_refresh_stats() returns jsonb` — service role: (1) `truth_source_keys.curated` = the channel's `folder` is not empty and not `'Unread'` (rows are created for curated channels that have none), `subscribers` copied; (2) one grouped query over published / archived / rejected events of the last `record.days` older than `min_age_hours`: first reporter = the outlet of the main source's key; `joined` = any other outlet key among non-context sources; `strong` = one of them is an approved official / mainstream outlet, or a `confirmed` citation row exists; `bad` = `truth_override <= 20`, or status rejected, or removed by a staff member, or a `not_found` citation of that source; upserts `truth_outlet_stats` with `truth_record`. Returns `{ outlets, mean }`. `truth_tick()` calls it when the newest `computed_at` is older than 24 h (and `compute` is on), then queues nothing — scores pick the new record up as events change.
+  - `truth_admin_compare(p_hours int default 48) returns jsonb` (staff) — for published events of the window: `{ n, with: { bands, avg }, without: { bands, avg }, moved: [ top 20 by |with − without|: { id, title, with, without, tier, record, subs } ] }`, `without` = `truth_calc(…, flags || '{"plain":true}')`.
+  - `truth_admin_save_outlet` accepts `trust_tier`; `truth_admin_outlets()` returns per outlet `tier`, `tier_default` (curated), `n`, `rate`, `mean`, `record`, `subscribers`, and `clash` = trusted with a `poor` record.
+
+- [ ] **Step 1: Failing local tests** (`record.test.ts`, mean 0.45, default weights): `n = 29` → `record 'none'`; `n = 2, joined = 2` → `'none'`; `n = 30, joined = 30, strong = 0` → rate `(18 + 13.5) / 60 = 0.525` → `'average'`; `n = 200, strong = 100, joined = 160` → `(100 + 36 + 13.5) / 230 = 0.65` → `'good'`; `n = 200, joined = 40` → `(24 + 13.5) / 230 = 0.163` → `'poor'`; `n = 100, joined = 70, bad = 5` → `'poor'` (bad share); negative results are floored at 0.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement `truth_record`**, then the 128 functions. **Step 4: Run** → PASS.
+- [ ] **Step 5: Extend the live test file:** after `truth_refresh_stats()` a test channel with 40 seeded events (30 joined) has a row with `n = 40`; a channel in folder `VIC` is `curated`, one in `Unread` is not; a hand-set `doubtful` survives the refresh; `truth_admin_compare(48)` returns `with` and `without` and they differ for an event of a curated channel; as a viewer it raises.
+- [ ] **Step 6:** word rule grep; **Commit** `feat(truth): daily track record per outlet, curated default, with/without comparison`.
 
 ## Phase 3 — Server
 
@@ -335,6 +369,18 @@
 - [ ] **Step 2: Run** `… --test tests/truth/checkWiring.test.ts` → FAIL. **Step 3: Implement.** **Step 4: Run** all `tests/truth/*.test.ts` → PASS; Deno check of `event-agent/index.ts` → no new errors.
 - [ ] **Step 5: Commit** `feat(truth): citation checker and source-class suggestions in event-agent (idle while flags are off)`.
 
+### Task 11A: Subscriber counts
+
+**Files:**
+- Modify: `supabase/functions/whatsapp-ingest/telegram.ts` (`fetchChannel` returns `subscribers`), `supabase/functions/_shared/truth.ts`, `supabase/functions/_shared/truthCheck.ts`, `supabase/functions/event-agent/index.ts`, `supabase/migrations/20261114000128_truth_wiring.sql` (the tick), `tests/truth/truth.test.ts`
+
+**Interfaces:**
+- Produces: `export function parseSubscribers(html: string): number | null` in `truth.ts` — the header counter of a public `t.me/s/<channel>` page whose label is `subscribers` / `members`: `"120K"` → 120000, `"1.2M"` → 1200000, `"8 431"` → 8431, absent → null. `fetchChannel` returns `{ title, posts, subscribers }` (existing callers unaffected). `export async function refreshSubscribers(db: Db, limit = 25): Promise<{ done: number }>` — active channels with `subscribers_at` null or older than 7 days, oldest first, 4 at a time, 8 s each; writes only when a number was parsed; idle unless `truth_score.compute`. `event-agent` action `truth_subscribers` (cron secret). `truth_tick()` calls it once an hour while any active channel is due. No AI, no paid call.
+
+- [ ] **Step 1: Failing tests:** `parseSubscribers` on four saved header snippets (`120K`, `1.2M`, `8 431`, none) and on a page whose only counter is `photos` → null; a post text containing "5M subscribers" does not count; `refreshSubscribers` with `compute` false makes no call.
+- [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** all truth tests + Deno check → PASS.
+- [ ] **Step 5: Commit** `feat(truth): weekly subscriber count from the public channel page`.
+
 ## Phase 4 — Site
 
 ### Task 12: Browser rules and service
@@ -355,7 +401,7 @@
   ```
   `truthService.ts`: `fetchTruthDetails(eventId)`, and the staff calls of Task 7 one-to-one. `AppEvent.truthScore: number | null` from the view column. i18n keys `truth.*` in both languages (name, four band labels, initial report, every line of the spec's UI sketch, the disclaimer, lock texts, filter label, admin labels, class / side / status / country names).
 
-- [ ] **Step 1: Failing tests:** bands at 34 / 35 / 59 / 60 / 79 / 80 / 99; `disputed` wins; initial report at 29 min + score 20 → true, at 31 min → false, score 40 → false, null `publishedAt` → false; `truthLines` for a `details` with parts best(official) + others + sides + langs + media + a confirmed cite → six lines in that order, the cite line `icon 'dot'` with `url`; a `media_old` part → a `warn` line and **no** footage line; an override → one line `truth.line.staff` first; unknown part key → skipped, no throw; every key returned exists in both `he.ts` and `en.ts`; neither language file contains the words `false` / `fake` / `שקרי` under `truth.`.
+- [ ] **Step 1: Failing tests:** bands at 34 / 35 / 59 / 60 / 79 / 80 / 99; `disputed` wins; initial report at 29 min + score 20 → true, at 31 min → false, score 40 → false, null `publishedAt` → false; `truthLines` for a `details` with parts best(official) + others + sides + langs + media + a confirmed cite → six lines in that order, the cite line `icon 'dot'` with `url`; a `best` part with `tier 'trusted'`, `record 'good'`, `rate 0.61`, `mean 0.45` → line `truth.line.trustedGood` with vars `{ rate: 61, mean: 45 }`; `record 'none'` → `truth.line.trusted` with no numbers; `record 'poor'` untiered → a `warn` line; a `size` part with `subs 120000` → `truth.line.size` with `{ subs: '120K' }`; a `media_old` part → a `warn` line and **no** footage line; an override → one line `truth.line.staff` first; unknown part key → skipped, no throw; every key returned exists in both `he.ts` and `en.ts`; neither language file contains the words `false` / `fake` / `שקרי` under `truth.`.
 - [ ] **Step 2: Run** `node --experimental-strip-types --test tests/truth/truthClient.test.ts` → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS; `npm run typecheck` → no new errors.
 - [ ] **Step 5: Commit** `feat(truth): browser rules — bands, initial report, the lines of the "why"`.
 
@@ -395,6 +441,7 @@
 - Consumes: the staff calls of Task 7 through `truthService.ts`.
 - Produces:
   - **Countries first:** one row per country from `truth_country_coverage()` — name, approved officials, readable, suggested, to check, and a red mark "no official source yet" when `gap`; a note field and a "checked" tick per country (`truth_admin_save_country`); a filter "only countries with a gap".
+  - **Trust and record:** per outlet a tier choice (trusted / normal / doubtful / default), a tag "owner's channel" when the default applies, the record ("61% of 240, average 45%" or "no record yet"), subscribers, and a red "trusted but weak record" mark on a clash; sortable by record and by events.
   - **Outlets:** table filtered by country / class / status; per row: class, side, country, status, aliases, check channel, feed, keys with language, note; buttons Approve / Reject (→ `to_check` with a note) on `suggested` and `to_check` rows; "Add outlet".
   - **Seen, not classified:** `truth_admin_unclassified()` with one-click "attach to outlet…" / "new outlet"; a button "Suggest classes (AI, about $0.02)" calling `truth_suggest_sources`, with a confirm.
   - **Recompute last 48 hours** button showing the number changed; the distribution (four band counts) under it.
@@ -420,6 +467,7 @@
   - flag off (faked view sends null for everyone, not guest): no chip, no section, no lock.
   - `he`: `dir="rtl"`, the percent sign and digits render `62%`; `phone`: the preview sheet shows the chip.
   Screenshots to `SETS_QA_SHOTS`.
+  - track record: a card of a trusted channel shows `43%`; its "why" has the trusted line with "61%" and "45%" and the size line "120K"; staff admin: setting a tier sends `trust_tier`, the clash mark shows on the faked weak-record trusted outlet.
 - [ ] **Step 2: Run** the matrix `he desktop pro`, `en phone pro`, `he desktop free`, `en desktop guest`, `he desktop staff` → each prints `PASS`.
 - [ ] **Step 3: Write the QA checklist** (for the owner and staff, in plain language, each line a thing to look at and what should be seen): the 11 example scores; a real event of each band; an event with an old picture; a cited outlet found / not found / not checkable; override and clear; each plan's view; the four flags off one by one; Hebrew and English; phone; the country table with every gap understood; "nothing changed" checks — feed order, push, the verified tick, event editing, the editor queue, page load time.
 - [ ] **Step 4: Final local pass** — every `tests/truth/*.test.ts`, `tests/filters/*`, `tests/dedupe/*`, `tests/deep/editorWiring.test.ts`, `tests/infra/affectedFunctions.test.ts`; typecheck; build; Deno check of `whatsapp-ingest`, `event-agent`; the word rule on 126–129 and the test files. List which functions the merge will deploy: `node tools/functions/affected.mjs` against `origin/main`.
@@ -440,7 +488,7 @@
 - [ ] **Step 6: STOP — ask the owner and staff to review the source list on the branch preview** (Vercel preview of `feat/truth-score`, admin → News agents → Source reliability). Country by country: approve, fix or reject every suggested and to-check row; write a gap note where no official source exists. Offer the AI suggestion run (about $0.02) — **its own yes**; report its cost from `ai_usage`. Changes he asks for in the screen are made and re-checked before going on.
 - [ ] **Step 7: STOP — ask to merge to `main`.** Say exactly: the site gets the new code with everything hidden; **the merge also deploys** the functions listed in Task 16 Step 4 (name them); ingest starts saving four small facts per source; nothing is computed or shown. Record the currently deployed version of each of those functions (`get_edge_function`) for roll-back. After the merge: the deploy workflow is green; the next real posts appear in `whatsapp_ingest_log` without errors; new `sources` entries carry `tk`; `truth_check` through `pg_net` with the cron secret answers zeros.
 - [ ] **Step 8: STOP — ask to switch `compute` on (the quiet stage).** Say: scores are computed from now on; only staff see them. Switch; after 15 minutes verify: new published events have `truth_score`; `truth_dirty` is draining; no warnings from the trigger in `query_logs`; the events table's write latency is unchanged. Then offer "recompute last 48 hours" — **its own yes**.
-- [ ] **Step 9: Quiet stage, two days. STOP — bring the calibration report.** `truth_admin_distribution(48)`; the share per band; 40 real events (10 per band) with headline, sources, score and "why", including every event with an *old* picture and every event sourced from an approved official; the countries still marked as a gap. In plain Hebrew. Weight changes he asks for → Settings (no deploy), "recompute", a new distribution. Repeat until he says the numbers look right.
+- [ ] **Step 9: Quiet stage, two days. STOP — bring the calibration report.** `truth_admin_distribution(48)`; **`truth_admin_compare(48)` — the same events with and without track record and size: band shares side by side, the average, and the 20 events that moved most, each with the reason**; the list of channels by record with the clashes (trusted but weak); the share per band; 40 real events (10 per band) with headline, sources, score and "why", including every event with an *old* picture and every event sourced from an approved official; the countries still marked as a gap. In plain Hebrew. Weight changes he asks for → Settings (no deploy), "recompute", a new distribution. Repeat until he says the numbers look right.
 - [ ] **Step 10: STOP — ask to switch `citation_check` on.** Say: from now on cited outlets are checked, at most $0.50 a day, expected a few cents. After 24 hours report: pairs checked, found / not found / not checkable (with reasons), model calls, cost (`ai_usage`, purpose `truth_cite`); 20 results for him to read (10 "found", 10 "not found") with the matching item. Matching fixes → Task 10, tests, a new merge with its own STOP.
 - [ ] **Step 11: STOP — ask to switch `public` on.** Say who will see what (guest lock, Free badge, Pro / Max "why" and filter). Before switching, walk the QA checklist with him on live as staff. Switch; check as a guest, a Free and a Pro test user (ask before creating any; remove them afterwards with his yes); watch a week: support questions, the band shares, cost.
 - [ ] **Step 12: Roll-back note in the hand-over:** `public` off → badges vanish on next load; `citation_check` off → no checks, no cost; `compute` off → scores freeze; the three can be switched in any order from Settings. To stop the ingest change, redeploy the functions at the versions recorded in Step 7. The tables and columns can stay.
