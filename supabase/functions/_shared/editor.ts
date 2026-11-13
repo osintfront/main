@@ -16,6 +16,7 @@
 //  - Foreign-letter check now catches any non-Hebrew script (not only Arabic/Latin).
 
 import { CATEGORY_RULES } from "./categoryRules.ts";
+import { cleanSecondary } from "./secondaryCats.ts";
 import { logUsage } from "./usage.ts";
 
 export interface EditorSource { name: string; url: string | null }
@@ -33,6 +34,8 @@ export interface EditResult {
   locations: EditorLocation[];
   sources: EditorSource[];
   category_slug: string | null;
+  /** Other kinds of the same incident (at most two, cleaned). */
+  secondary_category_slugs: string[];
   severity: "low" | "medium" | "high" | "critical";
   is_breaking: boolean;
   location_name: string;
@@ -182,6 +185,7 @@ const SYSTEM_DETAILED_PLACES = `
 - locations: כל מקום שמוזכר בדיווח, בלי לדלג (עד המגבלה), בסדר הופעתם. לכל מקום category_slug של מה שקרה בו לפי הכותרת שתחתיה הוא מופיע (למשל "الغارات الحربية" → airstrike, "القصف المدفعي" → artillery-shelling, "التفجيرات" → explosion, "القنابل الصوتية"/"القنابل المضيئة" → military-activity, כטב"ם → uav, ירי → shooting-gunfire).
 - "أطراف X" / "اطراف X" / "خراج X" / "محيط X" (פאתי X) → המקום הוא X. "وادي X" → ואדי X (מקום בפני עצמו). "سهل X" → מישור X. "بين بلدتي A و B" → שני המקומות A ו-B. "بحر X" / "شاطئ X" → X (חוף/ים).
 - מקום שמופיע פעמיים (תחת שתי כותרות) — פעם אחת, עם הקטגוריה החמורה יותר.
+- category_slug של מקום הוא סוג התקיפה בו — אף פעם לא killed / wounded, אלא אם אמצעי התקיפה לא ידוע.
 - category_slug של הדיווח כולו: סוג האירוע הדומיננטי (החמור או השכיח ביותר).
 - הכותרת והתמצית מסכמות את הכול (למשל "סיכום תקיפות ישראליות בדרום לבנון: X תקיפות אוויר, Y הפגזות…").`;
 
@@ -230,6 +234,12 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
     props.is_current = { type: "boolean", description: "true = a new development from the last day or two (relative to today's date); false = background, analysis, or old events" };
     props.category_slug = { type: "string", enum: categories.map((c) => c.slug) };
     required.push("relevant", "category_slug", "is_current");
+  }
+  if (categories.length) {
+    props.secondary_category_slugs = {
+      type: "array", maxItems: 2, items: { type: "string", enum: categories.map((c) => c.slug) },
+      description: "Other kinds of the SAME incident (see the category rules). Usually empty.",
+    };
   }
   return {
     name: "edited_report",
@@ -389,6 +399,8 @@ function normalise(raw: Record<string, any>, model: string, mode: EditInput["mod
       url: validUrl(s?.url),
     })).filter((s: EditorSource) => s.name || s.url),
     category_slug: typeof raw.category_slug === "string" && cats.has(raw.category_slug) ? raw.category_slug : null,
+    secondary_category_slugs: cleanSecondary(raw.secondary_category_slugs, cats,
+      typeof raw.category_slug === "string" && cats.has(raw.category_slug) ? raw.category_slug : null),
     severity: ["low", "medium", "high", "critical"].includes(raw.severity) ? raw.severity : "medium",
     is_breaking: raw.is_breaking === true,
     location_name: clean(raw.location_name, 200),

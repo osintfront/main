@@ -19,6 +19,8 @@ export const CATEGORY_SLUGS = [
   'transportation-incident',
   'humanitarian-event',
   'assassination',
+  'killed',
+  'wounded',
   'force-sighting',
   'statements',
   'artillery-shelling',

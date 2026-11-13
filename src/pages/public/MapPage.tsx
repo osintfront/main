@@ -334,7 +334,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const visibleEvents = useMemo(
     () =>
       (ask ? ask.events : allEvents)
-        .filter((e) => matchesQuery(e, deferredQuery, categoryLabel(e.category.slug, e.category.name)))
+        .filter((e) => matchesQuery(e, deferredQuery, [e.category, ...(e.secondaryCategories ?? [])].map((c) => categoryLabel(c.slug, c.name)).join(' ')))
         .filter((e) =>
           inForce
             ? matchingSets(e, activeSets).length > 0 || eeiMatches(e, eeiOn, eei.tags, eei.view).length > 0

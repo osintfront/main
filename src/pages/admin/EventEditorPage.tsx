@@ -16,9 +16,11 @@ import {
   saveInternalNotes,
   softDeleteEvent,
   updateEvent,
+  setEventSecondaryCategories,
 } from '@/services/eventAdminService';
 import { friendlyError } from '@/services/serviceError';
 import { attachComposeMedia, composeEvent, type ComposeMedia } from '@/services/composeService';
+import { SecondaryTypesField } from '@/components/admin/SecondaryTypesField';
 import { applyCompose, emptyEventInput, splitByCategory as splitParts, telegramPost } from '@/lib/quickReport';
 import { getCategoryIcon } from '@/data/categoryRegistry';
 import type { GeocodeResult } from '@/services/geocodingService';
@@ -198,13 +200,17 @@ export function EventEditorPage() {
         if (parts.length > 1) {
           for (const part of parts) {
             const ev = await createEvent(part, target, notes);
+            if (part.secondarySlugs?.length) await setEventSecondaryCategories(ev.id, part.secondarySlugs);
             if (linkMedia.length) await attachComposeMedia(ev.id, linkMedia, tgPost);
           }
           toast.success(t('compose.splitDone', { count: parts.length }));
           navigate('/admin/events', { replace: true });
           return;
         }
-        const created = await createEvent(input, target, notes);
+        // One part: it carries the place relabel and the secondary type the split rules added.
+        const one = parts[0] ?? input;
+        const created = await createEvent(one, target, notes);
+        if (one.secondarySlugs?.length) await setEventSecondaryCategories(created.id, one.secondarySlugs);
         if (linkMedia.length) await attachComposeMedia(created.id, linkMedia, tgPost);
         toast.success(t(target === 'published' ? 'form.toastPublished' : target === 'pending_review' ? 'form.toastSubmitted' : 'form.toastDraft'));
         navigate(`/admin/events/${created.id}`, { replace: true });
@@ -217,6 +223,11 @@ export function EventEditorPage() {
         rejectionReason: extra?.rejectionReason,
       });
       if (editable) await saveInternalNotes(event.id, notes).catch(() => undefined);
+      const nextSecondary = input.secondarySlugs ?? [];
+      if (editable && nextSecondary.join(',') !== (event.secondarySlugs ?? []).join(',')) {
+        await setEventSecondaryCategories(event.id, nextSecondary);
+        updated.secondarySlugs = nextSecondary;
+      }
       setEvent(updated);
       setInput(eventToInput(updated));
       setHistory(await getHistory(event.id).catch(() => history));
@@ -535,6 +546,13 @@ export function EventEditorPage() {
                 disabled={disabled}
               />
             </div>
+            <SecondaryTypesField
+              value={input.secondarySlugs ?? []}
+              mainSlug={category?.slug ?? null}
+              categories={categories}
+              onChange={(s) => set('secondarySlugs', s)}
+              disabled={disabled}
+            />
             {category?.slug === 'home-front-alerts' ? (
               <p className="flex items-start gap-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-900 ring-1 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-200 dark:ring-sky-500/20">
                 <Info className="mt-px size-3.5 shrink-0" aria-hidden />

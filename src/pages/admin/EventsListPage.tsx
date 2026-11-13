@@ -501,6 +501,14 @@ export function EventsListPage() {
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
+                      {ev.secondarySlugs?.length ? (
+                        <span className="mt-1 flex flex-wrap gap-1">
+                          {ev.secondarySlugs.map((slug) => {
+                            const c = categories.find((x) => x.slug === slug);
+                            return c ? <CategoryBadge key={slug} secondary category={{ id: c.id, slug: c.slug, name: c.name, icon: c.icon, color: c.color, markerColor: c.markerColor }} /> : null;
+                          })}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="hidden max-w-[14rem] text-slate-600 lg:table-cell lg:px-3 lg:py-3 dark:text-slate-300">
                       {canMovePins && !ev.deletedAt ? (

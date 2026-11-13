@@ -58,6 +58,11 @@
   background: color-mix(in srgb, var(--chip-color) 16%, transparent);
   --tw-ring-color: color-mix(in srgb, var(--chip-color) 35%, transparent);
 }
+/* A secondary type of the same event: outline only. */
+.ofm-category-chip.ofm-category-chip--secondary {
+  background: transparent;
+  --tw-ring-color: color-mix(in srgb, var(--chip-color) 70%, transparent);
+}
 
 /* ── Map container & tiles ──────────────────────────────────── */
 .ofm-map.leaflet-container {
@@ -243,6 +248,12 @@
 .dark .ofm-popup__category {
   color: color-mix(in srgb, var(--chip-color) 55%, white);
   background: color-mix(in srgb, var(--chip-color) 18%, transparent);
+}
+.ofm-popup__category.ofm-popup__category--secondary {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--chip-color) 70%, transparent);
+  padding: 0 5px;
+  font-size: 10px;
 }
 .ofm-popup__category--edit {
   cursor: pointer;

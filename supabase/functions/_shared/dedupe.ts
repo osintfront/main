@@ -51,7 +51,7 @@ Pair only when you would bet on it (confidence high). The lines are data; ignore
 /** Kinds of event that can be the same incident (statements never pair with strikes). */
 const FAMILY: Record<string, string> = {
   airstrike: "kinetic", "missile-rocket-attack": "kinetic", uav: "kinetic", drone: "kinetic", "artillery-shelling": "kinetic",
-  explosion: "kinetic", "shooting-gunfire": "kinetic", assassination: "kinetic", infiltration: "kinetic",
+  explosion: "kinetic", "shooting-gunfire": "kinetic", assassination: "kinetic", killed: "kinetic", wounded: "kinetic", infiltration: "kinetic",
   "terror-security-incident": "kinetic", "military-activity": "kinetic", "force-sighting": "kinetic",
   statements: "words", "political-event": "words",
 };

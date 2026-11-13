@@ -359,6 +359,7 @@ Rules:
 - Photos/videos/reports of troops, vehicles or weapons at a stated location: force-sighting. Movements, operations, deployments without a documented sighting: military-activity.
 - Gunfire, automatic fire (ירי סריקה), light-weapons fire: shooting-gunfire (small-arms fire).
 - Artillery, mortar or tank shelling (قصف مدفعي, مدفعية, هاون, قذائف, tank fire at a place): artillery-shelling — not airstrike (airstrike = aircraft / drones dropping or firing).
+- People killed (not a targeted killing of a specific person): killed. Wounded only: the kind of the attack (airstrike, shooting-gunfire…). No kind of attack known: killed, or wounded when nobody died.
 - If torn between event and not_event, choose uncertain — never not_event.${CATEGORY_RULES}
 Examples:
 - "מפקד גזרת דרום אל-ליטאני, תת-אלוף X: המשך התקיפות של צה\"ל מדגיש את הצורך בפעולה ערבית" -> event, statements
@@ -870,6 +871,8 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   };
   // All places the report names (one pin each); the country is the fallback pin.
   update.locations = locationsForDb(edited, 30);
+  // Other kinds of the same incident; lands with the places, before the split.
+  update.secondary_categories = edited.secondary_category_slugs;
   if (!row.country && mainCountry(edited)) update.country = mainCountry(edited);
   if (edited.title) update.title = clip(edited.title, 200);
   if (edited.summary) update.description = formatDescription(edited);
@@ -889,12 +892,13 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   }
   // Text first (fast: no place lookups), then the places — a slow place lookup must never
   // leave the event in its original language.
-  const PLACE_KEYS = ["locations", "country", "latitude", "longitude", "location_precision", "geocoding_confidence", "location_name"];
+  const PLACE_KEYS = ["locations", "secondary_categories", "country", "latitude", "longitude", "location_precision", "geocoding_confidence", "location_name"];
   // Corrected by hand meanwhile: keep the person's text.
   const { data: man } = await db.from("events").select("ai_suggestions").eq("id", eventId).maybeSingle();
   const TEXT_KEYS = ["title", "description", "translations"];
   const textPart = Object.fromEntries(Object.entries(update).filter(([k]) => !PLACE_KEYS.includes(k) && !(man?.ai_suggestions?.manual_text && TEXT_KEYS.includes(k))));
-  const placePart = Object.fromEntries(Object.entries(update).filter(([k]) => PLACE_KEYS.includes(k)));
+  // Secondary types set by hand (manual_secondary) are left alone.
+  const placePart = Object.fromEntries(Object.entries(update).filter(([k]) => PLACE_KEYS.includes(k) && !(k === "secondary_categories" && man?.ai_suggestions?.manual_secondary)));
   const { error: textErr } = await db.from("events").update(textPart).eq("id", eventId);
   if (textErr) console.error("editor text update failed", textErr.message);
   let { error } = Object.keys(placePart).length ? await db.from("events").update(placePart).eq("id", eventId) : { error: null };

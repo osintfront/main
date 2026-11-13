@@ -11,6 +11,7 @@ const ADMIN_EVENT_COLUMNS = [
   'source_name', 'source_url', 'source_type', 'occurred_at', 'published_at', 'created_at', 'updated_at',
   'created_by', 'approved_by', 'is_breaking', 'is_verified', 'geocoding_confidence', 'classification_confidence',
   'coordinates_manually_corrected', 'rejection_reason', 'duplicate_of_event_id', 'deleted_at', 'review_requested_at',
+  'secondary_categories',
   // Name of the reporter. RLS on profiles returns null for staff who may not read other profiles.
   'creator:profiles!events_created_by_fkey(full_name,email)',
 ].join(',');
@@ -21,6 +22,7 @@ interface EventRow {
   description: string;
   original_report_text: string;
   category_id: string | null;
+  secondary_categories?: string[] | null;
   status: EventStatus;
   severity: string;
   latitude: number | string | null;
@@ -65,6 +67,7 @@ function mapRow(r: EventRow): AdminEvent {
     description: r.description,
     originalReportText: r.original_report_text,
     categoryId: r.category_id,
+    secondarySlugs: Array.isArray(r.secondary_categories) ? r.secondary_categories : [],
     status: r.status,
     severity: (SEVERITIES as readonly string[]).includes(r.severity) ? (r.severity as Severity) : 'medium',
     latitude: num(r.latitude),
@@ -327,6 +330,7 @@ export function eventToInput(e: AdminEvent): EventInput {
     description: e.description,
     originalReportText: e.originalReportText,
     categoryId: e.categoryId,
+    secondarySlugs: e.secondarySlugs ?? [],
     severity: e.severity,
     latitude: e.latitude,
     longitude: e.longitude,
@@ -452,6 +456,12 @@ export async function editEventText(
 /** Change an event's category (staff; the classifier learns from it). */
 export async function setEventCategory(id: string, slug: string): Promise<void> {
   const { error } = await client().rpc('set_event_category', { p_id: id, p_slug: slug });
+  if (error) throw toServiceError(error);
+}
+
+/** Secondary types set by hand (at most two); the editor's re-runs leave them alone afterwards. */
+export async function setEventSecondaryCategories(id: string, slugs: string[]): Promise<void> {
+  const { error } = await client().rpc('set_event_secondary_categories', { p_id: id, p_slugs: slugs });
   if (error) throw toServiceError(error);
 }
 

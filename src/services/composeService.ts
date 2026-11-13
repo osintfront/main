@@ -7,6 +7,8 @@ export interface ComposeResult {
   description: string;
   categoryId: string | null;
   categorySlug: string | null;
+  /** Up to two more types, cleaned by the server. */
+  secondarySlugs: string[];
   severity: 'low' | 'medium' | 'high' | 'critical';
   isBreaking: boolean;
   country: string;

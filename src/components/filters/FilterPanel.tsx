@@ -20,6 +20,7 @@ import {
   TIME_PRESETS,
   activeFilterCount,
   eventAreas,
+  eventCategorySlugs,
   sourceKind,
   mediaKinds,
   placeKind,
@@ -279,7 +280,7 @@ export function FilterPanel({
     const media = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
     for (const e of without({ areas: [] })) eventAreas(e).forEach((a) => bump(area, a));
-    for (const e of without({ categories: [] })) bump(cat, e.category.slug);
+    for (const e of without({ categories: [] })) eventCategorySlugs(e, !view.mainOnly).forEach((s) => bump(cat, s));
     for (const e of without({ severities: [] })) bump(sev, e.severity);
     for (const e of without({ sources: [] })) bump(src, sourceKind(e));
     for (const e of without({ placeKinds: [] })) bump(place, placeKind(e));
@@ -484,6 +485,16 @@ export function FilterPanel({
                 );
               })}
             </div>
+            <label className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                data-testid="include-secondary"
+                checked={!view.mainOnly}
+                onChange={(e) => set({ mainOnly: !e.target.checked })}
+                className="size-4 accent-sky-600"
+              />
+              {t('filters.includeSecondary')}
+            </label>
           </Section>
 
           <Section title={t('filters.severity')}>

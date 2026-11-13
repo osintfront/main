@@ -36,3 +36,8 @@ export const Artillery = createLucideIcon('Artillery', [
   ['path', { d: 'M11.5 15.5 20 18', key: 'trail' }],
   ['path', { d: 'M17 5c2-1.5 3.5-1.5 5 0', key: 'arc' }],
 ]);
+
+/** פצועים — a thick equal-armed medical cross. */
+export const MedicalCross = createLucideIcon('MedicalCross', [
+  ['path', { d: 'M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z', key: 'cross' }],
+]);

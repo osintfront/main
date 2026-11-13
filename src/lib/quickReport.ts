@@ -4,6 +4,27 @@ import type { ComposeResult } from '@/services/composeService';
 import type { EventCategory } from '@/types/category';
 import type { EventInput, PlaceInput } from '@/types/event';
 
+// The secondary-type rules of supabase/functions/_shared/secondaryCats.ts (the browser must not
+// import from there); tests/categories/quickReport.test.ts keeps both sides equal.
+const MAX_SECONDARY = 2;
+const NEVER_SECONDARY = ['home-front-alerts', 'other', 'uncategorized'];
+const STICKY_MAIN = ['killed', 'wounded', 'assassination'];
+
+function singleKind(a: { own: string; secondary: string[]; kind: string }): { secondary: string[] } {
+  const room = a.secondary.length < MAX_SECONDARY && !a.secondary.includes(a.kind) && !NEVER_SECONDARY.includes(a.kind);
+  return { secondary: room ? [...a.secondary, a.kind] : [...a.secondary] };
+}
+
+function afterSplit(a: { own: string | null; secondary: string[]; groups: string[] }) {
+  const keepSlug = a.own && a.groups.includes(a.own) ? a.own : a.groups[0];
+  const rest = a.secondary.filter((s) => !a.groups.includes(s));
+  if (a.own && STICKY_MAIN.includes(a.own) && !a.groups.includes(a.own)) {
+    const own = a.own;
+    return { keepSlug, main: own, secondary: [keepSlug, ...rest.filter((s) => s !== keepSlug && s !== own)].slice(0, MAX_SECONDARY), relabelPlaces: true };
+  }
+  return { keepSlug, main: keepSlug, secondary: rest.filter((s) => s !== keepSlug), relabelPlaces: false };
+}
+
 export function emptyEventInput(): EventInput {
   return {
     title: '',
@@ -42,6 +63,7 @@ export function applyCompose(prev: EventInput, r: ComposeResult, text: string, c
     title: r.title || prev.title,
     description: r.description || prev.description,
     categoryId: r.categoryId && categories.some((c) => c.id === r.categoryId) ? r.categoryId : prev.categoryId,
+    secondarySlugs: Array.isArray(r.secondarySlugs) ? r.secondarySlugs.filter((s) => typeof s === 'string').slice(0, 2) : [],
     severity: r.severity || prev.severity,
     isBreaking: r.isBreaking,
     country: r.country || prev.country,
@@ -71,18 +93,27 @@ export function splitByCategory(
     if (!p.category_slug) continue;
     groups.set(p.category_slug, [...(groups.get(p.category_slug) ?? []), p]);
   }
+  const own = categories.find((c) => c.id === base.categoryId)?.slug ?? null;
+  const secondary = base.secondarySlugs ?? [];
+  const relabel = (list: PlaceInput[], to: string) => list.map((p) => (p.category_slug ? { ...p, category_slug: to } : p));
   if (groups.size < 2) {
-    // One kind only: it is this report's incident, so its pins show the report's category.
-    const own = categories.find((c) => c.id === base.categoryId)?.slug;
-    if (groups.size === 1 && own && !groups.has(own)) {
-      return [{ ...base, locations: places.map((p) => (p.category_slug ? { ...p, category_slug: own } : p)) }];
+    // One kind only: it is this report's incident, so its pins show the report's category;
+    // the place kind is kept as a secondary type.
+    const [kind] = groups.keys();
+    if (groups.size === 1 && own && kind !== own) {
+      const r = singleKind({ own, secondary, kind });
+      return [{ ...base, secondarySlugs: r.secondary, locations: relabel(places, own) }];
     }
-    return [base];
+    return [{ ...base, secondarySlugs: secondary }];
   }
+  const kinds = [...groups.keys()].filter((s) => categories.some((c) => c.slug === s));
+  const kept = kinds.length >= 2 ? afterSplit({ own, secondary, groups: kinds }) : null;
   const out: EventInput[] = [];
-  for (const [slug, list] of groups) {
-    const cat = categories.find((c) => c.slug === slug);
+  for (const [slug, list0] of groups) {
+    const isKept = kept?.keepSlug === slug;
+    const cat = categories.find((c) => c.slug === (isKept ? kept!.main : slug));
     if (!cat) continue;
+    const list = isKept && kept!.relabelPlaces ? relabel(list0, kept!.main) : list0;
     const names = list.map((p) => p.name).filter(Boolean);
     const shown = names.slice(0, 4).join(', ');
     const more = names.length > 4 ? ` ${andMore(names.length - 4)}` : '';
@@ -91,6 +122,7 @@ export function splitByCategory(
       ...base,
       title: `${label(cat)}: ${shown}${more}`.slice(0, 200),
       categoryId: cat.id,
+      secondarySlugs: isKept ? kept!.secondary : [],
       locations: list,
       locationName: first?.name ?? list[0]?.name ?? base.locationName,
       latitude: first ? first.lat : null,
@@ -98,7 +130,7 @@ export function splitByCategory(
       locationPrecision: first ? ((first.precision as EventInput['locationPrecision']) ?? 'exact') : null,
     });
   }
-  return out.length > 1 ? out : [base];
+  return out.length > 1 ? out : [{ ...base, secondarySlugs: secondary }];
 }
 
 /** A public Telegram post link (its pictures are fetched again when saved). */

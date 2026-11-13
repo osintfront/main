@@ -6,7 +6,7 @@ import { cn } from '@/utils/cn';
 import { isOnMap } from '@/lib/eventFilters';
 import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
-import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
+import { BreakingBadge, CategoryBadge, SecondaryBadges, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
 import { EventText, eventTexts } from './EventText';
 import { whereLabel } from '@/utils/places';
@@ -72,6 +72,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <CategoryBadge category={event.category} />
+        <SecondaryBadges categories={event.secondaryCategories} />
         <SeverityBadge severity={event.severity} />
         {setTag ? (
           <span data-set-tag className="inline-flex max-w-[16rem] items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
