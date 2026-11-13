@@ -57,19 +57,25 @@ export async function fetchMediaTranslation(eventId: string, force = false): Pro
   }
 }
 
-/** Start a reading (or join one in progress) and wait for it. `ran` = the server worked on it. */
+/**
+ * Start a reading (a click) and wait for it. `join` = only wait for a run someone else started: every
+ * request is a poll, which can never start (or charge for) a run. `ran` = the server worked on it.
+ */
 export async function runMediaTranslation(
   eventId: string,
-  o: { redo?: boolean } = {},
+  o: { redo?: boolean; join?: boolean } = {},
   onPending?: () => void,
 ): Promise<{ data: MediaTranslation | null; ran: boolean }> {
   let ran = false;
-  let poll = false;
+  let poll = !!o.join;
   for (let i = 0; i <= POLLS; i++) {
     const { data, error } = await client().functions.invoke('event-agent', {
       body: { action: 'media_translate', event_id: eventId, ...(o.redo && !poll ? { redo: true } : {}), ...(poll ? { poll: true } : {}) },
     });
-    if (error) throw new MediaTranslateError(await errorCode(error));
+    if (error) {
+      cache.delete(eventId); // never keep a stale "working" for this event
+      throw new MediaTranslateError(await errorCode(error));
+    }
     const d = (data ?? {}) as Record<string, unknown>;
     if (d.pending === true) {
       ran = true;
@@ -80,5 +86,6 @@ export async function runMediaTranslation(
     }
     return { data: await fetchMediaTranslation(eventId, true), ran };
   }
+  cache.delete(eventId);
   throw new MediaTranslateError('failed');
 }

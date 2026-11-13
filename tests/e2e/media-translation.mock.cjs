@@ -51,11 +51,12 @@ const VID = { media_id: 'm-still', kind: 'video', thumb: 'https://fake.supabase.
   speech: { state: 'ok', lang: 'ar', seconds: 700, orig: 'قال المتحدث', he: 'הדובר אמר', en: 'The spokesman said', summary_he: 'הדובר הודיע על תקיפה', summary_en: 'The spokesman announced a strike', cut: true } };
 const isStaff = PLAN === 'staff';
 const limit = isStaff ? null : PLAN === 'pro' ? 3 : 0;
-let mtState = 'empty'; // empty | filled | saved1
+let mtState = 'empty'; // empty | filled | saved1 | working
 let mtMode = 'ok'; // ok | quota | budget | busy | fail
 const mt = () => {
   const base = { working: false, failed: false, staff: isStaff, used: 0, limit, budget_left: true };
   if (mtState === 'empty') return { ...base, items: [], todo: 2 };
+  if (mtState === 'working' || mtState === 'working2') return { ...base, items: [], todo: 2, working: true };
   if (mtState === 'saved1') return { ...base, items: [PIC], todo: 1, used: 1 };
   return { ...base, items: [PIC, VID], todo: 0, used: 1 };
 };
@@ -136,6 +137,10 @@ async function routeAll(page) {
         if (mtMode === 'busy') return json({ error: 'busy' }, 429);
         if (mtMode === 'fail') return b.poll ? json({ error: 'failed' }, 409) : json({ pending: true, started: true }, 202);
         if (!b.poll) return json({ pending: true, started: true }, 202);
+        if (mtState === 'working') {
+          mtState = 'working2'; // the other reader's run is still going on the first poll
+          return json({ pending: true }, 202);
+        }
         mtState = 'filled';
         return json({ ok: true });
       }
@@ -317,6 +322,16 @@ async function routeAll(page) {
           if (m === 'fail') out.c5_retry = (await details(page).locator('[data-mt-retry]').innerText()).includes(T.retry);
           await page.waitForTimeout(5000);
           out[`c5_${m}_oneCall`] = calls.start === s0 + 1;
+        }
+        // 10. someone else's run in progress: opening the window only waits (polls), never starts a run
+        {
+          const s0 = calls.start;
+          const p0 = calls.poll;
+          await fresh(page, 'working', 'ok');
+          out.c10_workingView = (await details(page).locator('[data-mt-working]').count()) === 1;
+          await details(page).locator('[data-mt-item="video"]').waitFor({ timeout: 15000 });
+          out.c10_noStart = calls.start === s0;
+          out.c10_polled = calls.poll > p0;
         }
         // 6. new media
         await fresh(page, 'saved1', 'ok');

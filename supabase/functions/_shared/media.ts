@@ -11,7 +11,8 @@ import { costUsd, logUsage } from "./usage.ts";
 import { TRANSLATE_API_URL } from "./translate.ts";
 import { videoForThumb } from "./videoOnDemand.ts";
 import {
-  cleanReading, cleanRoute, MEDIA_LIMITS, MEDIA_TOOL, mediaItems, mediaSystemPrompt, mediaUserContent, needsClaude, pickTodo, speechPlan,
+  cleanReading, cleanRoute, MEDIA_LIMITS, MEDIA_TOOL, mediaItems, mediaSystemPrompt, mediaUserContent, needsClaude, pickTodo, refundAfterJob,
+  routeOutcome, speechBudgetMs, speechPlan,
   type MediaItem, type MediaRow, type RouteSpeech, type SentItem,
 } from "./mediaInput.ts";
 
@@ -35,20 +36,21 @@ export async function speechOn(db: Db): Promise<boolean> {
 
 const MEDIA_COLS = "id,kind,public_url,bytes,thumb_id,source_msg_key,source_url,video_state,ready,created_at";
 
-/** The event's items and the saved readings' speech states. */
+/** The event's items and the saved readings' speech states (by media id: a merged event's media keeps its readings). */
 export async function loadItems(db: Db, eventId: string): Promise<{ items: MediaItem[]; readings: { media_id: string; speech_state: string | null }[] }> {
-  const [{ data: rows }, { data: reads }] = await Promise.all([
-    db.from("event_media").select(MEDIA_COLS).eq("event_id", eventId),
-    db.from("media_readings").select("media_id,speech").eq("event_id", eventId),
-  ]);
+  const { data: rows } = await db.from("event_media").select(MEDIA_COLS).eq("event_id", eventId);
+  const items = mediaItems((rows ?? []) as MediaRow[]);
+  const { data: reads } = items.length
+    ? await db.from("media_readings").select("media_id,speech").in("media_id", items.map((i) => i.id))
+    : { data: [] };
   return {
-    items: mediaItems((rows ?? []) as MediaRow[]),
+    items,
     readings: ((reads ?? []) as any[]).map((r) => ({ media_id: r.media_id, speech_state: r.speech?.state ?? null })),
   };
 }
 
 /** Gemini (through our Vercel route) writes down one stored video's speech and on-screen text. */
-export async function speechFor(videoUrl: string, purpose: string): Promise<RouteSpeech | "failed"> {
+export async function speechFor(videoUrl: string, purpose: string, ms: number = MEDIA_LIMITS.routeMs): Promise<RouteSpeech | "failed"> {
   let status = 0;
   let body: unknown = null;
   try {
@@ -56,7 +58,7 @@ export async function speechFor(videoUrl: string, purpose: string): Promise<Rout
       method: "POST",
       headers: { "content-type": "application/json", "x-translate-secret": SECRET },
       body: JSON.stringify({ url: videoUrl }),
-      signal: AbortSignal.timeout(MEDIA_LIMITS.routeMs),
+      signal: AbortSignal.timeout(ms),
     });
     status = res.status;
     body = await res.json().catch(() => null);
@@ -127,7 +129,7 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
         let url = item.videoUrl;
         if (plan === "fetch") {
           plan = "unavailable";
-          for (let t = 0; t < 10 && Date.now() < deadline - 20_000; t++) {
+          for (let t = 0; t < 10 && Date.now() < deadline - MEDIA_LIMITS.claudeMs - 20_000; t++) {
             const v = await videoForThumb(db, item.id);
             if (v?.state === "loading") {
               await sleep(3000);
@@ -142,10 +144,12 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
           }
         }
         if (plan === "route" && url) {
-          const sp = await speechFor(url, purpose);
-          if (sp === "failed") throw new Error("speech route failed");
-          videosSoFar++;
-          s.speech = sp;
+          // Inside the job's time, leaving Claude its share; a failed or skipped route leaves the speech
+          // 'off' (retried later) and the pictures are still read.
+          const ms = speechBudgetMs(deadline, Date.now());
+          const sp = ms ? await speechFor(url, purpose, ms) : "failed";
+          if (sp !== "failed") videosSoFar++;
+          s.speech = routeOutcome(sp);
         } else {
           s.speech = noSpeech(plan === "route" ? "unavailable" : plan);
         }
@@ -193,8 +197,11 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
   } catch (e) {
     console.warn("media translate failed", job.eventId, String((e as Error)?.message ?? e).slice(0, 300));
   } finally {
-    if (!ok && job.uid) await db.rpc("refund_feature", { p_uid: job.uid, p_key: "media_translate" }).then(() => {}, () => {});
-    const { error } = await db.rpc("media_done", { p_event: job.eventId, p_token: job.token, p_fail: ok ? null : "failed", p_cost: cost });
+    // Ending the lease first: when it is no longer ours, the stale-lease takeover already gave the use back.
+    const { data: owned, error } = await db.rpc("media_done", { p_event: job.eventId, p_token: job.token, p_fail: ok ? null : "failed", p_cost: cost });
     if (error) console.warn("media_done", error.message);
+    if (refundAfterJob({ ok, uid: job.uid, owned: owned === true })) {
+      await db.rpc("refund_feature", { p_uid: job.uid, p_key: "media_translate" }).then(() => {}, () => {});
+    }
   }
 }

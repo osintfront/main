@@ -78,8 +78,15 @@ export function useMediaTranslate(event: PublicEvent, expandOpen: boolean): { bu
     void fetchMediaTranslation(id).then((d) => {
       if (current.current !== id) return;
       setData(d);
-      // Someone already started it: show the working view and wait (polls never start a run).
-      if (d?.working) void runMediaTranslation(id).then((r) => current.current === id && setData(r.data)).catch(() => {});
+      // Someone already started it: show the working view and wait. Joining only polls, so opening the
+      // window can never start (or charge for) a run.
+      if (!d?.working) return;
+      setPanel(true);
+      setWorking(true);
+      void runMediaTranslation(id, { join: true })
+        .then((r) => current.current === id && setData(r.data))
+        .catch(() => fetchMediaTranslation(id, true).then((f) => current.current === id && setData(f)))
+        .finally(() => current.current === id && setWorking(false));
     });
   }, [expandOpen, hasMedia, allowed, data, event.id]);
 

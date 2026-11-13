@@ -293,3 +293,19 @@ export function mediaOverAfterClaim(s: { staff: boolean; spentUsd: number; budge
 export function staleMediaJob(row: { busy_until: string | null } | null, now: number): boolean {
   return !!row?.busy_until && new Date(row.busy_until).getTime() <= now;
 }
+
+/** Give the reader's use back only for a failed run whose lease was still ours (a takeover already refunded it). */
+export function refundAfterJob(o: { ok: boolean; uid: string | null; owned: boolean }): boolean {
+  return !o.ok && !!o.uid && o.owned;
+}
+
+/** Time for one speech-route call: what is left of the job after Claude's share; 0 (skip) under 15 s. */
+export function speechBudgetMs(deadline: number, now: number): number {
+  const ms = Math.min(MEDIA_LIMITS.routeMs, deadline - now - MEDIA_LIMITS.claudeMs - 5000);
+  return ms < 15000 ? 0 : ms;
+}
+
+/** A failed route call leaves that video's speech 'off' (retried once speech works), and the run goes on. */
+export function routeOutcome(sp: RouteSpeech | 'failed'): RouteSpeech {
+  return sp === 'failed' ? { state: 'off', lang: 'und', seconds: null, speech: '', onScreen: [], cut: false } : sp;
+}

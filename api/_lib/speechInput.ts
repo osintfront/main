@@ -142,3 +142,18 @@ export function cleanSpeech(raw: unknown): SpeechAnswer | null {
   if (letters < 4) return { state: 'none', lang: langCode(r.language), speech: '', on_screen, cut: false };
   return { state: 'ok', lang: langCode(r.language), speech, on_screen, cut };
 }
+
+/** Gemini's answer: any refused request (4xx) is 'busy' (a set-up error, not saved); a safety block or no text is 'unreadable'. */
+export function geminiOutcome(status: number, out: unknown): 'ok' | 'busy' | 'unreadable' {
+  if (status < 200 || status >= 300) return 'busy';
+  const o = (out ?? {}) as { promptFeedback?: { blockReason?: string }; candidates?: { finishReason?: string; content?: { parts?: unknown[] } }[] };
+  if (o.promptFeedback?.blockReason) return 'unreadable';
+  const c = o.candidates?.[0];
+  if (!c || c.finishReason === 'SAFETY' || c.finishReason === 'PROHIBITED_CONTENT' || !c.content?.parts?.length) return 'unreadable';
+  return 'ok';
+}
+
+/** A step's time limit inside the route's own deadline. */
+export function remainingMs(deadline: number, now: number, cap: number): number {
+  return Math.max(0, Math.min(cap, deadline - now));
+}
