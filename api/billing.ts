@@ -10,8 +10,9 @@
 //        → Grow's notifications: first payment, monthly renewals, failed charges.
 //
 // Env (Vercel): SUPABASE_URL, SUPABASE_ANON_KEY (or the VITE_ ones), SUPABASE_SERVICE_ROLE_KEY,
-//   GROW_WEBHOOK_TOKEN, MAKE_BILLING_WEBHOOK_URL, MAKE_BILLING_SECRET,
-//   BILLING_SANDBOX=1 while testing, BILLING_OPEN=1 to let everyone buy (otherwise super admins only),
+//   GROW_WEBHOOK_TOKEN, GROW_ACCOUNT_WEBHOOK_TOKEN, MAKE_BILLING_WEBHOOK_URL, MAKE_BILLING_SECRET,
+//   BILLING_SANDBOX=1 while testing. Selling to everyone is app_settings.billing_open (or BILLING_OPEN=1);
+//   until then only testers (super admins + app_settings.billing_testers) can pay.
 //   GROW_IP_CHECK=off only if Grow's addresses change and payments stop arriving.
 import { env, json } from './_lib/member.js';
 import {
@@ -115,7 +116,8 @@ async function checkout(req: Request): Promise<Response> {
   if (!user) return json({ error: 'signin_required' }, 401);
   // Until payments open to everyone (BILLING_OPEN=1), only testers may pay: super admins and the
   // emails listed in app_settings.billing_testers.
-  if (env('BILLING_OPEN') !== '1' && user.role !== 'super_admin' && (await rpc<boolean>('billing_is_tester', { p_user: user.id })) !== true) {
+  const open = env('BILLING_OPEN') === '1' || (await rpc<boolean>('billing_is_open', {})) === true;
+  if (!open && user.role !== 'super_admin' && (await rpc<boolean>('billing_is_tester', { p_user: user.id })) !== true) {
     return json({ error: 'not_open_yet' }, 403);
   }
 
@@ -187,9 +189,12 @@ async function cancel(req: Request): Promise<Response> {
 }
 
 async function webhook(req: Request, token: string | null): Promise<Response> {
+  // Two addresses: GROW_WEBHOOK_TOKEN is in every payment link's notifyUrl; GROW_ACCOUNT_WEBHOOK_TOKEN is the
+  // one Grow support sets for the account webhooks (monthly renewals and failed charges).
   const secret = env('GROW_WEBHOOK_TOKEN');
+  const accountSecret = env('GROW_ACCOUNT_WEBHOOK_TOKEN');
   if (!secret || !SUPABASE_URL() || !SERVICE_KEY()) return json({ error: 'not_configured' }, 503);
-  if (!tokenMatches(token, secret)) return json({ error: 'forbidden' }, 403);
+  if (!tokenMatches(token, secret) && !tokenMatches(token, accountSecret)) return json({ error: 'forbidden' }, 403);
 
   const text = await req.text();
   if (Buffer.byteLength(text) > MAX_WEBHOOK_BYTES) return json({ error: 'too_large' }, 413);

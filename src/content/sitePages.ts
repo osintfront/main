@@ -119,7 +119,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         },
         {
           h: 'מנויים בתשלום',
-          p: ['האתר כולל מסלולי מנוי (Free / Pro / Max) שטרם הופעלו לגבייה בפועל. כאשר ייפתחו לגבייה, נעדכן מדיניות זו ואת [תנאי השימוש](/terms) בהתאם לחוק הגנת הצרכן, לרבות זכות ביטול בתוך 14 יום.'],
+          p: ['התשלום על מסלולי Pro ו-Max מבוצע באמצעות חברת הסליקה Grow. פרטי כרטיס האשראי נמסרים ישירות ל-Grow ואינם נשמרים אצלנו. אנחנו שומרים את פרטי ההזמנה והמנוי (מסלול, סכום, מועדים), ואת השם, הטלפון והמייל שנמסרו לתשלום, לצורך ניהול המנוי, הפקת קבלות ועמידה בדרישות החוק.'],
         },
         {
           h: 'שיתוף מידע',
@@ -170,7 +170,11 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         {
           h: 'מנויים ותשלום',
           p: [
-            'באתר מוצגים מסלולי מנוי (Free / Pro / Max) שטרם הופעלו לגבייה בפועל. כאשר תופעל גבייה, יעודכנו תנאים אלה בפרטי מחיר ואמצעי תשלום, וזכות הביטול תפעל לפי [מדיניות הביטולים וההחזרים](/refund-policy).',
+            'את מסלולי Pro ו-Max אפשר לרכוש ב[דף החבילות](/packages). המחיר המוצג שם הוא המחיר הסופי לתשלום. התשלום מבוצע באמצעות חברת הסליקה Grow, וקבלה נשלחת למייל.',
+            '**מנוי חודשי:** חיוב חודשי בהוראת קבע, שמתחדש מדי חודש עד לביטול, ללא תקופת התחייבות. הרשאת החיוב בכרטיס תקפה עד 36 חודשים, ולפני שתסתיים נבקש לאשר אותה מחדש.',
+            '**מנוי שנתי:** תשלום אחד עבור 12 חודשים, שאינו מתחדש מעצמו. לקראת סוף התקופה תוצג באתר אפשרות לחדש.',
+            '**שדרוג מ-Pro ל-Max:** הזמן שנותר במנוי הקיים מומר לימים נוספים במסלול החדש, לפי שוויו הכספי.',
+            '**ביטול:** אפשר לבטל בכל עת, כמפורט ב[מדיניות הביטולים וההחזרים](/refund-policy) ובדף [ביטול מנוי](/cancel-subscription).',
           ],
         },
         {
@@ -201,8 +205,12 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
     },
     refund: {
       title: 'מדיניות ביטולים והחזרים',
-      intro: `מסלולי המנוי (Free / Pro / Max) טרם הופעלו לגבייה בפועל. הטקסט הבא מתאר את המדיניות שתחול כאשר תופעל גבייה, לפי חוק הגנת הצרכן, התשמ"א-1981 ותקנות ביטול עסקה.`,
+      intro: `המדיניות הבאה חלה על מסלולי המנוי בתשלום (Pro / Max), לפי חוק הגנת הצרכן, התשמ"א-1981 ותקנות ביטול עסקה.`,
       sections: [
+        {
+          h: 'ביטול מנוי חודשי בכל עת',
+          p: [`מנוי חודשי אפשר לבטל בכל עת, גם אחרי 14 הימים הראשונים, בהודעה ב-${mail} או בדף [ביטול מנוי](/cancel-subscription). הביטול ייכנס לתוקף תוך 3 ימי עסקים מקבלת ההודעה, ולא יבוצעו חיובים נוספים. הגישה למסלול נשמרת עד סוף החודש ששולם.`],
+        },
         {
           h: 'ביטול בתוך 14 יום',
           p: [`ניתן לבטל עסקת מנוי בתוך 14 יום ממועד ביצועה, ובלבד שהביטול נעשה לפחות יומיים שלפני מועד תחילת השירות (אם רלוונטי). הודעת ביטול תימסר בכתב ב-${mail}.`],
@@ -243,7 +251,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         },
         {
           h: 'רכישת חבילה בתשלום',
-          p: ['בשלב זה חבילות Pro, Max וה-API נרכשות ומופעלות ידנית. כתבו לנו ב-' + mail + ' וציינו את החבילה הרצויה (חודשית או שנתית) ואת כתובת המייל של החשבון באתר. נחזור אליכם עם פרטי התשלום ונפעיל את החבילה. המחירים מופיעים ב[דף החבילות](/packages).'],
+          p: ['את חבילות Pro ו-Max אפשר לרכוש ישירות ב[דף החבילות](/packages). לרכישת חבילת API, או לכל שאלה על חבילה, כתבו לנו ב-' + mail + '. לביטול מנוי ראו [ביטול מנוי](/cancel-subscription).'],
         },
         {
           h: 'דיווחים, שיתופי פעולה ופרסום',
@@ -340,7 +348,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         },
         {
           h: 'Paid subscriptions',
-          p: ['The site lists subscription tiers (Free / Pro / Max) that are not yet charged in practice. When billing is enabled, this policy and the [Terms of Use](/terms) will be updated accordingly, including consumer-protection rights such as a 14-day cancellation window.'],
+          p: ['Payment for the Pro and Max plans is processed by the payment company Grow. Card details go directly to Grow and are never stored by us. We keep the order and subscription details (plan, amount, dates) and the name, phone and email given for payment, to manage the subscription, issue receipts and meet legal requirements.'],
         },
         {
           h: 'Sharing information',
@@ -388,7 +396,11 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         {
           h: 'Subscriptions and payment',
           p: [
-            'The site lists subscription tiers (Free / Pro / Max) not yet charged in practice. When billing is enabled, these terms will be updated with price and payment details, and the cancellation right will follow the [cancellation and refund policy](/refund-policy).',
+            'The Pro and Max plans can be bought on the [plans page](/packages). The price shown there is the final price. Payment is processed by the payment company Grow, and a receipt is emailed.',
+            '**Monthly:** a monthly standing-order charge that renews each month until cancelled, with no commitment period. The card authorisation is valid for up to 36 months; before it ends we will ask you to confirm it again.',
+            '**Yearly:** one payment for 12 months that does not renew by itself. Near the end of the period the site offers a renewal.',
+            '**Upgrading from Pro to Max:** the time left on the current plan becomes extra days on the new plan, by its value.',
+            '**Cancelling:** you can cancel at any time, as set out in the [cancellation and refund policy](/refund-policy) and on the [cancel subscription](/cancel-subscription) page.',
           ],
         },
         {
@@ -416,8 +428,12 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
     },
     refund: {
       title: 'Cancellation and refund policy',
-      intro: `The subscription tiers (Free / Pro / Max) are not yet charged in practice. The following describes the policy that will apply once billing is enabled, under the Israeli Consumer Protection Law, 1981 and its transaction-cancellation regulations.`,
+      intro: `This policy applies to the paid plans (Pro / Max), under the Israeli Consumer Protection Law, 1981 and its transaction-cancellation regulations.`,
       sections: [
+        {
+          h: 'Cancelling a monthly subscription at any time',
+          p: [`A monthly subscription can be cancelled at any time, also after the first 14 days, by writing to ${mail} or on the [cancel subscription](/cancel-subscription) page. It takes effect within 3 business days of your notice, with no further charges; access stays until the end of the month already paid.`],
+        },
         {
           h: 'Cancelling within 14 days',
           p: [`A subscription may be cancelled within 14 days of the purchase, provided cancellation is given at least two days before the service is due to start (where relevant). Send cancellation notice in writing to ${mail}.`],
@@ -455,7 +471,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         },
         {
           h: 'Buying a paid plan',
-          p: ['For now, Pro, Max and API plans are purchased and activated manually. Write to ' + mail + ' with the plan you want (monthly or yearly) and the email of your site account. We will reply with payment details and activate the plan. Prices are on the [plans page](/packages).'],
+          p: ['Pro and Max can be bought directly on the [plans page](/packages). For an API plan, or any question about plans, write to ' + mail + '. To cancel, see [cancel subscription](/cancel-subscription).'],
         },
         { h: 'Tips, partnerships and advertising', p: ['Want to suggest a source, work with us or advertise on the site? Write to the same address.'] },
       ],

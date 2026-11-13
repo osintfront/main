@@ -59,6 +59,21 @@ export async function loadBillingOptions(): Promise<BillingOptions | null> {
   return error ? null : (data as BillingOptions);
 }
 
+/** Is online payment open to everyone on /packages (app_settings.billing_open)? Works signed out too. */
+export async function isBillingOpen(): Promise<boolean> {
+  if (!supabase) return false;
+  const { data, error } = await supabase.rpc('billing_is_open');
+  return !error && data === true;
+}
+
+/** Super admin: cancel a customer's monthly subscription after their request (then stop it in Grow). */
+export async function adminCancel(email: string): Promise<{ ok: boolean; reason?: string; until?: string }> {
+  if (!supabase) return { ok: false, reason: 'generic' };
+  const { data, error } = await supabase.rpc('billing_admin_cancel', { p_email: email });
+  if (error) return { ok: false, reason: error.message };
+  return data as { ok: boolean; reason?: string; until?: string };
+}
+
 /** May the signed-in user use the payments test page (super admin or listed tester)? */
 export async function canTestBilling(): Promise<boolean> {
   if (!supabase) return false;

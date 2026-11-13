@@ -13,7 +13,7 @@ import { INTRO_PRICES, shekels } from '@/content/packages';
 import { SITE_EMAIL } from '@/content/sitePages';
 import { cn } from '@/utils/cn';
 import { BillingAdminPanel, BillingCta, CheckoutDialog, OrderBanner, SubscriptionPanel, useBilling } from '@/components/plans/Checkout';
-import { canTestBilling, type PaidPlan, type Period, type Quote } from '@/lib/billing';
+import { canTestBilling, isBillingOpen, type PaidPlan, type Period, type Quote } from '@/lib/billing';
 import type { PlanId } from '@/types/user';
 
 type Sold = 'free' | 'pro' | 'max';
@@ -48,8 +48,14 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
   useEffect(() => void loadPlanConfig(), []);
   const [yearly, setYearly] = useState(false);
   const { opts, reload } = useBilling();
+  // Online payment on /packages once app_settings.billing_open is on; the test page always has it.
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!grow) void isBillingOpen().then(setOpen);
+  }, [grow]);
+  const live = grow || open;
   const [params] = useSearchParams();
-  const orderId = grow ? params.get('order') : null;
+  const orderId = live ? params.get('order') : null;
   const [buying, setBuying] = useState<{ plan: PaidPlan; period: Period; quote: Quote } | null>(null);
   const period: Period = yearly ? 'yearly' : 'monthly';
   // Back from Grow on a yearly plan: show the yearly prices.
@@ -67,7 +73,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
 
   // On the test page the stored plan counts (staff test real purchases there); elsewhere staff see no "your plan".
   const mine: EffectivePlan | null =
-    grow && opts?.signed_in
+    live && opts?.signed_in && (grow || profile?.role === 'viewer')
       ? effectivePlan({ plan: (opts.plan ?? 'free') as PlanId, planExpiresAt: opts.plan_expires_at ?? null })
       : status === 'signed_in' && profile?.role === 'viewer'
         ? effectivePlan(profile)
@@ -178,12 +184,12 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
     { label: t('pk.c.ads'), cell: (p) => (p === 'guest' || p === 'free' ? t('pk.c.withAds') : t('pk.c.noAds')) },
   ];
 
+  // Yearly is shown as what the customer pays: one payment for 12 months (not a per-month figure).
   const price = (plan: 'pro' | 'max') => {
     const p = INTRO_PRICES[plan];
-    return {
-      main: shekels(yearly ? Math.round(p.yearly / 12) : p.monthly, locale),
-      note: yearly ? t('pk.yearlyBilled', { price: shekels(p.yearly, locale) }) : t('pk.yearlyNote', { price: shekels(p.yearly, locale) }),
-    };
+    return yearly
+      ? { main: shekels(p.yearly, locale), unit: t('pk.perYear'), note: t('pk.yearlyOnce') }
+      : { main: shekels(p.monthly, locale), unit: t('pk.perMonth'), note: t('pk.yearlyNote', { price: shekels(p.yearly, locale) }) };
   };
 
   const toggle = (on: boolean) =>
@@ -241,7 +247,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
           </div>
         </section>
 
-        {grow ? (
+        {live ? (
           <>
             {orderId ? (
               <OrderBanner
@@ -251,8 +257,8 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
                 }}
               />
             ) : null}
-            <SubscriptionPanel opts={opts} reload={reload} />
-            <BillingAdminPanel />
+            <SubscriptionPanel opts={opts} />
+            {grow ? <BillingAdminPanel /> : null}
           </>
         ) : (
           <ManualNotice />
@@ -262,7 +268,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
             plan={buying.plan}
             period={buying.period}
             quote={buying.quote}
-            returnTo="/packages-test"
+            returnTo={grow ? '/packages-test' : '/packages'}
             testPrice={opts?.test_price_agorot ?? null}
             onClose={() => setBuying(null)}
           />
@@ -274,14 +280,14 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
             name="Pro"
             tag={t('pk.proTag')}
             price={price('pro').main}
-            unit={t('pk.perMonth')}
+            unit={price('pro').unit}
             note={price('pro').note}
             intro
             highlight
             current={mine === 'pro'}
             lead={t('pk.plusFree')}
             items={proItems}
-            cta={grow
+            cta={live
               ? growCta('pro', true)
               : mine === 'pro' ? null : <Link to="/contact" className={ctaPrimary}>{t('pk.buy')}</Link>}
           />
@@ -289,13 +295,13 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
             name="Max"
             tag={t('pk.maxTag')}
             price={price('max').main}
-            unit={t('pk.perMonth')}
+            unit={price('max').unit}
             note={price('max').note}
             intro
             current={mine === 'max'}
             lead={t('pk.plusPro')}
             items={maxItems}
-            cta={grow
+            cta={live
               ? growCta('max', false)
               : mine === 'max' ? null : <Link to="/contact" className={ctaSecondary}>{t('pk.buy')}</Link>}
           />
