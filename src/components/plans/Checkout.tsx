@@ -327,7 +327,7 @@ export function BillingAdminPanel() {
                 <td className="p-1" dir="ltr">{o.email}</td>
                 <td className="p-1">{o.plan} {o.period === 'yearly' ? 'שנתי' : 'חודשי'}</td>
                 <td className="p-1">{o.kind}</td>
-                <td className="p-1">₪{o.amount}</td>
+                <td className="p-1">₪{Number(o.amount).toLocaleString('he-IL')}{o.sandbox ? ' (בדיקה)' : ''}</td>
                 <td className="p-1">{o.status}{o.reason ? ` (${o.reason})` : ''}</td>
               </tr>
             ))}
