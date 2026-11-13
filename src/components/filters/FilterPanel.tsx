@@ -335,7 +335,7 @@ export function FilterPanel({
                 onChange(EMPTY_FILTERS);
                 onSwitchSetsOff?.();
               }}
-              className="ms-auto rounded-lg px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
+              className="ms-auto inline-flex min-h-9 items-center rounded-lg px-2 py-1 sm:min-h-0 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
             >
               {t('filters.clearAll')}
             </button>

@@ -166,7 +166,7 @@ export function EeiPanel({ list, rawText, prev, tags, degraded, waiting, view, o
                           type="button"
                           aria-pressed={on}
                           onClick={() => editTheatre(i, (x) => ({ ...x, areas: on ? x.areas.filter((y) => y !== a.id) : [...x.areas, a.id] }))}
-                          className={cn('min-h-8 rounded-full border px-2.5 text-xs font-medium', on ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300')}
+                          className={cn('min-h-9 rounded-full border px-2.5 text-xs font-medium sm:min-h-8', on ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300')}
                         >
                           {lang === 'he' ? a.he : a.en}
                         </button>
@@ -223,7 +223,7 @@ export function EeiPanel({ list, rawText, prev, tags, degraded, waiting, view, o
 
       {state === 'active' && list ? (
         <>
-          <label className="flex items-center justify-between gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <label className="flex min-h-9 items-center justify-between gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
             {t('eeiList.priorityOnly')}
             <input type="checkbox" data-eei-action="priority-only" checked={view.priorityOnly} onChange={(e) => onView({ ...view, priorityOnly: e.target.checked })} className="size-5 accent-sky-600" />
           </label>
@@ -244,9 +244,12 @@ export function EeiPanel({ list, rawText, prev, tags, degraded, waiting, view, o
                     aria-checked={!off}
                     aria-label={t('sets.toggle')}
                     onClick={() => onView({ ...view, off: off ? view.off.filter((x) => x !== th.id) : [...view.off, th.id] })}
-                    className={cn('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors', !off ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-700')}
+                    className="inline-flex h-9 w-11 shrink-0 items-center"
                   >
-                    <span className={cn('inline-block size-5 rounded-full bg-white shadow transition-transform', !off ? 'translate-x-[22px] rtl:-translate-x-[22px]' : 'translate-x-0.5 rtl:-translate-x-0.5')} />
+                    {/* The track stays 24 px tall; the button around it is 36 px for a finger. */}
+                    <span className={cn('relative inline-flex h-6 w-11 items-center rounded-full transition-colors', !off ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-700')}>
+                      <span className={cn('inline-block size-5 rounded-full bg-white shadow transition-transform', !off ? 'translate-x-[22px] rtl:-translate-x-[22px]' : 'translate-x-0.5 rtl:-translate-x-0.5')} />
+                    </span>
                   </button>
                 </div>
                 {th.kind === 'exceptional' ? (
@@ -264,7 +267,7 @@ export function EeiPanel({ list, rawText, prev, tags, degraded, waiting, view, o
                           aria-pressed={!topicOff}
                           onClick={() => onView({ ...view, topicsOff: topicOff ? view.topicsOff.filter((x) => x !== id) : [...view.topicsOff, id] })}
                           className={cn(
-                            'inline-flex min-h-8 max-w-full items-center gap-1 rounded-full border px-2.5 text-start text-xs font-medium',
+                            'inline-flex min-h-9 max-w-full items-center sm:min-h-8 gap-1 rounded-full border px-2.5 text-start text-xs font-medium',
                             topicOff ? 'border-slate-200 text-slate-400 line-through dark:border-slate-700' : 'border-slate-300 bg-slate-50 text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100',
                           )}
                         >

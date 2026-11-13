@@ -5,7 +5,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { callClaude } from "./editor.ts";
 import {
-  batches, cleanList, cleanTagOutput, israelDay, LIMITS, markBold, mayTag, PARSE_TOOL, parseCacheKey, parseSystemPrompt,
+  batches, cleanList, inCurrentLists, cleanTagOutput, israelDay, LIMITS, markBold, mayTag, PARSE_TOOL, parseCacheKey, parseSystemPrompt,
   TAG_TOOL, tagSystemPrompt, tagUserMessage, theatreSpec, type CleanTheatre, type TagEvent, type TheatreSpec,
 } from "./eeiInput.ts";
 
@@ -159,15 +159,17 @@ export async function tagTheatre(db: Db, hash: string, maxEvents: number, maxCal
   }
 }
 
-/** Every theatre used in the last 24 h, least recently tagged first, until 25 calls are used. */
+/** Every theatre a current list holds and used in the last 24 h, least recently tagged first, until 25 calls are used. */
 export async function tick(db: Db): Promise<{ theatres: number; tagged: number; calls: number }> {
   const { data } = await db.from("eei_theatres").select("hash")
     .gt("last_used_at", new Date(Date.now() - 24 * 3600_000).toISOString())
     .order("last_tagged_at", { ascending: true, nullsFirst: true }).limit(100);
+  const { data: lists } = await db.from("eei_lists").select("list").not("list", "is", null);
+  const rows = inCurrentLists((data ?? []) as { hash: string }[], (lists ?? []) as { list: unknown }[]);
   let tagged = 0;
   let calls = 0;
   let theatres = 0;
-  for (const t of (data ?? []) as { hash: string }[]) {
+  for (const t of rows) {
     if (calls >= LIMITS.callsPerTick) break;
     const r = await tagTheatre(db, t.hash, LIMITS.theatrePerDay, LIMITS.callsPerTick - calls);
     theatres++;
