@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, Loader2, Lock } from 'lucide-react';
+import { Download, Loader2, Lock, Trash2 } from 'lucide-react';
 import { featureLimit, hasFeature, usePlanVersion } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useToast } from '@/components/common/Toast';
 import type { MediaKind } from '@/types/event';
 import { useI18n } from '@/i18n';
 import { openLightbox } from '@/lib/lightbox';
-import { loadEventMedia, requestVideo, toMediaView, type EventMediaView } from '@/services/eventMediaService';
+import { loadEventMedia, removeEventMedia, requestVideo, toMediaView, type EventMediaView } from '@/services/eventMediaService';
 import { safeExternalUrl } from '@/utils/url';
 
 /** Photos and videos of an event, loaded lazily (batched across cards). */
@@ -94,6 +96,48 @@ function VideoStill({ still }: { still: Still }) {
   );
 }
 
+/** Staff only: remove this photo / video from the event. First tap arms it, the second removes. */
+function RemoveMedia({ eventId, mediaId, onRemoved }: { eventId: string; mediaId: string; onRemoved: () => void }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = window.setTimeout(() => setArmed(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+  const click = async (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!armed) return setArmed(true);
+    setBusy(true);
+    try {
+      await removeEventMedia(eventId, mediaId);
+      toast.success(t('media.removed'));
+      onRemoved();
+    } catch {
+      toast.error(t('media.removeFailed'));
+    } finally {
+      setBusy(false);
+      setArmed(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={(e) => void click(e)}
+      disabled={busy}
+      data-remove-media={mediaId}
+      aria-label={armed ? t('media.removeConfirm') : t('media.remove')}
+      title={armed ? t('media.removeConfirm') : t('media.remove')}
+      className={`absolute start-1.5 top-1.5 z-10 inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs font-semibold text-white ${armed ? 'bg-red-600 hover:bg-red-700' : 'bg-black/55 hover:bg-black/75'}`}
+    >
+      {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Trash2 className="size-4" aria-hidden />}
+      {armed ? t('media.removeConfirm') : null}
+    </button>
+  );
+}
+
 export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; occurredAt: string; kinds?: MediaKind[] }) {
   const { t } = useI18n();
   const { profile } = useAuth();
@@ -103,6 +147,10 @@ export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; oc
   const firstOnly = featureLimit('media') != null; // free: the first picture only
   const canDownload = hasFeature(undefined, 'media_download');
   const hasMedia = !!kinds?.some((k) => k === 'image' || k === 'video');
+  // Analysts and managers can take a wrong or unsuitable picture off the event.
+  const canRemove = usePermissions().can('event.edit.any');
+  const [reload, setReload] = useState(0);
+  const removed = () => setReload((n) => n + 1);
 
   useEffect(() => {
     let alive = true;
@@ -113,12 +161,12 @@ export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; oc
         setView(items.length ? toMediaView(items) : null);
         if (Date.now() - new Date(occurredAt).getTime() < RECENT_MS) timer = window.setTimeout(() => void load(true), POLL_MS);
       });
-    void load(false);
+    void load(reload > 0);
     return () => {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [eventId, occurredAt]);
+  }, [eventId, occurredAt, reload]);
 
   // No pictures in the plan (guests): a blurred box that asks to sign up.
   if (!allowed) {
@@ -146,8 +194,9 @@ export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; oc
   return (
     <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
       {view.videos.map(({ video, poster }) => (
-        <video
-          key={video.id}
+        <div key={video.id} className="relative">
+          {canRemove ? <RemoveMedia eventId={eventId} mediaId={video.id} onRemoved={removed} /> : null}
+          <video
           src={video.url}
           poster={poster ?? undefined}
           controls
@@ -155,15 +204,20 @@ export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; oc
           playsInline
           className="w-full rounded-lg bg-black"
           style={{ aspectRatio: video.width && video.height ? `${video.width} / ${video.height}` : '16 / 9', maxHeight: 320 }}
-        />
+          />
+        </div>
       ))}
       {view.stills.map((s) => (
-        <VideoStill key={s.id} still={s} />
+        <div key={s.id} className="relative">
+          {canRemove ? <RemoveMedia eventId={eventId} mediaId={s.id} onRemoved={removed} /> : null}
+          <VideoStill still={s} />
+        </div>
       ))}
       {view.images.length ? (
         <div className={view.images.length > 1 ? 'grid grid-cols-2 gap-1.5' : 'grid grid-cols-1'}>
           {view.images.map((m) => (
             <div key={m.id} className="relative">
+              {canRemove ? <RemoveMedia eventId={eventId} mediaId={m.id} onRemoved={removed} /> : null}
               <button
                 type="button"
                 onClick={() => openLightbox(m.url)}

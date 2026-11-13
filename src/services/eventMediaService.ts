@@ -136,3 +136,20 @@ export async function requestVideo(thumbId: string): Promise<VideoResult> {
   throw new Error('video timeout');
 }
 
+
+/**
+ * Staff (analyst / manager): remove a photo or video from an event. The server hides the row (and the
+ * video's still, or the still's video) and returns the files, which are then deleted from storage.
+ */
+export async function removeEventMedia(eventId: string, mediaId: string): Promise<void> {
+  if (!supabase) return;
+  const { data, error } = await supabase.rpc('remove_event_media', { p_id: mediaId });
+  if (error) throw error;
+  const paths = Array.isArray(data) ? (data as string[]).filter(Boolean) : [];
+  if (paths.length) {
+    // The row is already hidden; a file left behind only costs space, so a failure here is not an error.
+    const { error: rmErr } = await supabase.storage.from('event-media').remove(paths);
+    if (rmErr) console.warn('[media] file not deleted', rmErr.message);
+  }
+  invalidateEventMedia(eventId);
+}
