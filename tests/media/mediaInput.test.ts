@@ -218,3 +218,9 @@ test('mediaOverAfterClaim and staleMediaJob', () => {
   assert.equal(staleMediaJob({ busy_until: null }, now), false);
   assert.equal(staleMediaJob(null, now), false);
 });
+
+test('cleanReading: bare numbers are not texts to translate', () => {
+  const pair = (orig: string) => ({ orig, lang: 'ar', he: orig, en: orig, where_he: '', where_en: '' });
+  const r = cleanReading({ items: [{ n: 1, description_he: 'מפה', description_en: 'A map', texts: [pair('64'), pair('27 · 3'), pair('C-130'), pair('تزويد بالوقود')] }] }, [pic])!;
+  assert.deepEqual(r[0].texts.map((t) => t.orig), ['C-130', 'تزويد بالوقود']);
+});

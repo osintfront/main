@@ -205,7 +205,7 @@ function cleanPairs(raw: unknown, onScreen: string[]): TextPair[] {
   for (const p of Array.isArray(raw) ? raw : []) {
     if (!p || typeof p !== 'object') continue;
     const orig = str((p as any).orig, MEDIA_LIMITS.orig);
-    if (!orig || !/[\p{L}\p{N}]/u.test(orig) || seen.has(orig)) continue;
+    if (!orig || !/\p{L}/u.test(orig) || seen.has(orig)) continue;
     const he = str((p as any).he, MEDIA_LIMITS.tr);
     const en = str((p as any).en, MEDIA_LIMITS.tr);
     if (!he && !en) continue;
