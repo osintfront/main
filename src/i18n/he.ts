@@ -258,6 +258,8 @@ export const he: Record<TranslationKey, string> = {
 
   'category.shooting-gunfire': 'ירי נשק קל',
   'category.assassination': 'חיסול',
+  'category.killed': 'הרוגים',
+  'category.wounded': 'פצועים',
   'category.artillery-shelling': 'הפגזה ארטילרית',
   'category.force-sighting': 'זיהוי כוחות',
   'category.statements': 'הצהרות',

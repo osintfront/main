@@ -256,6 +256,8 @@ export const en = {
 
   'category.shooting-gunfire': 'Small-arms fire',
   'category.assassination': 'Assassination',
+  'category.killed': 'Killed',
+  'category.wounded': 'Wounded',
   'category.artillery-shelling': 'Artillery shelling',
   'category.force-sighting': 'Forces sighting',
   'category.statements': 'Statements',

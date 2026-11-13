@@ -8,7 +8,7 @@
 type Db = any;
 
 const HE: Record<string, string> = {
-  "shooting-gunfire": "ירי נשק קל", assassination: "חיסול", "artillery-shelling": "הפגזה ארטילרית",
+  "shooting-gunfire": "ירי נשק קל", assassination: "חיסול", killed: "הרוגים", wounded: "פצועים", "artillery-shelling": "הפגזה ארטילרית",
   "force-sighting": "זיהוי כוחות", statements: "הצהרות", "missile-rocket-attack": "ירי רקטות וטילים",
   airstrike: "תקיפה אווירית", explosion: "פיצוץ", infiltration: "חדירה", drone: "רחפן", uav: 'כטב"מ',
   "terror-security-incident": "אירוע טרור או ביטחוני", "military-activity": "פעילות צבאית",
@@ -20,6 +20,7 @@ const EN: Record<string, string> = {
   "shooting-gunfire": "Small-arms fire", "artillery-shelling": "Artillery shelling", "force-sighting": "Forces sighting",
   "missile-rocket-attack": "Rocket and missile fire", uav: "UAV", "military-activity": "Military activity",
   "terror-security-incident": "Security incident", "infrastructure-incident": "Infrastructure incident",
+  killed: "Killed", wounded: "Wounded",
 };
 
 // country/region/city are NOT cloned: they describe the original event's own place, and a sibling

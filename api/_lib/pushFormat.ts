@@ -7,6 +7,8 @@ export const CATEGORY_HE: Record<string, [string, string]> = {
   airstrike: ['✈️', 'תקיפה אווירית'],
   'artillery-shelling': ['💥', 'ירי ארטילרי'],
   assassination: ['🎯', 'חיסול'],
+  killed: ['💀', 'הרוגים'],
+  wounded: ['🚑', 'פצועים'],
   'cyber-incident': ['💻', 'אירוע סייבר'],
   drone: ['🛸', 'רחפן'],
   explosion: ['💥', 'פיצוץ'],

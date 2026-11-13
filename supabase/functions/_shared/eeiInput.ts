@@ -49,7 +49,7 @@ export const EEI_AREAS: { id: string; names: string[]; bbox: [number, number, nu
 export const CATEGORY_SLUGS: string[] = [
   "home-front-alerts", "shooting-gunfire", "missile-rocket-attack", "airstrike", "explosion", "infiltration", "drone", "uav",
   "terror-security-incident", "military-activity", "political-event", "protest-civil-unrest", "natural-disaster", "fire",
-  "infrastructure-incident", "cyber-incident", "humanitarian-event", "assassination", "force-sighting", "statements",
+  "infrastructure-incident", "cyber-incident", "humanitarian-event", "assassination", "killed", "wounded", "force-sighting", "statements",
   "artillery-shelling", "other",
 ];
 

@@ -16,13 +16,14 @@ import {
   Plane,
   Rocket,
   ShieldAlert,
+  Skull,
   Siren,
   Swords,
   Target,
   type LucideIcon,
 } from 'lucide-react';
 import type { CategoryRef, CategorySlug, EventCategory } from '@/types/category';
-import { Artillery, FixedWingUav, Infiltration, Quadcopter } from './customIcons';
+import { Artillery, FixedWingUav, Infiltration, MedicalCross, Quadcopter } from './customIcons';
 
 /**
  * Icons a category may reference by name. Category rows store the icon as a
@@ -54,6 +55,8 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Target,
   Binoculars,
   MessageSquareQuote,
+  Skull,
+  MedicalCross,
 };
 
 export function getCategoryIcon(name: string | null | undefined): LucideIcon {
@@ -79,6 +82,8 @@ export const DEFAULT_CATEGORIES: readonly CategoryDefinition[] = [
   { slug: 'home-front-alerts', name: 'Home Front Command Alerts', icon: 'Siren', color: '#ff2d2d' },
   { slug: 'shooting-gunfire', name: 'Small-arms fire', icon: 'Crosshair', color: '#e11d48' },
   { slug: 'assassination', name: 'Assassination', icon: 'Target', color: '#991b1b' },
+  { slug: 'killed', name: 'Killed', icon: 'Skull', color: '#27272a' },
+  { slug: 'wounded', name: 'Wounded', icon: 'MedicalCross', color: '#701a75' },
   { slug: 'missile-rocket-attack', name: 'Missile or Rocket Attack', icon: 'Rocket', color: '#f97316' },
   { slug: 'airstrike', name: 'Airstrike', icon: 'Plane', color: '#9333ea' },
   { slug: 'artillery-shelling', name: 'Artillery shelling', icon: 'Artillery', color: '#b45309' },
@@ -126,4 +131,10 @@ export function demoCategoryRef(slug: CategorySlug): CategoryRef {
   const c = DEMO_CATEGORIES.find((x) => x.slug === slug);
   if (!c) return FALLBACK_CATEGORY;
   return { id: c.id, slug: c.slug, name: c.name, icon: c.icon, color: c.color, markerColor: c.markerColor };
+}
+
+/** A category from the built-in list by slug (null for an unknown slug). */
+export function categoryRefBySlug(slug: string): CategoryRef | null {
+  const c = DEFAULT_CATEGORIES.find((x) => x.slug === slug);
+  return c ? { id: null, slug: c.slug, name: c.name, icon: c.icon, color: c.color, markerColor: c.color } : null;
 }
