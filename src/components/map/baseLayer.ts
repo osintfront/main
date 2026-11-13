@@ -1,14 +1,23 @@
 import L from 'leaflet';
 import { TILE_PROVIDERS, mapConfig, type MapTheme, type TileLayerSpec, type TileProviderId } from '@/config/map';
+import { VectorBaseLayer } from './vectorBase';
 
-/** Map styles a visitor can pick: the standard map plus OpenStreetMap-based layers. */
-export const BASE_STYLES = ['standard', 'cyclosm', 'topo'] as const;
+/**
+ * Map styles a visitor can pick: the standard map, OpenStreetMap-based layers, Esri satellite
+ * imagery (plain or with place names), and OpenFreeMap vector maps (light, dark, detailed).
+ * CARTO's free raster tiles now answer "API KEY REQUIRED", so the light/dark maps use
+ * OpenFreeMap's copies of the same CARTO designs (Positron, Dark Matter) instead.
+ */
+export const BASE_STYLES = ['standard', 'topo', 'cyclosm', 'satellite', 'hybrid', 'light', 'dark', 'vector'] as const;
 export type BaseStyle = (typeof BASE_STYLES)[number];
 
 const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const ESRI_IMAGERY = 'Imagery &copy; Esri, Maxar, Earthstar Geographics';
+
+type RasterStyle = Exclude<BaseStyle, 'standard' | 'hybrid' | 'vector' | 'light' | 'dark'>;
 
 /** Extra styles (same in light and dark: they are detailed maps, inverting them hurts). */
-const STYLE_SPECS: Record<Exclude<BaseStyle, 'standard'>, TileLayerSpec> = {
+const STYLE_SPECS: Record<RasterStyle, TileLayerSpec> = {
   cyclosm: {
     url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
     attribution: `${OSM} · <a href="https://www.cyclosm.org">CyclOSM</a>`,
@@ -21,6 +30,18 @@ const STYLE_SPECS: Record<Exclude<BaseStyle, 'standard'>, TileLayerSpec> = {
     subdomains: 'abc',
     maxZoom: 17,
   },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: ESRI_IMAGERY,
+    maxZoom: 19,
+  },
+};
+
+/** Place names, roads and borders drawn over the satellite picture (transparent tiles). */
+const ESRI_LABELS: TileLayerSpec = {
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+  attribution: 'Labels &copy; Esri',
+  maxZoom: 19,
 };
 
 const STORAGE_KEY = 'ofm.mapStyle';
@@ -63,7 +84,19 @@ function tileLayer(spec: TileLayerSpec, cors = true): L.Layer {
  * Builds the base tile layer for the configured provider (or a chosen style). This is the
  * single integration point for swapping map vendors (see src/config/map.ts).
  */
-export function createBaseLayer(theme: MapTheme, provider: TileProviderId = mapConfig.provider, style: BaseStyle = 'standard'): L.Layer {
+export function createBaseLayer(
+  theme: MapTheme,
+  provider: TileProviderId = mapConfig.provider,
+  style: BaseStyle = 'standard',
+  lang = 'en',
+): L.Layer {
+  if (style === 'vector') return new VectorBaseLayer(lang, 'liberty');
+  if (style === 'light') return new VectorBaseLayer(lang, 'positron');
+  if (style === 'dark') return new VectorBaseLayer(lang, 'dark');
+  if (style === 'hybrid') {
+    // A feature group passes its tiles' load/error events up, so the fallback check still works.
+    return L.featureGroup([tileLayer(STYLE_SPECS.satellite, false), tileLayer(ESRI_LABELS, false)]);
+  }
   if (style !== 'standard') return tileLayer(STYLE_SPECS[style], false);
   if (provider === 'google') {
     // Google Maps requires leaflet.gridlayer.googlemutant + the Maps JS API.

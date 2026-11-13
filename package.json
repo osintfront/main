@@ -12,12 +12,14 @@
     "check": "tsc --noEmit -p tsconfig.json && vite build"
   },
   "dependencies": {
+    "@maplibre/maplibre-gl-leaflet": "^0.1.4",
     "@supabase/supabase-js": "^2.49.4",
     "@vercel/analytics": "^1.5.0",
     "leaflet": "^1.9.4",
     "leaflet-rotate": "0.2.8",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.468.0",
+    "maplibre-gl": "^5.24.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.0",
