@@ -164,7 +164,7 @@ async function merge(db: Db, keep: Row, dup: Row): Promise<void> {
  * sinceMinutes: events created in this window are "new" (default: since the last run).
  * Returns the merges done.
  */
-export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): Promise<{ checked: number; considered?: number; proposed?: unknown; merged: { keep: string; dup: string; keep_title: string; dup_title: string; incident?: string }[] }> {
+export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): Promise<{ checked: number; considered?: number; proposed?: unknown; trace?: unknown; merged: { keep: string; dup: string; keep_title: string; dup_title: string; incident?: string }[] }> {
   const { data: st } = await db.from("intel_config").select("value").eq("key", "dedupe_last_run").maybeSingle();
   const now = new Date();
   const lastRun = st?.value ? new Date(st.value) : new Date(now.getTime() - 30 * 60000);
@@ -195,7 +195,10 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   };
   // Proposed pairs as ids (each pass numbers its own lines).
   const proposals = new Map<string, { a: Row; b: Row; incident?: string }>();
-  const propose = (list: Row[], found: Pair[]) => {
+  // Dry runs report every stage, so a missed duplicate can be traced to the step that dropped it.
+  const trace: { pass: string; a: string; b: string; confidence?: string; incident?: string }[] = [];
+  const propose = (list: Row[], found: Pair[], pass = "") => {
+    if (dry) for (const p of found) trace.push({ pass, a: list[Number(p.new) - 1]?.id, b: list[Number(p.same_as) - 1]?.id, confidence: p.confidence, incident: String(p.incident ?? "").slice(0, 120) });
     for (const p of found) {
       if (p.confidence !== "high") continue;
       const a = list[Number(p.new) - 1], b = list[Number(p.same_as) - 1];
@@ -209,7 +212,7 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   const freshRows = rows.filter((r) => fresh.has(r.id));
   const related = rows.filter((r) => fresh.has(r.id) ? freshRows.some((f) => f.id !== r.id && couldBeSame(f, r, slug)) : freshRows.some((f) => couldBeSame(f, r, slug)));
   const broad = related.some((r) => fresh.has(r.id)) ? related.sort((a, b) => a.occurred_at.localeCompare(b.occurred_at)).slice(-120) : [];
-  if (broad.length) propose(broad, await ask(broad.map(lineOf).join("\n"), CHEAP_MODELS));
+  if (broad.length) propose(broad, await ask(broad.map(lineOf).join("\n"), CHEAP_MODELS), "broad");
 
   // Focused pass: each NEW event next to its few closest look-alikes (by headline), so a re-post
   // of one statement in another language is not lost among a hundred other statements.
@@ -219,7 +222,7 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
     const text = `${list.map(lineOf).join("\n")}\n\nCompare each NEW line with the lines listed after it (its closest look-alikes):\n${focus.compare}`;
     // One answer per NEW event at most: a busy run (dozens of NEW events) needs room, or the
     // tool call is cut off and every pair in it is lost.
-    propose(list, await ask(text, CHEAP_MODELS, Math.min(4000, 400 + 60 * focus.groups.length)));
+    propose(list, await ask(text, CHEAP_MODELS, Math.min(4000, 400 + 60 * focus.groups.length)), "focused");
   }
 
   // Only the proposed pairs go to the strong model to confirm (a few lines) — a wrong merge hides
@@ -244,5 +247,11 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
     gone.add(dup.id);
     merged.push({ keep: keep.id, dup: dup.id, keep_title: keep.title.slice(0, 120), dup_title: dup.title.slice(0, 120), incident: String(incident ?? "").slice(0, 200) });
   }
-  return { checked: fresh.size, merged, ...(dry ? { considered: broad.length + (focus?.rows.length ?? 0), proposed: merged } : {}) };
+  return {
+    checked: fresh.size, merged,
+    ...(dry ? {
+      considered: broad.length + (focus?.rows.length ?? 0), proposed: merged,
+      trace: { groups: focus?.groups ?? [], cheap: trace, confirmed: pairs.map((p) => [p.a.id, p.b.id]) },
+    } : {}),
+  };
 }
