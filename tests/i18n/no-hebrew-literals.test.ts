@@ -22,6 +22,10 @@ const FILES = [
   'src/components/feed/TermText.tsx',
   'src/components/feed/DeepEntryDialog.tsx',
   'src/components/feed/MediaTranslate.tsx',
+  'src/components/feed/EventMedia.tsx',
+  'src/lib/mediaOverlayDom.ts',
+  'src/lib/lightbox.ts',
+  'src/lib/mediaOverlay.ts',
   'src/components/common/InfoTip.tsx',
   'src/pages/admin/AccountPage.tsx',
 ];

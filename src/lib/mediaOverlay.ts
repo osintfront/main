@@ -10,7 +10,7 @@ import { pairView, pick } from './mediaReading.ts';
 export interface OverlayBox { box: Box; text: string; orig: string; dir: 'rtl' | 'ltr' }
 export interface Rect { left: number; top: number; width: number; height: number }
 
-const RTL = /[֐-ࣿיִ-ﻼ]/;
+const RTL = /[\u0590-\u08ff\ufb1d-\ufefc]/;
 
 /** 'rtl' when the first letter is Hebrew / Arabic script, else 'ltr'. */
 export function textDir(s: string): 'rtl' | 'ltr' {
