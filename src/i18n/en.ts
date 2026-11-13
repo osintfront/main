@@ -755,7 +755,7 @@ export const en = {
   'pk.heading': 'What is happening in the Middle East now, on one map',
   'pk.lead': 'Start free, upgrade when you need more.',
   'pk.introBadge': 'Introductory price',
-  'pk.introNote': 'These are introductory launch prices, VAT included, and may change in the future.',
+  'pk.introNote': 'These are introductory launch prices, final, and may change in the future. An existing subscription keeps the price it was bought at.',
   'pk.manualTitle': 'How do I get a paid plan?',
   'pk.manualBody': 'For now, plans are purchased and activated manually. Contact us with the plan you want and your account email. We will reply with payment details and activate the plan.',
   'pk.contactCta': 'Contact us to buy a plan',

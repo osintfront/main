@@ -244,6 +244,7 @@ function Banner({ tone, icon, title, children }: { tone: 'ok' | 'bad' | 'wait'; 
 
 interface Attention {
   open?: boolean;
+  assumed?: { subscription_id: string; email: string; name: string; plan: string; months: number; until: string; payer_phone: string | null; direct_debit_id: string | null }[];
   cancellations: { subscription_id: string; email: string; name: string; plan: string; state: string; canceled_at: string; payer_phone: string | null; direct_debit_id?: string | null }[];
   events: { event_key: string; kind: string; outcome: string; note: string | null; email: string | null; received_at: string }[];
   recent: { at: string; email: string; plan: string; period: string; kind: string; status: string; amount: number; sandbox: boolean; reason: string | null }[];
@@ -276,6 +277,15 @@ export function BillingAdminPanel() {
 
   const done = async (id: string) => {
     await supabase?.rpc('billing_mark_cancel_done', { p_subscription: id });
+    await load();
+  };
+  const confirmAssumed = async (id: string) => {
+    await supabase?.rpc('billing_admin_confirm_assumed', { p_subscription: id });
+    await load();
+  };
+  const revoke = async (id: string, who: string) => {
+    if (!window.confirm(`החיוב של ${who} לא עבר? הלקוח יעבור עכשיו לחינם, ותופיע משימה לעצור את הוראת הקבע ב-Grow.`)) return;
+    await supabase?.rpc('billing_admin_revoke', { p_subscription: id });
     await load();
   };
   const cancelFor = async () => {
@@ -315,6 +325,28 @@ export function BillingAdminPanel() {
         <button type="button" onClick={() => void cancelFor()} className="min-h-10 rounded-lg bg-red-600 px-4 text-xs font-bold text-white">בטל מנוי ללקוח</button>
       </div>
       {cancelMsg ? <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{cancelMsg}</p> : null}
+
+      <h3 className="mt-4 font-bold text-slate-900 dark:text-white">חודשים שהוארכו אוטומטית — לוודא ב-Grow שהחיוב עבר</h3>
+      {data?.assumed?.length ? (
+        <ul className="mt-2 flex flex-col gap-2">
+          {data.assumed.map((a) => (
+            <li key={a.subscription_id} className="flex flex-col gap-2 rounded-xl bg-white p-3 sm:flex-row sm:items-center dark:bg-slate-900">
+              <span className="flex-1">
+                <b>{a.name || a.email}</b> · {a.plan} · {a.months} חודש/ים · פעיל עד {when(a.until)}
+                {a.direct_debit_id ? <> · הוראת קבע <b dir="ltr">{a.direct_debit_id}</b></> : null}
+                <br />
+                <span className="text-xs text-slate-600 dark:text-slate-400">ב-Grow: הוראות קבע → המספר הזה → לבדוק שהחיוב האחרון "שולם".</span>
+              </span>
+              <span className="flex gap-2">
+                <button type="button" onClick={() => void confirmAssumed(a.subscription_id)} className="min-h-9 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">שולם ✓</button>
+                <button type="button" onClick={() => void revoke(a.subscription_id, a.name || a.email)} className="min-h-9 rounded-lg bg-red-600 px-3 text-xs font-bold text-white">לא עבר ✗</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-slate-600 dark:text-slate-400">אין. 👍</p>
+      )}
 
       <h3 className="mt-4 font-bold text-slate-900 dark:text-white">ביטולים שצריך לעצור ב-Grow</h3>
       {data?.cancellations.length ? (
