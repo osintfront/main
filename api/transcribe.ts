@@ -184,7 +184,7 @@ export async function POST(req: Request) {
     if (outcome === 'busy') throw busy('generate', res.status, out); // a refused request (bad model / key) is never saved as "unreadable"
     if (outcome === 'unreadable') return json({ state: 'unreadable', seconds });
     const text = (out?.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p?.text ?? '').join('');
-    const clean = text ? cleanSpeech(text) : null;
+    const clean = text ? cleanSpeech(text, seconds) : null;
     if (!clean) return json({ state: 'unreadable', seconds });
     const usage = { input: Number(out?.usageMetadata?.promptTokenCount ?? 0), output: Number(out?.usageMetadata?.candidatesTokenCount ?? 0) };
     console.log('transcribe', clean.state, file.length, seconds, Date.now() - t0);
