@@ -16,7 +16,7 @@ import { EventStaffEdit } from './EventStaffEdit';
 import { EventGeolocation } from './EventGeolocation';
 import { TermText } from './TermText';
 import { DeepEntryDialog, type DeepTarget } from './DeepEntryDialog';
-import { linkSegments, selectionTerm, type EventTerm } from '@/lib/deepTerms';
+import { segmentsInOrder, selectionTerm, type EventTerm } from '@/lib/deepTerms';
 import { fetchEventTerms } from '@/services/deepService';
 import { usePermissions } from '@/hooks/usePermissions';
 
@@ -75,8 +75,8 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
     setDeep({ eventId: event.id, term });
   };
   // The headline links first; the summary and the expansion skip what it linked.
-  const headlineUsed = new Set<string>();
-  linkSegments(title, terms, headlineUsed);
+  const headlineParts = segmentsInOrder([title], terms)[0];
+  const headlineUsed = new Set(headlineParts.flatMap((p) => (typeof p === 'string' ? [] : [p.term.key])));
   const selected = () => {
     const sel = window.getSelection();
     const node = sel?.anchorNode;
@@ -156,7 +156,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
               <SeverityBadge severity={event.severity} />
             </div>
             <h2 id="event-details-title" ref={headArea} onContextMenu={onContextMenu} className="mt-2 text-lg font-bold leading-snug text-slate-900 sm:text-xl dark:text-white" dir="auto">
-              <TermText text={title} terms={terms} onTerm={onTerm} />
+              <TermText parts={headlineParts} onTerm={onTerm} />
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               <bdi>{formatDateTime(event.occurredAt, locale)}</bdi>

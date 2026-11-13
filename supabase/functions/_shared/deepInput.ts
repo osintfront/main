@@ -208,6 +208,11 @@ export const WIKIMEDIA_HOSTS = ["upload.wikimedia.org", "thumb.wikimedia.org"];
 const plain = (v: unknown) => (typeof v === "string" ? v.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120) : "");
 
 /** The Wikipedia lead image, only when free (CC0 / CC BY / CC BY-SA / public domain / GFDL) and credited. */
+/** The author's name only: Commons templates in the field ("This … image was created with Inkscape.") are cut; ≤ 120 chars. */
+export function cleanCredit(v: string): string {
+  return v.replace(/\s*\bThis\b[^.]*\b(was )?created with\b.*$/i, "").replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
 export function pickImage(page: unknown, info: unknown): DeepImage | null {
   if (!page || typeof page !== "object" || !info || typeof info !== "object") return null;
   const p = page as { pageprops?: Record<string, unknown>; title?: string; fullurl?: string };
@@ -224,7 +229,7 @@ export function pickImage(page: unknown, info: unknown): DeepImage | null {
   const meta = i.extmetadata ?? {};
   const license = plain(meta.LicenseShortName?.value);
   if (!/^(cc0|cc by(-sa)?\b.*|public domain.*|pd\b.*|gfdl.*)$/i.test(license) || /\b(nc|nd)\b|-nc|-nd/i.test(license)) return null;
-  let credit = plain(meta.Artist?.value) || plain(meta.Credit?.value);
+  let credit = cleanCredit(plain(meta.Artist?.value)) || cleanCredit(plain(meta.Credit?.value));
   if (!credit) {
     if (!/^(cc0|public domain|pd\b)/i.test(license)) return null;
     credit = "Wikimedia Commons";

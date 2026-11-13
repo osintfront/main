@@ -128,3 +128,27 @@ export function mapEntry(row: unknown): DeepEntry | null {
     editedAt: typeof r.edited_at === 'string' ? r.edited_at : null,
   };
 }
+
+/**
+ * The link segments of several texts in reading order: a term links once across all of them, and not
+ * at all when it is in `already`. Works on its own copy, so it gives the same answer on every render
+ * (React may render twice) and never changes `already`.
+ */
+export function segmentsInOrder(texts: string[], terms: EventTerm[], already?: Iterable<string>): Segment[][] {
+  const used = new Set(already ?? []);
+  return texts.map((t) => linkSegments(t, terms, used));
+}
+
+/**
+ * The entry's sources as a reader may see them. Our events' own sources follow the event window's rules:
+ * hidden without `source_link` or `sources_detail`; names only when `sources_detail` is limited (Pro);
+ * names and links otherwise. Web sources always link.
+ */
+export function entrySources(
+  sources: { title: string; url: string; from?: 'event' | 'web' }[],
+  o: { sourceLink: boolean; detail: 'none' | 'names' | 'links' },
+): { title: string; url: string | null }[] {
+  return sources
+    .filter((s) => s.from !== 'event' || (o.sourceLink && o.detail !== 'none'))
+    .map((s) => ({ title: s.title, url: s.from === 'event' && o.detail === 'names' ? null : s.url }));
+}

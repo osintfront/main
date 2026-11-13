@@ -96,3 +96,30 @@ test('mapEntry keeps where a source came from', () => {
   const e = mapEntry({ id: 'E', kind: 'org', sources: [{ title: 'T', url: 'https://t.me/x/1', from: 'event' }, { title: 'W', url: 'https://w.example', from: 'web' }] })!;
   assert.deepEqual(e.sources.map((s) => s.from), ['event', 'web']);
 });
+
+test('segmentsInOrder: a term links once across the texts, and running it twice gives the same (no shared state)', async () => {
+  const { segmentsInOrder } = await import('../../src/lib/deepTerms.ts');
+  const h = T('heron', 'Heron');
+  const r = T('radwan', 'Radwan');
+  const before = new Set<string>(['radwan']); // linked in the headline already
+  const run = () => segmentsInOrder(['Heron over Radwan', 'Heron again'], [h, r], before);
+  const a = run();
+  const b = run();
+  assert.deepEqual(a, b, 'the same answer on a second render');
+  assert.equal(links(a[0]).length, 1);
+  assert.equal(links(a[0])[0].term.key, 'heron');
+  assert.equal(links(a[1]).length, 0, 'heron already linked above');
+  assert.deepEqual([...before], ['radwan'], 'the given set is not changed');
+});
+
+test('entrySources: our events follow source_link and sources_detail; web sources always link', async () => {
+  const { entrySources } = await import('../../src/lib/deepTerms.ts');
+  const src = [{ title: 'Ch', url: 'https://t.me/x/1', from: 'event' as const }, { title: 'W', url: 'https://w.example', from: 'web' as const }];
+  // Max: links everywhere.
+  assert.deepEqual(entrySources(src, { sourceLink: true, detail: 'links' }), [{ title: 'Ch', url: 'https://t.me/x/1' }, { title: 'W', url: 'https://w.example' }]);
+  // Pro (sources_detail limit 1): our event's source by name only.
+  assert.deepEqual(entrySources(src, { sourceLink: true, detail: 'names' }), [{ title: 'Ch', url: null }, { title: 'W', url: 'https://w.example' }]);
+  // No sources_detail, or no source_link: our event's source is not shown.
+  assert.deepEqual(entrySources(src, { sourceLink: true, detail: 'none' }), [{ title: 'W', url: 'https://w.example' }]);
+  assert.deepEqual(entrySources(src, { sourceLink: false, detail: 'links' }), [{ title: 'W', url: 'https://w.example' }]);
+});

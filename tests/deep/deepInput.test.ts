@@ -192,3 +192,17 @@ test('allowed source urls compare after normalising', async () => {
   assert.ok(e && e !== 'none');
   assert.equal(e.sources.length, 1);
 });
+
+test('pickImage: the credit is the author only, without Commons template text', () => {
+  const page = { title: 'X', fullurl: 'https://en.wikipedia.org/wiki/X', pageimage: 'A.svg', pageprops: {} };
+  const inf = (artist: string) => ({
+    thumburl: 'https://upload.wikimedia.org/a.png', descriptionurl: 'https://commons.wikimedia.org/wiki/File:A.svg',
+    extmetadata: { LicenseShortName: { value: 'Public domain' }, Artist: { value: artist } },
+  });
+  const credit = (a: string) => pickImage(page, inf(a))!.credit;
+  assert.equal(credit('<a href="//commons.wikimedia.org/wiki/User:MrInfo2012">MrInfo2012</a> <span class="hidden">This W3C-unspecified vector image was created with Inkscape .</span>'), 'MrInfo2012');
+  assert.equal(credit('MrInfo2012 This W3C-unspecified vector image was created with Inkscape .'), 'MrInfo2012');
+  assert.equal(credit('Jane Doe This SVG file was created with Adobe Illustrator.'), 'Jane Doe');
+  assert.equal(credit('U.S. Department of State'), 'U.S. Department of State');
+  assert.equal(credit('x'.repeat(300)).length <= 120, true);
+});
