@@ -253,3 +253,7 @@ end $$;
 
 revoke all on function public.billing_apply(text, text, uuid, text, text, text, text, uuid, int, int, jsonb) from public, anon, authenticated;
 grant execute on function public.billing_apply(text, text, uuid, text, text, text, text, uuid, int, int, jsonb) to service_role;
+
+-- ── 5) Hourly: plans whose time is up go back to Free (was commented out in 20261028000067) ──
+-- Named job, the same pattern as the other cron jobs in the migrations.
+select cron.schedule('osintfront-expire-plans', '11 * * * *', $c$select public.expire_plans()$c$);
