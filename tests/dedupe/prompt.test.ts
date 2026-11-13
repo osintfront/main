@@ -18,3 +18,8 @@ test('the dedupe prompt treats a re-report of ongoing works or presence as the s
 test('the rules that keep real incidents apart are still there', () => {
   for (const w of ['Two statements by different people', 'different statements by the same person', 'different times or places']) assert.ok(system.includes(w), w);
 });
+
+test('the prompt knows protests are ongoing activity and what "(same photo)" means', () => {
+  assert.ok(system.includes('protest, sit-in or vigil'));
+  assert.ok(system.includes('(same photo)'));
+});
