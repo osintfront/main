@@ -815,7 +815,7 @@ export const he: Record<TranslationKey, string> = {
   'bill.fail.title': 'התשלום לא עבר',
   'bill.fail.body': 'לא בוצע חיוב. אפשר לנסות שוב עם אותו כרטיס או עם כרטיס אחר.',
   'bill.sub.title': 'המנוי שלך',
-  'bill.sub.monthly': '{plan}, חודשי. החיוב הבא בסביבות {date}.',
+  'bill.sub.monthly': '{plan} חודשי: החבילה פעילה עד {date}. כל חיוב חודשי מאריך אותה בחודש נוסף, ואפשר לבטל בכל עת.',
   'bill.sub.yearly': '{plan}, שנתי. פעיל עד {date}. לא מתחדש מעצמו.',
   'bill.sub.canceled': '{plan}: בוטל. הגישה נשארת עד {date}, בלי חיובים נוספים.',
   'bill.sub.pastDue': 'החיוב החודשי האחרון של {plan} נכשל. Grow תנסה שוב בימים הקרובים. הגישה נשארת עד {date}.',

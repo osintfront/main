@@ -813,7 +813,7 @@ export const en = {
   'bill.fail.title': 'The payment did not go through',
   'bill.fail.body': 'Nothing was charged. You can try again with the same or another card.',
   'bill.sub.title': 'Your subscription',
-  'bill.sub.monthly': '{plan}, monthly. Next charge around {date}.',
+  'bill.sub.monthly': '{plan}, monthly: active until {date}. Each monthly charge adds another month; you can cancel at any time.',
   'bill.sub.yearly': '{plan}, yearly. Active until {date}. It does not renew by itself.',
   'bill.sub.canceled': '{plan}: cancelled. Access stays until {date}, with no further charges.',
   'bill.sub.pastDue': 'The last monthly charge for {plan} failed. Grow will try again over the next few days. Access stays until {date}.',
