@@ -31,6 +31,8 @@ const BOT_USER_ID = Deno.env.get("INGEST_USER_ID") ?? "d8d87c3a-1739-4c8a-8617-9
 const ALLOWED_CHATS = (Deno.env.get("INGEST_CHATS") ?? "החזית הצפונית").split("|").map((s) => s.trim());
 const DUP_WINDOW_MIN = 30;
 const DUP_LOOKBACK_H = 8;
+/** Rows to load for those 8 hours: ~425 events on average, up to ~740 at peak (100 covered only ~2 h). */
+const DUP_POOL_ROWS = 800;
 const MAX_CANDIDATES = 14;
 const MAX_SOURCES = 30;
 
@@ -642,7 +644,7 @@ async function processOne(m: InMsg) {
     .gte("occurred_at", from)
     .lte("occurred_at", to)
     .order("occurred_at", { ascending: false })
-    .limit(100);
+    .limit(DUP_POOL_ROWS);
   const candidates = pickCandidates(text, sentAt, pool ?? []);
 
   // A near-identical report from the last hour: merge as a source, no AI call.

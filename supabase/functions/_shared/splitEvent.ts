@@ -6,8 +6,9 @@
 // a secondary type; after a split a Killed / Wounded / Assassination main survives and takes the kept
 // kind as secondary; siblings start with none. Hand-set lists (manual_secondary) only lose sibling kinds.
 // Siblings carry ai_suggestions.split_from = the original id (the dedupe agent skips them).
+// A statement (mentionsOnly) is never split: the places it names are mentions, not incidents.
 
-import { afterSplit, singleKind } from "./secondaryCats.ts";
+import { afterSplit, mentionsOnly, singleKind } from "./secondaryCats.ts";
 // deno-lint-ignore no-explicit-any
 type Db = any;
 
@@ -73,6 +74,18 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
   const places: Place[] = Array.isArray(ev.locations) ? ev.locations : [];
   const oldSecondary: string[] = Array.isArray(ev.secondary_categories) ? ev.secondary_categories : [];
   const manual = ev.ai_suggestions?.manual_secondary === true;
+  // A statement is never split: the places it names (where it was said, past strikes, threats, an
+  // attack it condemns) are mentions, not incidents of their own. They take the statement's kind,
+  // so no strike pin or strike secondary type comes from them, and its headline stays.
+  if (places.some((p) => p?.category_slug)) {
+    const { data: mainCat } = await db.from("event_categories").select("slug").eq("id", ev.category_id).maybeSingle();
+    const relabelled = mentionsOnly(mainCat?.slug ?? null, places);
+    if (relabelled) {
+      const { error } = await db.from("events").update({ locations: relabelled }).eq("id", ev.id);
+      if (error) console.error("statement place update failed", error.message);
+      return [];
+    }
+  }
   const groups = new Map<string, Place[]>();
   for (const p of places) if (p?.category_slug) groups.set(p.category_slug, [...(groups.get(p.category_slug) ?? []), p]);
   if (groups.size < 2) {

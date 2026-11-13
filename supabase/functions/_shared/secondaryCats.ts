@@ -20,6 +20,23 @@ export function cleanSecondary(raw: unknown, allowed: Iterable<string>, main: st
   return ordered.slice(0, MAX_SECONDARY);
 }
 
+/**
+ * Main types whose places are only mentions: a statement names where it was said, past strikes,
+ * threats, an attack it condemns. Such an event is never split into incidents, and its places
+ * never lend it a strike kind.
+ */
+export const MENTION_ONLY_MAIN: string[] = ["statements"];
+
+/**
+ * For a mention-only main type: the places with every tag set to the main type (untagged stay
+ * untagged), or null when there is nothing to change (other main types, or already all tagged so).
+ */
+export function mentionsOnly<P extends { category_slug?: string }>(own: string | null, places: P[]): P[] | null {
+  if (!own || !MENTION_ONLY_MAIN.includes(own)) return null;
+  if (!places.some((p) => p?.category_slug && p.category_slug !== own)) return null;
+  return places.map((p) => (p?.category_slug ? { ...p, category_slug: own } : p));
+}
+
 /** All tagged places share one kind: when it is not the main type it becomes a secondary type (if there is room). */
 export function singleKind(a: { own: string | null; secondary: string[]; kind: string }): { secondary: string[]; relabelPlaces: boolean } {
   if (!a.own || a.kind === a.own) return { secondary: [...a.secondary], relabelPlaces: false };

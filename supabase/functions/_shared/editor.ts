@@ -190,6 +190,7 @@ const SYSTEM_DETAILED_PLACES = `
 - "أطراف X" / "اطراف X" / "خراج X" / "محيط X" (פאתי X) → המקום הוא X. "وادي X" → ואדי X (מקום בפני עצמו). "سهل X" → מישור X. "بين بلدتي A و B" → שני המקומות A ו-B. "بحر X" / "شاطئ X" → X (חוף/ים).
 - מקום שמופיע פעמיים (תחת שתי כותרות) — פעם אחת, עם הקטגוריה החמורה יותר.
 - category_slug של מקום הוא סוג התקיפה בו — אף פעם לא killed / wounded, אלא אם אמצעי התקיפה לא ידוע.
+- מקום שרק מוזכר בדברים של דובר (הצהרה, גינוי, איום, דרישה, ראיון, ניתוח) — מקום הנאום, מקום של תקיפה בעבר, מקום שמאיימים עליו, מקום של אירוע שהדובר מגנה — מקבל category_slug של הדיווח כולו (למשל statements), לא סוג תקיפה. סוג תקיפה רק למקום שהדיווח עצמו מדווח שקרה בו עכשיו אירוע.
 - category_slug של הדיווח כולו: סוג האירוע הדומיננטי (החמור או השכיח ביותר).
 - הכותרת והתמצית מסכמות את הכול (למשל "סיכום תקיפות ישראליות בדרום לבנון: X תקיפות אוויר, Y הפגזות…").`;
 
@@ -213,7 +214,7 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
           country: { type: "string", description: "Country the place is in, in English" },
           lat: { type: ["number", "null"] },
           lng: { type: ["number", "null"] },
-          ...(detailed && categories.length ? { category_slug: { type: "string", enum: categories.map((c) => c.slug), description: "What happened at this place (its own category)" } } : {}),
+          ...(detailed && categories.length ? { category_slug: { type: "string", enum: categories.map((c) => c.slug), description: "What happened at this place now, per this report (its own category). A place only mentioned in a statement (past strike, threat, condemned attack, where it was said) takes the report's category" } } : {}),
           ...(detailed ? { name_ar: { type: "string", description: "The place name in Arabic script, as written in the report when it is Arabic (else empty)" } } : {}),
         },
         required: detailed && categories.length ? ["name", "name_en", "category_slug"] : ["name", "name_en"],
