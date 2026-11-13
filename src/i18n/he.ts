@@ -180,6 +180,7 @@ export const he: Record<TranslationKey, string> = {
   "deep.sources": "מקורות",
   "deep.aiLine": "נכתב ע\"י AI ממקורות פתוחים — בדקו את המקורות. עודכן {date} · גרסה {version}",
   "deep.imageCredit": "תמונה: {credit} · {license} · Wikimedia Commons",
+  "deep.pick": "על מה לקרוא?",
   "deep.analyze": "נתח „{text}”",
   "deep.edit": "עריכה",
   "deep.refresh": "רענון",

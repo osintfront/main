@@ -178,6 +178,7 @@ export const en = {
   "deep.sources": "Sources",
   "deep.aiLine": "Written by AI from open sources — check the sources. Updated {date} · v{version}",
   "deep.imageCredit": "Picture: {credit} · {license} · Wikimedia Commons",
+  "deep.pick": "Read about…",
   "deep.analyze": "Analyze “{text}”",
   "deep.edit": "Edit",
   "deep.refresh": "Refresh",

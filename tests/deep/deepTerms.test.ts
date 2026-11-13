@@ -123,3 +123,36 @@ test('entrySources: our events follow source_link and sources_detail; web source
   assert.deepEqual(entrySources(src, { sourceLink: true, detail: 'none' }), [{ title: 'W', url: 'https://w.example' }]);
   assert.deepEqual(entrySources(src, { sourceLink: false, detail: 'links' }), [{ title: 'W', url: 'https://w.example' }]);
 });
+
+test('nested terms: a link lists the other terms inside it', () => {
+  const ground = T('irgc ground forces', 'כוחות היבשה של משמרות המהפכה');
+  const irgc = T('irgc', 'משמרות המהפכה', 'IRGC');
+  const used = new Set<string>();
+  const s = check('נציג המנהיג העליון בכוחות היבשה של משמרות המהפכה סייר בחוזסטאן', [irgc, ground], used);
+  const l = links(s);
+  assert.equal(l.length, 1);
+  assert.equal(l[0].text, 'כוחות היבשה של משמרות המהפכה');
+  assert.equal(l[0].term, ground);
+  assert.deepEqual(l[0].inner, [{ text: 'משמרות המהפכה', term: irgc }]);
+  // the inner term is not used up: it can still link on its own later
+  assert.deepEqual([...used], ['irgc ground forces']);
+  assert.equal(links(check('דובר משמרות המהפכה', [irgc, ground], used))[0].term, irgc);
+});
+
+test('nested terms: edge cases', () => {
+  const outer = T('a', 'כוחות היבשה של משמרות המהפכה', 'כוחות היבשה');
+  const irgc = T('irgc', 'משמרות המהפכה');
+  const part = T('part', 'מהפכה');
+  // no inner: plain link, no `inner` field
+  assert.equal('inner' in links(check('כוחות היבשה תקפו', [outer]))[0], false);
+  // the outer term's own shorter name is not an inner option
+  assert.equal(links(check('כוחות היבשה של משמרות המהפכה', [outer]))[0].inner, undefined);
+  // part of a word is not an option; a whole word with a Hebrew prefix is
+  const stub = T('stub', 'מהפכ');
+  assert.equal(links(check('יחידת המהפכנים', [T('u', 'יחידת המהפכנים'), stub]))[0].inner, undefined);
+  const l = links(check('כוחות ומשמרות המהפכה', [T('t2', 'כוחות ומשמרות המהפכה'), irgc, part]))[0];
+  assert.deepEqual(l.inner?.map((x) => x.text), ['משמרות המהפכה', 'מהפכה']);
+  // twice inside the phrase → listed once
+  const twice = T('tw', 'משמרות המהפכה ושוב משמרות המהפכה');
+  assert.equal(links(check('משמרות המהפכה ושוב משמרות המהפכה', [twice, irgc]))[0].inner?.length, 1);
+});

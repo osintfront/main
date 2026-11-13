@@ -7,7 +7,9 @@ const KINDS: readonly string[] = ['person', 'weapon', 'org', 'place', 'term'];
 export const SECTION_KEYS: readonly string[] = ['background', 'capabilities', 'operators', 'use', 'significance'];
 
 export interface EventTerm { key: string; name: string; kind: TermKind; surfaces: string[]; entry: string | null }
-export type Segment = string | { text: string; term: EventTerm };
+/** A link's text, its term, and the other terms written inside it (reading order; absent when none). */
+export interface InnerTerm { text: string; term: EventTerm }
+export type Segment = string | { text: string; term: EventTerm; inner?: InnerTerm[] };
 
 const str = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : '');
 
@@ -70,12 +72,41 @@ export function linkSegments(text: string, terms: EventTerm[], used: Set<string>
   let at = 0;
   for (const h of hits) {
     if (h.start > at) out.push(text.slice(at, h.start));
-    out.push({ text: text.slice(h.start, h.end), term: h.term });
+    const linkText = text.slice(h.start, h.end);
+    const inner = innerTerms(linkText, h.term, terms);
+    out.push(inner.length ? { text: linkText, term: h.term, inner } : { text: linkText, term: h.term });
     at = h.end;
   }
   if (at < text.length) out.push(text.slice(at));
   for (const k of linked) used.add(k);
   return out;
+}
+
+/**
+ * The other terms written inside a link's text, whole words only (a Hebrew prefix letter is allowed),
+ * in reading order, each once. They are not "used": the same term may still link on its own later.
+ */
+function innerTerms(linkText: string, outer: EventTerm, terms: EventTerm[]): InnerTerm[] {
+  const found: { start: number; text: string; term: EventTerm }[] = [];
+  for (const t of terms) {
+    if (t.key === outer.key) continue;
+    let best: { start: number; text: string } | null = null;
+    for (const s of t.surfaces) {
+      if (s.length < 2 || s.length >= linkText.length) continue;
+      const re = new RegExp(escapeRe(s), 'giu');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(linkText))) {
+        const end = m.index + m[0].length;
+        if (okBefore(linkText, m.index) && okAfter(linkText, end)) {
+          if (!best || m.index < best.start) best = { start: m.index, text: m[0] };
+          break;
+        }
+        if (m[0].length === 0) re.lastIndex++;
+      }
+    }
+    if (best) found.push({ ...best, term: t });
+  }
+  return found.sort((a, b) => a.start - b.start).map(({ text, term }) => ({ text, term }));
 }
 
 /** The selected text for "Analyze": trimmed, 2–80 characters, one line; else null. */
