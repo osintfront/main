@@ -154,6 +154,8 @@ async function checkout(req: Request): Promise<Response> {
     full_name: fullName,
     phone,
     email: user.email,
+    // Each plan and period has its own picture on Grow's payment page (public/pay/*.png: Grow takes PNG/JPEG, 1:1).
+    product_image: `${origin}/pay/${plan}-${period}.png`,
     success_url: `${origin}${back}?order=${order.order_id}`,
     notify_url: `${origin}/api/billing/grow-webhook/${env('GROW_WEBHOOK_TOKEN')}`,
   }).catch((e: Error) => ({ ok: false, error: e.message }));
