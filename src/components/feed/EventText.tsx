@@ -80,10 +80,11 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
     if (!hasFeature(undefined, 'source_link')) return void openGate(profile ? 'upgrade' : 'signup', 'source_link');
     if (source === null) {
       setBusy('source');
+      // No original → say so; never show the (Hebrew) description as the "source".
       try {
-        setSource((await fetchSourceText(event.id)) || event.description);
+        setSource(await fetchSourceText(event.id));
       } catch {
-        setSource(event.description);
+        setSource('');
       } finally {
         setBusy(null);
       }
@@ -147,7 +148,7 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
           )}
           dir="auto"
         >
-          <LinkifiedText text={source ?? ''} mapsLabel={t('details.openInMaps')} />
+          {source ? <LinkifiedText text={source} mapsLabel={t('details.openInMaps')} /> : <span className="italic text-slate-500 dark:text-slate-400">{t('text.noSource')}</span>}
         </p>
       ) : summary ? (
         <p className={cn('text-slate-600 dark:text-slate-300', compact ? 'text-[13px] leading-relaxed' : 'text-[15px] leading-relaxed text-slate-800 dark:text-slate-200')} dir="auto">
