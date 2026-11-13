@@ -265,7 +265,40 @@ async function routeAll(page) {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(300);
       out.c6_closed = (await page.locator('.ofm-lightbox').count()) === 0;
-      //@@TASK7@@
+      out.c6_dialogStays = (await details().count()) === 1; // Escape closes the viewer only
+      // 11. subtitles on the uploaded video
+      const vid = details().locator('[data-media-video="m-vid"]');
+      out.c11_track = (await vid.locator('track[kind="subtitles"]').count()) === 1;
+      const cues = await vid.locator('video').evaluate(async (v) => {
+        const tr = v.querySelector('track');
+        if (tr && tr.readyState !== 2) await new Promise((r) => { tr.addEventListener('load', r, { once: true }); setTimeout(r, 3000); });
+        const tt = v.textTracks[0];
+        return tt && tt.cues ? { n: tt.cues.length, first: tt.cues[0]?.text, mode: tt.mode } : null;
+      });
+      out.c11_cues = !!cues && cues.n === 2 && cues.first === T.sub1 && cues.mode === 'showing';
+      if (!out.c11_cues) out.c11_detail = cues;
+      const tog = vid.locator('[data-sub-toggle]');
+      await tog.click();
+      await page.waitForTimeout(200);
+      out.c11_off = (await vid.locator('video').evaluate((v) => v.textTracks[0]?.mode)) === 'disabled' && (await tog.getAttribute('aria-pressed')) === 'false';
+      await tog.click();
+      await page.waitForTimeout(200);
+      out.c11_on = (await vid.locator('video').evaluate((v) => v.textTracks[0]?.mode)) === 'showing';
+      // 13. the staff note
+      const note = details().locator('[data-mt-staff-note]');
+      out.c13_note = isStaff ? (await note.count()) === 1 && (await note.innerText()).includes('route 502 busy generate 429') : (await note.count()) === 0;
+      // 12. a reading without timed lines: no track, no switch, the speech text still in the panel
+      mtState = 'nosegs';
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await settle();
+      await openDetails();
+      await details().getByRole('button', { name: T.expand }).first().click();
+      await details().locator('[data-mt-button]').waitFor({ timeout: 5000 });
+      await page.waitForTimeout(800);
+      await details().locator('[data-mt-button]').click();
+      await details().locator('[data-mt-item="video"]').waitFor({ timeout: 5000 });
+      out.c12_noTrack = (await details().locator('[data-media-video="m-vid"] track').count()) === 0 && (await details().locator('[data-sub-toggle]').count()) === 0;
+      out.c12_text = (await details().locator('[data-mt-item="video"]').innerText()).includes(LANG === 'he' ? 'ברכה' : 'A greeting');
     }
   } catch (e) {
     out.FAILED = String(e).slice(0, 400);

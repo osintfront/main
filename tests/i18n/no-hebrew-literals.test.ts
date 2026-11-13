@@ -23,6 +23,7 @@ const FILES = [
   'src/components/feed/DeepEntryDialog.tsx',
   'src/components/feed/MediaTranslate.tsx',
   'src/components/feed/EventMedia.tsx',
+  'src/components/feed/SubtitledVideo.tsx',
   'src/lib/mediaOverlayDom.ts',
   'src/lib/lightbox.ts',
   'src/lib/mediaOverlay.ts',

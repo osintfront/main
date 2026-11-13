@@ -26,7 +26,7 @@ export interface EventMediaItem {
 /** What to render: images, plus each video with its thumbnail as poster. */
 export interface EventMediaView {
   images: EventMediaItem[];
-  videos: { video: EventMediaItem; poster: string | null }[];
+  videos: { video: EventMediaItem; poster: string | null; posterId: string | null }[];
   /** Video stills without an uploaded video — shown with a play mark; the video is fetched on demand. */
   stills: (EventMediaItem & { onDemand: EventMediaItem | null })[];
 }
@@ -107,10 +107,13 @@ export function toMediaView(items: EventMediaItem[]): EventMediaView {
   // Uploaded with the message (WhatsApp extension): shown as a player straight away.
   const videoItems = items.filter((m) => m.kind === 'video' && !m.thumbId);
   const withVideo = new Set(videoItems.map((v) => v.sourceMsgKey));
-  const thumbFor = (key: string | null) => items.find((m) => m.kind === 'video_thumb' && m.sourceMsgKey === key)?.url ?? null;
+  const stillFor = (key: string | null) => items.find((m) => m.kind === 'video_thumb' && m.sourceMsgKey === key) ?? null;
   return {
     images: items.filter((m) => m.kind === 'image'),
-    videos: videoItems.map((video) => ({ video, poster: thumbFor(video.sourceMsgKey) })),
+    videos: videoItems.map((video) => {
+      const still = stillFor(video.sourceMsgKey);
+      return { video, poster: still?.url ?? null, posterId: still?.id ?? null };
+    }),
     stills: items
       .filter((m) => m.kind === 'video_thumb' && !withVideo.has(m.sourceMsgKey))
       .map((m) => ({ ...m, onDemand: items.find((v) => v.kind === 'video' && v.thumbId === m.id) ?? null })),
