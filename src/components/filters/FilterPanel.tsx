@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Crosshair, Loader2, Octagon, Plus, X } from 'lucide-react';
 import { compileEei, matchesEei, type Eei } from '@/lib/eei';
-import { defaultSetName, fromEventFilters, isLocked, matchesSetFilter, toEventFilters, type FilterSet } from '@/lib/filterSets';
+import { defaultSetName, fromEventFilters, isLocked, panelMatcher, toEventFilters, type FilterSet } from '@/lib/filterSets';
 import { FilterSetsBar } from './FilterSetsBar';
 import { FilterSetHeader } from './FilterSetHeader';
 import { EeiPanel } from './EeiPanel';
@@ -24,7 +24,6 @@ import {
   sourceKind,
   mediaKinds,
   placeKind,
-  matchesFilters,
   type MediaFilter,
   type PlaceKind,
   type EventFilters,
@@ -266,11 +265,10 @@ export function FilterPanel({
   // active filter (time window included) — so they add up to what the feed shows.
   const polygons = scopeSet?.filter.polygons;
   const counts = useMemo(() => {
-    const now = Date.now();
-    const matches = (e: PublicEvent, f: EventFilters) => (polygons ? matchesSetFilter(e, fromEventFilters(f, polygons), now) : matchesFilters(e, f, now));
-    const without = (patch: Partial<EventFilters>) => {
+    const matches = panelMatcher(polygons);
+    const without = (patch: Partial<EventFilters>, placeFree = false) => {
       const f = { ...view, ...patch };
-      return events.filter((e) => matches(e, f));
+      return events.filter((e) => matches(e, f, placeFree));
     };
     const area = new Map<string, number>();
     const cat = new Map<string, number>();
@@ -279,7 +277,7 @@ export function FilterPanel({
     const place = new Map<string, number>();
     const media = new Map<string, number>();
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
-    for (const e of without({ areas: [] })) eventAreas(e).forEach((a) => bump(area, a));
+    for (const e of without({ areas: [] }, true)) eventAreas(e).forEach((a) => bump(area, a));
     for (const e of without({ categories: [] })) eventCategorySlugs(e, !view.mainOnly).forEach((s) => bump(cat, s));
     for (const e of without({ severities: [] })) bump(sev, e.severity);
     for (const e of without({ sources: [] })) bump(src, sourceKind(e));

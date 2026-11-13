@@ -80,3 +80,16 @@ export function historyMessages(history: AskTurn[]): { role: "user" | "assistant
     { role: "assistant" as const, content: t.a.replace(/\s*\[\d+\]/g, "").trim() || "-" },
   ]);
 }
+
+/** How many events go with the long original report. */
+export const LONG_SOURCES = 40;
+
+/**
+ * Does the event at index `i` get the long original report? The list starts with `prev` events already
+ * shown (a follow-up); they get at most half the long slots, and fresh results get the rest.
+ */
+export function longSource(i: number, prev: number): boolean {
+  const fromPrev = Math.min(prev, LONG_SOURCES / 2);
+  if (i < prev) return i < fromPrev;
+  return i - prev < LONG_SOURCES - fromPrev;
+}

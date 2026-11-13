@@ -63,7 +63,8 @@ const server = http.createServer((req, res) => {
     localStorage.setItem('ofm.auth', JSON.stringify(s));
     localStorage.setItem('ofm.lang', lang);
     window.__opened = [];
-    window.open = (u) => (window.__opened.push(String(u)), null);
+    // A real browser gives back the new window; with __blockPopup set it acts like a popup blocker.
+    window.open = (u) => (window.__opened.push(String(u)), window.__blockPopup ? null : { opener: window });
     window.__shared = [];
     if (phone) navigator.share = async (d) => void window.__shared.push(d.text);
     else try { delete Navigator.prototype.share; } catch {}
@@ -183,6 +184,15 @@ const server = http.createServer((req, res) => {
     await page.waitForTimeout(300);
     if (phone) { const s = await page.evaluate(() => window.__shared); out.share_native = s.length === 1 && s[0] === clip; }
     else { const o = await page.evaluate(() => window.__opened); out.share_whatsapp = o.length === 1 && o[0] === `https://wa.me/?text=${encodeURIComponent(clip)}`; }
+    if (!phone) {
+      // 8b: the popup is blocked → a message, and the text is copied to paste by hand.
+      out.share_noNoteWhenOpened = (await page.locator('[data-ask-share-note]').count()) === 0;
+      await page.evaluate(() => { window.__blockPopup = true; });
+      await page.locator('[data-ask-turn="2"] [data-ask-action="share"]').click();
+      await page.waitForTimeout(400);
+      out.share_blockedNote = (await page.locator('[data-ask-turn="2"] [data-ask-share-note]').count()) === 1;
+      await page.evaluate(() => { window.__blockPopup = false; });
+    }
 
     // error keeps the conversation and the typed question.
     await input.fill('fail429 test');

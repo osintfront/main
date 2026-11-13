@@ -117,3 +117,22 @@ test('share text: no limit (copy) keeps the whole answer', () => {
   const out = answerShareText({ question: 'Q', answer, ids: [], events: [] }, SITE, LABELS, Infinity);
   assert.equal(out, `Q\n\n${answer}\n\nosintfront.com`);
 });
+
+test('openWindow: opened → true and the opener is cut; blocked → false', async () => {
+  const { openWindow } = await import('../../src/lib/askChat.ts');
+  const w = { opener: {} as unknown };
+  assert.equal(openWindow('https://wa.me/?text=x', { open: () => w }), true);
+  assert.equal(w.opener, null);
+  assert.equal(openWindow('https://wa.me/?text=x', { open: () => null }), false);
+});
+
+test('turnToShow: a follow-up with no events keeps the map on the last answer that had some', async () => {
+  const { turnToShow } = await import('../../src/lib/askChat.ts');
+  const t = (n: number) => ({ events: Array.from({ length: n }) });
+  assert.equal(turnToShow([t(3)]), 0);
+  assert.equal(turnToShow([t(3), t(2)]), 1);
+  assert.equal(turnToShow([t(3), t(0)]), 0);
+  assert.equal(turnToShow([t(3), t(4), t(0), t(0)]), 1);
+  assert.equal(turnToShow([t(0)]), 0, 'a first question with nothing: itself');
+  assert.equal(turnToShow([]), 0);
+});

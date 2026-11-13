@@ -178,3 +178,12 @@ export function switchOffSets(sets: FilterSet[], limit: number): FilterSet[] {
   if (!sets.some((s, i) => i < limit && s.enabled)) return sets;
   return sets.map((s, i) => (i < limit && s.enabled ? { ...s, enabled: false } : s));
 }
+
+/**
+ * The filter panel's per-option counts. Inside a set the place is "countries OR drawn areas", so the
+ * country counts (placeFree) leave the drawn areas out too: a country's count is what choosing it adds.
+ */
+export function panelMatcher(polygons: LatLng[][] | undefined, now = Date.now()) {
+  return (e: PublicEvent, f: EventFilters, placeFree: boolean): boolean =>
+    polygons ? matchesSetFilter(e, fromEventFilters(f, placeFree ? [] : polygons), now) : matchesFilters(e, f, now);
+}

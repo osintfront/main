@@ -848,6 +848,8 @@ export const en = {
   'ask.copied': 'Copied',
   'ask.copyFailed': 'Could not copy',
   'ask.share': 'Share',
+  'ask.shareBlockedCopied': 'The browser blocked the WhatsApp window. The text was copied — you can paste it yourself.',
+  'ask.shareBlocked': 'The browser blocked the WhatsApp window. Allow pop-ups for this site and try again.',
   'ask.sources': 'Sources:',
   'ask.summary': 'Summary',
   'ask.summaryArea': 'Summarise the last 24 hours in:',

@@ -850,6 +850,8 @@ export const he: Record<TranslationKey, string> = {
   'ask.copied': 'הועתק',
   'ask.copyFailed': 'ההעתקה נכשלה',
   'ask.share': 'שתף',
+  'ask.shareBlockedCopied': 'הדפדפן חסם את חלון WhatsApp. הטקסט הועתק — אפשר להדביק אותו בעצמך.',
+  'ask.shareBlocked': 'הדפדפן חסם את חלון WhatsApp. אפשר לאפשר חלונות קופצים לאתר ולנסות שוב.',
   'ask.sources': 'מקורות:',
   'ask.summary': 'סיכום',
   'ask.summaryArea': 'סיכום 24 השעות האחרונות ב:',
