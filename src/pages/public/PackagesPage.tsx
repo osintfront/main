@@ -136,12 +136,14 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
     daily('pro', 'share_daily', 'pk.f.shares', 'pk.f.sharesAll'),
     daily('pro', 'expand_daily', 'pk.f.expand', 'pk.f.expandAll'),
     daily('pro', 'satellite', 'pk.f.sat', 'pk.f.satAll'),
+    daily('pro', 'sat_enhance', 'pk.f.satEnhance', 'pk.f.satEnhanceAll'),
     archive('pro'),
     ask('pro'),
     lim('pro', 'devices') ? t('pk.f.devices', { n: lim('pro', 'devices') ?? 1 }) : null,
   );
   const maxItems = list(
     daily('max', 'expand_daily', 'pk.f.expand', 'pk.f.expandAll'),
+    daily('max', 'sat_enhance', 'pk.f.satEnhance', 'pk.f.satEnhanceAll'),
     archive('max'),
     ask('max'),
     lim('max', 'sources_detail') == null && on('max', 'sources_detail') ? t('pk.f.sourcesLinks') : null,
@@ -176,6 +178,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
     { label: t('pk.c.ships'), cell: (p) => on(p, 'ships_aircraft') },
     { label: t('pk.c.weather'), cell: (p) => on(p, 'weather') },
     { label: t('pk.c.satellite'), cell: perDay('satellite') },
+    { label: t('pk.c.satEnhance'), cell: perDay('sat_enhance') },
     { label: t('pk.c.military'), cell: (p) => on(p, 'military_assets') },
     { label: t('pk.c.expand'), cell: perDay('expand_daily') },
     { label: t('pk.c.ask'), cell: perDay('ai_expand_ask') },
