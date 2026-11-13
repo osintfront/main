@@ -4,18 +4,22 @@ import type { Vessel } from './intelLayers';
 
 export type ChokepointId = 'hormuz' | 'bab_el_mandeb' | 'suez' | 'tiran' | 'bosphorus' | 'dardanelles';
 export interface ChokepointStat {
-  id: ChokepointId; crossings_24h: number; tankers_24h: number; avg_7d: number; days: number; pct_normal: number | null;
+  id: ChokepointId; crossings_24h: number; tankers_24h: number;
+  /** Ships heard inside the strait in the last 24 h; 0 = no AIS receiver covers it now. */
+  seen_24h?: number;
+  avg_7d: number; days: number; pct_normal: number | null;
   waiting: { en: string; he: string; n: number }[];
   last: { mmsi: number; name: string | null; ship_type: number | null; dir_en: string; dir_he: string; at: string } | null;
 }
-export type Status = 'normal' | 'below' | 'low' | 'collecting';
+export type Status = 'normal' | 'below' | 'low' | 'collecting' | 'nocoverage';
 export interface Sanction { n: string; l: string[] }
 
 export const CHOKEPOINT_TXT = {
   he: {
     hormuz: 'מצר הורמוז', bab_el_mandeb: 'באב אל-מנדב', suez: 'תעלת סואץ', tiran: 'מצרי טיראן', bosphorus: 'הבוספורוס', dardanelles: 'הדרדנלים',
     title: 'נקודות חנק עכשיו', onMap: 'אוניות במפה', sanctioned: 'בסנקציות בים', silent: 'שקטות 24 ש׳+',
-    normal: 'תקין', below: 'מתחת לרגיל', low: 'נמוך', collecting: 'אוסף נתוני בסיס', ofNormal: 'מהתנועה הרגילה',
+    normal: 'תקין', below: 'מתחת לרגיל', low: 'נמוך', collecting: 'אוסף נתוני בסיס', nocoverage: 'אין קליטת AIS',
+    nocoverageNote: 'אין כרגע תחנת AIS חופית שקולטת את המצר, ולכן אוניות כאן לא מופיעות במפה.', ofNormal: 'מהתנועה הרגילה',
     collectingDays: 'אוסף נתוני בסיס ({n} ימים)', crossings: 'מעברים ב-24 ש׳', tankers: 'מכליות', avg: 'ממוצע יומי, 7 ימים',
     waiting: 'ממתינות', last: 'מעבר אחרון', none: 'אין מעברים עדיין', seeMap: 'הצגה במפה', ago: 'לפני',
     footer: 'אוניות מסחריות שנקלטו בתחנות AIS חופיות; אונייה שה-AIS שלה כבוי לא נספרת.',
@@ -24,7 +28,8 @@ export const CHOKEPOINT_TXT = {
   en: {
     hormuz: 'Strait of Hormuz', bab_el_mandeb: 'Bab el-Mandeb', suez: 'Suez Canal', tiran: 'Strait of Tiran', bosphorus: 'Bosphorus', dardanelles: 'Dardanelles',
     title: 'Chokepoints now', onMap: 'ships on the map', sanctioned: 'sanctioned at sea', silent: 'silent 24 h+',
-    normal: 'Normal', below: 'Below normal', low: 'Low', collecting: 'Collecting baseline', ofNormal: 'of normal traffic',
+    normal: 'Normal', below: 'Below normal', low: 'Low', collecting: 'Collecting baseline', nocoverage: 'No AIS reception',
+    nocoverageNote: 'No AIS shore receiver hears this strait right now, so ships here do not show on the map.', ofNormal: 'of normal traffic',
     collectingDays: 'Collecting baseline ({n} days)', crossings: 'crossings in 24 h', tankers: 'tankers', avg: 'a day, 7-day average',
     waiting: 'waiting', last: 'Last crossing', none: 'No crossings yet', seeMap: 'See it on the map', ago: 'ago',
     footer: 'Commercial ships seen by AIS shore receivers; a ship with AIS off is not counted.',
@@ -32,7 +37,9 @@ export const CHOKEPOINT_TXT = {
   },
 } as const;
 
-export function statusOf(pct: number | null): Status {
+/** seen = ships heard in the strait in the last 24 h (0 → no reception; unknown → judged by pct alone). */
+export function statusOf(pct: number | null, seen?: number | null): Status {
+  if (seen === 0) return 'nocoverage';
   if (pct === null || pct === undefined) return 'collecting';
   return pct >= 70 ? 'normal' : pct >= 30 ? 'below' : 'low';
 }

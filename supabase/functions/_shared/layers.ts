@@ -348,18 +348,19 @@ export async function osmWadis(db: Db, band = "s1") {
     const { data: courses, error } = await db.rpc("build_wadi_lines");
     if (error) throw new Error(error.message);
     const { count } = await db.from("wadi_lines").select("id", { count: "exact", head: true });
-    await db.from("layer_sync").upsert({ layer: "wadis", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: count ?? 0, source: "OpenStreetMap (waterways and valleys with a name)", detail: `${courses} new courses` }, { onConflict: "layer" });
+    await db.from("layer_sync").upsert({ layer: "wadis", synced_at: new Date().toISOString(), changed_at: new Date().toISOString(), items: count ?? 0, source: "OpenStreetMap (waterways and valleys)", detail: `${courses} new courses` }, { onConflict: "layer" });
     return { ok: true, new_courses: Number(courses ?? 0), courses: count };
   }
   if (band === "file") {
     // The extract the GitHub workflow "OSM wadis (Lebanon)" wrote to the repository (Geofabrik).
     const res = await fetch(`https://raw.githubusercontent.com/osintfront/main/main/data/osm/lebanon-waterways.jsonl?t=${Date.now()}`);
     if (!res.ok) throw new Error(`extract HTTP ${res.status} (run the "OSM wadis" workflow first)`);
-    const rows = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((f: any) => f?.p?.name && Array.isArray(f.c) && f.c.length > 1 && !["canal", "drain", "ditch"].includes(f.p.waterway)).map((f: any) => ({
+    const rows = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((f: any) => f?.p && Array.isArray(f.c) && f.c.length > 1 && !["canal", "drain", "ditch"].includes(f.p.waterway)).map((f: any) => ({
       way_id: Number(String(f.id).replace(/\D/g, "")),
       kind: f.p.waterway ?? (f.p.natural === "valley" ? "valley" : "waterway"),
-      name: String(f.p.name).slice(0, 200),
-      name_ar: f.p.ar ?? (/[\u0600-\u06FF]/.test(f.p.name) ? f.p.name : null),
+      // Unnamed streams are kept too (most of Lebanon's are): name null, drawn as "unnamed stream".
+      name: f.p.name ? String(f.p.name).slice(0, 200) : null,
+      name_ar: f.p.ar ?? (f.p.name && /[\u0600-\u06FF]/.test(f.p.name) ? f.p.name : null),
       name_en: f.p.en ?? null,
       name_he: f.p.he ?? null,
       geometry: { type: "LineString", coordinates: f.c },

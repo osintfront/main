@@ -23,14 +23,14 @@ const AREA_TXT = {
     control: 'אזורי שליטה', sects: 'עדות בלבנון', lebanon: 'לבנון', syria: 'סוריה', yemen: 'תימן', gaza: 'עזה',
     updated: 'סונכרן', source: 'מקור: מפת המלחמה (Google My Maps)', since: 'במפה מאז', sectsSource: 'מקור: ויקיפדיה (קטגוריות יישובים לפי עדה)',
     mixed: 'מעורב', places: 'יישובים', wiki: 'ויקיפדיה',
-    wadis: 'ואדיות ונחלים בלבנון', wadisSource: 'מקור: OpenStreetMap', courses: 'תוואים', km: 'ק"מ', aiName: 'שם בעברית: תעתיק AI',
+    wadis: 'ואדיות ונחלים בלבנון', wadisSource: 'מקור: OpenStreetMap', unnamed: 'נחל / ואדי ללא שם', courses: 'תוואים', km: 'ק"מ', aiName: 'שם בעברית: תעתיק AI',
     shia: 'שיעים', sunni: 'סונים', druze: 'דרוזים', alawite: 'עלאווים', maronite: 'מרונים', orthodox: 'יוונים-אורתודוקסים', melkite: 'יוונים-קתולים', armenian: 'ארמנים', christian: 'נוצרים (אחר)',
   },
   en: {
     control: 'Areas of control', sects: 'Lebanon: communities', lebanon: 'Lebanon', syria: 'Syria', yemen: 'Yemen', gaza: 'Gaza',
     updated: 'Synced', source: 'Source: war map (Google My Maps)', since: 'On the map since', sectsSource: 'Source: Wikipedia (communities by sect)',
     mixed: 'Mixed', places: 'places', wiki: 'Wikipedia',
-    wadis: 'Lebanon: wadis and streams', wadisSource: 'Source: OpenStreetMap', courses: 'courses', km: 'km', aiName: 'Hebrew name: AI transliteration',
+    wadis: 'Lebanon: wadis and streams', wadisSource: 'Source: OpenStreetMap', unnamed: 'Unnamed stream / wadi', courses: 'courses', km: 'km', aiName: 'Hebrew name: AI transliteration',
     shia: 'Shia', sunni: 'Sunni', druze: 'Druze', alawite: 'Alawite', maronite: 'Maronite', orthodox: 'Greek Orthodox', melkite: 'Greek Catholic', armenian: 'Armenian', christian: 'Christian (other)',
   },
 } as const;
@@ -100,6 +100,7 @@ export function useAreaLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rtl
   const [places, setPlaces] = useState<SectPlace[]>([]);
   const [wadisOn, setWadisOn] = useState(false);
   const [wadis, setWadis] = useState<GeoJSON.FeatureCollection | null>(null);
+  const wadiCanvasRef = useRef<L.Canvas | null>(null);
 
   useEffect(() => {
     if (!supabase || !wadisOn || wadis) return;
@@ -202,12 +203,17 @@ export function useAreaLayers(map: L.Map | null, lang: string, dir: 'ltr' | 'rtl
 
   useEffect(() => {
     if (!map || !wadisOn || !wadis) return;
+    // Thousands of courses (named and unnamed): one canvas, not an SVG path each.
+    wadiCanvasRef.current ??= L.canvas({ padding: 0.3, pane: 'ofmAreas' });
     const layer = L.geoJSON(wadis, {
       pane: 'ofmAreas',
-      style: { color: '#0284c7', weight: 2.5, opacity: 0.85 },
+      // Named courses stand out; unnamed streams are thinner and lighter.
+      style: (f) => (f?.properties?.name
+        ? { color: '#0284c7', weight: 2.5, opacity: 0.85, renderer: wadiCanvasRef.current! }
+        : { color: '#38bdf8', weight: 1.5, opacity: 0.7, renderer: wadiCanvasRef.current! }),
       onEachFeature: (f, l) => {
-        const p = (f.properties ?? {}) as { name: string; ar?: string; en?: string; he?: string; ai?: boolean; km?: number };
-        const name = (lang === 'he' ? p.he : p.en) || p.name;
+        const p = (f.properties ?? {}) as { name: string | null; ar?: string; en?: string; he?: string; ai?: boolean; km?: number };
+        const name = (lang === 'he' ? p.he : p.en) || p.name || T.unnamed;
         const other = [p.he, p.ar, p.en, p.name].filter((x, i, a) => x && x !== name && a.indexOf(x) === i).join(' · ');
         l.bindTooltip(esc(name), { sticky: true, direction: 'top' });
         l.bindPopup(

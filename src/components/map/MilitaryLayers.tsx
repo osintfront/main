@@ -8,6 +8,7 @@ import { Shield } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
+import { LayerSection } from './LayerSection';
 import { supabase } from '@/integrations/supabase/client';
 import { clusterIconHtml, isNotBuilt, loadInfra } from '@/lib/infra';
 import { MilitaryMarkers, foreignShown } from '@/lib/militaryMarkers';
@@ -132,7 +133,7 @@ function Swatch({ k, size = 16 }: { k: MilKind; size?: number }) {
   );
 }
 
-/** The "Military bases" toggles, rendered inside the "Airfields & ports" panel section. */
+/** The "Military bases" toggles: their own collapsible section of the Intelligence panel. */
 export function MilitaryLayersGroup({ s }: { s: MilState }) {
   const { T } = s;
   const row = (k: MilKind) => {
@@ -151,17 +152,15 @@ export function MilitaryLayersGroup({ s }: { s: MilState }) {
     );
   };
   return (
-    <div className="space-y-1.5 pt-1.5">
-      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        <Shield className="size-3.5" aria-hidden />{T.title}
-      </p>
+    <LayerSection id="military" icon={<Shield className="size-4 text-slate-500" aria-hidden />} title={T.title}
+      active={KINDS.filter((k) => s.on[k]).length + (s.foreignOnly ? 1 : 0)} locked={s.guest || !hasFeature(undefined, 'military_assets')}>
       {(['base', 'naval', 'range', 'minor'] as MilKind[]).map(row)}
       <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input type="checkbox" className="size-4 accent-amber-500" data-mil-foreign checked={s.foreignOnly} onChange={(e) => s.setForeignOnly(e.target.checked)} />
         <span className="size-4 shrink-0 rounded-[3px] bg-slate-200 dark:bg-slate-700" aria-hidden style={{ boxShadow: `0 0 0 2px ${FOREIGN_RING}` }} />
         <span className="flex-1">{T.foreignOnly}{s.guest ? ' 🔒' : ''}</span>
       </label>
-    </div>
+    </LayerSection>
   );
 }
 

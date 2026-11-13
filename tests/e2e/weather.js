@@ -23,6 +23,9 @@ async () => {
   }
   [...document.querySelectorAll('button')].find((b) => /Intelligence layers|שכבות מודיעין/.test((b.getAttribute('aria-label') || '') + b.textContent + (b.title || '')))?.click();
   await wait(600);
+  // The section is a dropdown: open it first.
+  const sec = document.querySelector('[data-layer-section="weather"]');
+  if (sec?.getAttribute('aria-expanded') === 'false') { sec.click(); await wait(200); }
   document.querySelector('[data-weather-toggle="clouds"]')?.click();
   await wait(1500);
   out.toggleGate = gate();
