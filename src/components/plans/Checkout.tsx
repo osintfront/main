@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Loader2, Lock, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { useI18n } from '@/i18n';
 import type { TranslationKey } from '@/i18n/en';
 import { shekels } from '@/content/packages';
@@ -230,6 +231,102 @@ function Banner({ tone, icon, title, children }: { tone: 'ok' | 'bad' | 'wait'; 
       <div>
         <h2 className="text-base font-bold">{title}</h2>
         <p className="mt-1 text-sm">{children}</p>
+      </div>
+    </section>
+  );
+}
+
+interface Attention {
+  cancellations: { subscription_id: string; email: string; name: string; plan: string; state: string; canceled_at: string; payer_phone: string | null }[];
+  events: { event_key: string; kind: string; outcome: string; note: string | null; email: string | null; received_at: string }[];
+  recent: { at: string; email: string; plan: string; period: string; kind: string; status: string; amount: number; sandbox: boolean; reason: string | null }[];
+}
+
+const OUTCOME_HE: Record<string, string> = {
+  unmatched: 'תשלום שלא הותאם ללקוח',
+  charged_after_cancel: 'חיוב אחרי ביטול — להחזיר כסף ולעצור הוראת קבע',
+  amount_mismatch: 'סכום שונה מהמחיר — לבדוק ולהחזיר/לטפל',
+  needs_attention: 'דורש טיפול',
+};
+
+/** Super admin only (internal test page): what needs a person, in Hebrew. */
+export function BillingAdminPanel() {
+  const { profile } = useAuth();
+  const [data, setData] = useState<Attention | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    if (!supabase) return;
+    const { data: d, error } = await supabase.rpc('billing_attention');
+    if (error) setErr(error.message);
+    else setData(d as Attention);
+  }, []);
+  useEffect(() => {
+    if (profile?.role === 'super_admin') void load();
+  }, [profile?.role, load]);
+  if (profile?.role !== 'super_admin') return null;
+
+  const done = async (id: string) => {
+    await supabase?.rpc('billing_mark_cancel_done', { p_subscription: id });
+    await load();
+  };
+  const when = (iso: string) => new Date(iso).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'short', timeStyle: 'short' });
+
+  return (
+    <section dir="rtl" className="mx-auto mt-6 max-w-3xl rounded-2xl bg-amber-50 p-5 text-sm ring-1 ring-amber-300 dark:bg-amber-500/10 dark:ring-amber-500/30">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">ניהול תשלומים (רק לך)</h2>
+        <button type="button" onClick={() => void load()} className="rounded-lg px-3 py-1 text-xs font-semibold ring-1 ring-amber-400">רענון</button>
+      </div>
+      {err ? <p className="mt-2 text-red-700">{err}</p> : null}
+
+      <h3 className="mt-4 font-bold text-slate-900 dark:text-white">ביטולים שצריך לעצור ב-Grow</h3>
+      {data?.cancellations.length ? (
+        <ul className="mt-2 flex flex-col gap-2">
+          {data.cancellations.map((c) => (
+            <li key={c.subscription_id} className="flex flex-col gap-2 rounded-xl bg-white p-3 sm:flex-row sm:items-center dark:bg-slate-900">
+              <span className="flex-1">
+                <b>{c.name || c.email}</b> · {c.plan} · {c.payer_phone ?? ''} · בוטל {when(c.canceled_at)}
+                <br />
+                <span className="text-xs text-slate-600 dark:text-slate-400">ב-Grow: עסקאות → הוראות קבע → לחפש לפי הטלפון → ביטול. אחר כך ללחוץ כאן.</span>
+              </span>
+              <button type="button" onClick={() => void done(c.subscription_id)} className="min-h-9 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white">ביטלתי ב-Grow ✓</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-slate-600 dark:text-slate-400">אין. 👍</p>
+      )}
+
+      <h3 className="mt-4 font-bold text-slate-900 dark:text-white">התראות</h3>
+      {data?.events.length ? (
+        <ul className="mt-2 flex flex-col gap-1">
+          {data.events.map((e) => (
+            <li key={e.event_key} className="rounded-lg bg-white px-3 py-2 dark:bg-slate-900">
+              {when(e.received_at)} · {OUTCOME_HE[e.outcome] ?? e.outcome} · {e.email ?? 'לא ידוע'} {e.note ? `· ${e.note}` : ''}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-slate-600 dark:text-slate-400">אין. 👍</p>
+      )}
+
+      <h3 className="mt-4 font-bold text-slate-900 dark:text-white">הזמנות אחרונות</h3>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[520px] text-xs">
+          <thead><tr className="text-start text-slate-500"><th className="p-1 text-start">מתי</th><th className="p-1 text-start">מי</th><th className="p-1 text-start">חבילה</th><th className="p-1 text-start">סוג</th><th className="p-1 text-start">סכום</th><th className="p-1 text-start">מצב</th></tr></thead>
+          <tbody>
+            {(data?.recent ?? []).map((o, i) => (
+              <tr key={i} className="border-t border-amber-200 dark:border-slate-700">
+                <td className="p-1">{when(o.at)}</td>
+                <td className="p-1" dir="ltr">{o.email}</td>
+                <td className="p-1">{o.plan} {o.period === 'yearly' ? 'שנתי' : 'חודשי'}</td>
+                <td className="p-1">{o.kind}</td>
+                <td className="p-1">₪{o.amount}</td>
+                <td className="p-1">{o.status}{o.reason ? ` (${o.reason})` : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );

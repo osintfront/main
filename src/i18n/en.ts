@@ -790,7 +790,7 @@ export const en = {
   'bill.fullName': 'Full name (first and last)',
   'bill.phone': 'Mobile phone',
   'bill.email': 'Receipt to',
-  'bill.termsMonthly': 'I agree to a monthly charge of {price} that renews automatically every month until I cancel. I can cancel at any time on the site; access stays until the end of the month already paid.',
+  'bill.termsMonthly': 'I agree to a monthly charge of {price} that renews automatically every month until I cancel. I can cancel at any time on the site; access stays until the end of the month already paid. The card authorisation is valid for up to 36 months; before it ends I will be asked to confirm it again.',
   'bill.termsYearly': 'I agree to a one-time payment of {price} for 12 months. The plan does not renew by itself; I will get a reminder before it ends.',
   'bill.termsLink': 'Terms of use and cancellation policy',
   'bill.pay': 'Continue to secure payment',

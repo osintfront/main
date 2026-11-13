@@ -12,7 +12,7 @@ import { effectivePlan, loadPlanConfig, PLAN_LABEL, planFeature, usePlanVersion,
 import { INTRO_PRICES, shekels } from '@/content/packages';
 import { SITE_EMAIL } from '@/content/sitePages';
 import { cn } from '@/utils/cn';
-import { BillingCta, CheckoutDialog, OrderBanner, SubscriptionPanel, useBilling } from '@/components/plans/Checkout';
+import { BillingAdminPanel, BillingCta, CheckoutDialog, OrderBanner, SubscriptionPanel, useBilling } from '@/components/plans/Checkout';
 import type { PaidPlan, Period, Quote } from '@/lib/billing';
 import type { PlanId } from '@/types/user';
 
@@ -245,6 +245,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
               />
             ) : null}
             <SubscriptionPanel opts={opts} reload={reload} />
+            <BillingAdminPanel />
           </>
         ) : (
           <ManualNotice />

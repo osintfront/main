@@ -4,7 +4,8 @@
 //   POST /api/billing?action=checkout   { plan, period, fullName, phone }   (Bearer = the user's session)
 //        → the server checks what this user may buy, opens an order, asks Make to create a Grow payment
 //          page for exactly that order, and answers { url, orderId }. The browser goes to the url.
-//   POST /api/billing?action=cancel     (Bearer)  → stops the monthly standing order.
+//   POST /api/billing?action=cancel     (Bearer)  → cancels the monthly subscription (no more charges on our
+//        side; a super admin stops the standing order in Grow, see stopStandingOrder).
 //   POST /api/billing/grow-webhook/<GROW_WEBHOOK_TOKEN>    (rewritten to action=webhook)
 //        → Grow's notifications: first payment, monthly renewals, failed charges.
 //
@@ -161,16 +162,13 @@ async function checkout(req: Request): Promise<Response> {
   return json({ url, orderId: order.order_id, kind: order.kind, creditDays: order.credit_days ?? 0 });
 }
 
-/** Stops a standing order at Grow (through Make). Returns whether Grow confirmed. */
-async function stopStandingOrder(o: Record<string, unknown>): Promise<{ ok: boolean; note: string }> {
-  if (!o.transaction_id) return { ok: false, note: 'no Grow transaction on file' };
-  const r = await make('cancel', {
-    transaction_id: o.transaction_id,
-    transaction_token: o.transaction_token,
-    asmachta: o.asmachta,
-    direct_debit_id: o.direct_debit_id,
-  }, 20_000).catch((e: Error) => ({ ok: false, error: e.message }));
-  return { ok: r.ok === true, note: r.ok === true ? 'stopped in Grow' : `make: ${String(r.error ?? 'failed')}`.slice(0, 200) };
+/**
+ * Stops a standing order at Grow. Grow's Make app cannot do this (its "Make an API Call" module has no
+ * Grow connection), so the subscription is cancelled here and a super admin stops the standing order in
+ * the Grow dashboard (the admin panel on /packages-test lists it). The law allows 3 business days.
+ */
+async function stopStandingOrder(_o: Record<string, unknown>): Promise<{ ok: boolean; note: string }> {
+  return { ok: false, note: 'stop the standing order in the Grow dashboard' };
 }
 
 async function cancel(req: Request): Promise<Response> {
@@ -226,10 +224,8 @@ async function webhook(req: Request, token: string | null): Promise<Response> {
         p_status_text: n.statusText,
         p_payload: payload,
       });
-      if (n.paid) {
-        // Tell Grow we received it (they ask for this after every payment). Needs the full notification.
-        await make('approve', { notification: raw }, 15_000).catch(() => {});
-      }
+      // Grow resends an unacknowledged notification after about 10, 20 and 30 minutes; billing_pay_order is
+      // idempotent, so a repeat changes nothing.
       // An upgrade replaced a monthly plan: its standing order at Grow is stopped so it is not charged again.
       const old = r.cancel_old as Record<string, unknown> | null;
       if (old) {
