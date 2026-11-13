@@ -41,10 +41,10 @@ def utm_window(lat: float, lng: float, ds_transform: Affine, ds_crs, box_px: int
     The point falls in pixel (box_px // 2, box_px // 2) of the window.
     """
     xs, ys = transform_xy(WGS84, ds_crs, [lng], [lat])
-    col, row = ~ds_transform * (xs[0], ys[0])
+    col, row = ~ds_transform @ (xs[0], ys[0])
     col0 = int(math.floor(col)) - box_px // 2
     row0 = int(math.floor(row)) - box_px // 2
-    return col0, row0, ds_transform * Affine.translation(col0, row0)
+    return col0, row0, ds_transform @ Affine.translation(col0, row0)
 
 
 def mercator_grid(src_transform: Affine, src_crs, width: int, height: int) -> tuple[Affine, int, int]:
@@ -56,8 +56,8 @@ def mercator_grid(src_transform: Affine, src_crs, width: int, height: int) -> tu
 
 def grid_bounds(dst_transform: Affine, width: int, height: int) -> tuple[float, float, float, float]:
     """(south, west, north, east) in degrees of a mercator grid's outer corners."""
-    x0, y0 = dst_transform * (0, 0)
-    x1, y1 = dst_transform * (width, height)
+    x0, y0 = dst_transform @ (0, 0)
+    x1, y1 = dst_transform @ (width, height)
     lngs, lats = transform_xy(MERCATOR, WGS84, [x0, x1], [y0, y1])
     return min(lats), min(lngs), max(lats), max(lngs)
 

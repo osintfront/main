@@ -58,7 +58,7 @@ def process(job: dict, cfg: Config, source, engine, sb) -> dict:
     k = engine.scale
     if sr.shape[1:] != (x.shape[1] * k, x.shape[2] * k):
         raise RuntimeError(f"engine returned {sr.shape}, expected ×{k} of {x.shape}")
-    sr_transform = src_transform * Affine.scale(1 / k)
+    sr_transform = src_transform @ Affine.scale(1 / k)
     sr_valid = np.repeat(np.repeat(valid, k, axis=0), k, axis=1)
 
     files: dict[str, bytes] = {}

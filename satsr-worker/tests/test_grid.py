@@ -33,22 +33,22 @@ class GridTest(unittest.TestCase):
         self.assertAlmostEqual((tr.f - TILE_TRANSFORM.f) % 10.0, 0.0, places=6)
         self.assertEqual((tr.a, tr.e), (10.0, -10.0))
         xs, ys = transform_xy(WGS84, UTM36, [LNG], [LAT])
-        c, r = ~tr * (xs[0], ys[0])
+        c, r = ~tr @ (xs[0], ys[0])
         self.assertTrue(128 <= c < 129 and 128 <= r < 129, (c, r))
 
     def _bright_pixel_case(self, scale: int):
         col0, row0, tr = utm_window(LAT, LNG, TILE_TRANSFORM, UTM36, 256)
-        tr = tr * Affine.scale(1 / scale)
+        tr = tr @ Affine.scale(1 / scale)
         n = 256 * scale
         img = np.zeros((3, n, n), np.uint8)
         xs, ys = transform_xy(WGS84, UTM36, [LNG], [LAT])
-        c, r = ~tr * (xs[0], ys[0])
+        c, r = ~tr @ (xs[0], ys[0])
         img[:, int(r), int(c)] = 255
         rgba, dst, bounds = warp_to_mercator(img, tr, UTM36, Resampling.nearest)
         dtr, w, h = dst
         rr, cc = np.nonzero(rgba[..., 0] > 0)
         self.assertGreater(len(rr), 0)
-        px, py = dtr * (cc.mean() + 0.5, rr.mean() + 0.5)
+        px, py = dtr @ (cc.mean() + 0.5, rr.mean() + 0.5)
         tx, ty = to_merc(LAT, LNG)
         res = abs(dtr.a)
         self.assertLess(abs(px - tx), 1.5 * res)
@@ -79,7 +79,7 @@ class GridTest(unittest.TestCase):
         col0, row0, tr = utm_window(LAT, LNG, TILE_TRANSFORM, UTM36, 256)
         lr = np.full((3, 256, 256), 100, np.uint8)
         sr = np.full((3, 1024, 1024), 100, np.uint8)
-        a, dst, b1 = warp_to_mercator(sr, tr * Affine.scale(0.25), UTM36, Resampling.cubic)
+        a, dst, b1 = warp_to_mercator(sr, tr @ Affine.scale(0.25), UTM36, Resampling.cubic)
         b, dst2, b2 = warp_to_mercator(lr, tr, UTM36, Resampling.nearest, dst)
         self.assertEqual(a.shape, b.shape)
         self.assertEqual(dst, dst2)
