@@ -23,7 +23,8 @@ test('every writer stores them and respects hand-set ones', () => {
   for (const f of ['whatsapp-ingest/index.ts', 'event-agent/index.ts', 'intel-crawler/index.ts']) {
     const s = read(f);
     assert.ok(s.includes('secondary_categories'), f);
-    assert.ok(s.includes('manual_secondary'), f);
+    // event-agent obeys the hand-set flag through afterEdit (read fresh after the AI call).
+    assert.ok(s.includes('manual_secondary') || (f === 'event-agent/index.ts' && s.includes('afterEdit(')), f);
   }
 });
 

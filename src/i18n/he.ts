@@ -927,6 +927,7 @@ export const he: Record<TranslationKey, string> = {
   'form.toastSubmitted': 'נשלח לבדיקה.',
   'form.toastPublished': 'פורסם — האירוע מופיע עכשיו במפה הציבורית.',
   'form.toastSaved': 'השינויים נשמרו.',
+  'form.secondaryFailed': 'האירוע נשמר, אבל הסוגים המשניים לא נשמרו. אפשר לנסות לשמור אותם שוב.',
   'form.toastRejected': 'האירוע נדחה.',
   'form.toastArchived': 'האירוע הועבר לארכיון.',
   'form.toastDeleted': 'האירוע נמחק.',

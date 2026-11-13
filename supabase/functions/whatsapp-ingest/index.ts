@@ -11,6 +11,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { inRegion } from "../_shared/region.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor, type EditResult } from "../_shared/editor.ts";
+import { withEditorMain } from "../_shared/secondaryCats.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
@@ -872,14 +873,22 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   };
   // All places the report names (one pin each); the country is the fallback pin.
   update.locations = locationsForDb(edited, 30);
-  // Other kinds of the same incident; lands with the places, before the split.
-  update.secondary_categories = edited.secondary_category_slugs;
+  // Other kinds of the same incident; lands with the places, before the split. The editor's own
+  // Killed / Wounded / Assassination is kept even when triage chose another main type (withEditorMain).
+  const allCats = await categories();
+  const rowSlug = allCats.find((x) => x.id === row.category_id)?.slug ?? null;
+  const types = withEditorMain(rowSlug, edited.category_slug, edited.secondary_category_slugs, allCats.map((x) => x.slug));
+  update.secondary_categories = types.secondary;
+  const newMain = types.main && types.main !== rowSlug ? allCats.find((x) => x.slug === types.main) : undefined;
+  if (newMain) update.category_id = newMain.id;
   if (!row.country && mainCountry(edited)) update.country = mainCountry(edited);
   if (edited.title) update.title = clip(edited.title, 200);
   if (edited.summary) update.description = formatDescription(edited);
   update.translations = translationsFor(edited);
   // Keep sources added meanwhile (duplicates of this event) and add the editor's.
-  const { data: cur } = await db.from("events").select("sources,latitude,longitude,location_name").eq("id", eventId).maybeSingle();
+  const { data: cur } = await db.from("events").select("sources,latitude,longitude,location_name,category_id").eq("id", eventId).maybeSingle();
+  // The type was changed by hand meanwhile: keep the person's main type.
+  if (update.category_id && cur?.category_id !== row.category_id) delete update.category_id;
   const current: any[] = Array.isArray(cur?.sources) ? cur!.sources : [];
   const more = extra.filter((s) => !current.some((c) => (c?.url && s.url ? c.url === s.url : c?.name === s.name)));
   if (more.length) update.sources = [...current, ...more.map((s) => ({ name: s.name, url: s.url, at: null }))].slice(-MAX_SOURCES);
@@ -893,13 +902,13 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   }
   // Text first (fast: no place lookups), then the places — a slow place lookup must never
   // leave the event in its original language.
-  const PLACE_KEYS = ["locations", "secondary_categories", "country", "latitude", "longitude", "location_precision", "geocoding_confidence", "location_name"];
+  const PLACE_KEYS = ["locations", "secondary_categories", "category_id", "country", "latitude", "longitude", "location_precision", "geocoding_confidence", "location_name"];
   // Corrected by hand meanwhile: keep the person's text.
   const { data: man } = await db.from("events").select("ai_suggestions").eq("id", eventId).maybeSingle();
   const TEXT_KEYS = ["title", "description", "translations"];
   const textPart = Object.fromEntries(Object.entries(update).filter(([k]) => !PLACE_KEYS.includes(k) && !(man?.ai_suggestions?.manual_text && TEXT_KEYS.includes(k))));
   // Secondary types set by hand (manual_secondary) are left alone.
-  const placePart = Object.fromEntries(Object.entries(update).filter(([k]) => PLACE_KEYS.includes(k) && !(k === "secondary_categories" && man?.ai_suggestions?.manual_secondary)));
+  const placePart = Object.fromEntries(Object.entries(update).filter(([k]) => PLACE_KEYS.includes(k) && !((k === "secondary_categories" || k === "category_id") && man?.ai_suggestions?.manual_secondary)));
   const { error: textErr } = await db.from("events").update(textPart).eq("id", eventId);
   if (textErr) console.error("editor text update failed", textErr.message);
   let { error } = Object.keys(placePart).length ? await db.from("events").update(placePart).eq("id", eventId) : { error: null };

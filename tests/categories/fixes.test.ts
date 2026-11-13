@@ -26,8 +26,9 @@ test('a place shows its own kind, except under a sticky main type', () => {
 });
 
 test('event-agent re-run leaves a split event\'s secondary types alone', () => {
-  const s = readFileSync('supabase/functions/event-agent/index.ts', 'utf8');
-  assert.match(s, /!ai\?\.manual_secondary && !ai\?\.split_from && !ai\?\.split_into/);
+  // The rule itself lives in afterEdit (tests/categories/afterEdit.test.ts); event-agent obeys it.
+  assert.match(readFileSync('supabase/functions/_shared/afterEdit.ts', 'utf8'), /!now\.manual_secondary && !now\.split_from && !now\.split_into/);
+  assert.match(readFileSync('supabase/functions/event-agent/index.ts', 'utf8'), /if \(now\.writeSecondary\) update\.secondary_categories/);
 });
 
 test('SQL test checks that a non-member reads no archive rows', () => {
@@ -38,4 +39,15 @@ test('editor page saves the single (relabelled) part, not the raw form', () => {
   const s = readFileSync('src/pages/admin/EventEditorPage.tsx', 'utf8');
   assert.match(s, /const one = parts\[0\] \?\? input;/);
   assert.match(s, /createEvent\(one, target, notes\)/);
+});
+
+test('a failed secondary-type save after the event saved is a warning, not a failed save', async () => {
+  const { saveSecondary } = await import('../../src/lib/secondarySave.ts');
+  const warned: string[] = [];
+  assert.equal(await saveSecondary(async () => {}, () => warned.push('w')), true);
+  assert.equal(await saveSecondary(async () => { throw new Error('rpc down'); }, () => warned.push('w')), false);
+  assert.deepEqual(warned, ['w']);
+  const { readFileSync } = await import('node:fs');
+  const page = readFileSync('src/pages/admin/EventEditorPage.tsx', 'utf8');
+  assert.equal((page.match(/await setEventSecondaryCategories\(/g) ?? []).length, 0, 'every call goes through saveSecondary');
 });
