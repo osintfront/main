@@ -1223,6 +1223,9 @@ export const he: Record<TranslationKey, string> = {
   'planCard.rateLimited': 'יותר מדי ניסיונות. נסו שוב בעוד רבע שעה.',
   'planCard.invalid': 'המפתח לא תקין או שכבר נוצל.',
   'planCard.failed': 'ההפעלה נכשלה. נסו שוב.',
+  'planCard.paidActive': 'יש לכם מנוי בתשלום פעיל, ולכן מפתח רישוי לא יכול לשנות אותו.',
+  'planCard.planActive': 'התוכנית שלכם ללא תפוגה, ולכן מפתח רישוי לא יכול להחליף אותה.',
+  'planCard.otherActive': 'יש לכם תוכנית אחרת פעילה. אפשר להשתמש במפתח אחרי שתסתיים.',
   'planCard.activate': 'הפעלת רישיון',
 
   'map.northUp': 'צפון למעלה',

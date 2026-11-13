@@ -1221,6 +1221,9 @@ export const en = {
   'planCard.rateLimited': 'Too many attempts. Try again in 15 minutes.',
   'planCard.invalid': 'This key is invalid or has already been used.',
   'planCard.failed': 'Activation failed. Please try again.',
+  'planCard.paidActive': 'You have an active paid plan, so a license key cannot change it.',
+  'planCard.planActive': 'Your plan does not expire, so a license key cannot replace it.',
+  'planCard.otherActive': 'You have another plan running. The key can be used after it ends.',
   'planCard.activate': 'Activate license',
 
   'map.northUp': 'North up',

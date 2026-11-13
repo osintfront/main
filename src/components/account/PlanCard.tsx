@@ -4,6 +4,14 @@ import { effectivePlan, PLAN_LABEL } from '@/lib/plans';
 import { redeemLicense } from '@/services/planService';
 import { useI18n } from '@/i18n';
 
+/** Redeem errors from the redeem_license RPC, as translation keys. Unknown codes fall back to "invalid". */
+const REDEEM_ERROR_KEY: Record<string, 'planCard.rateLimited' | 'planCard.paidActive' | 'planCard.planActive' | 'planCard.otherActive'> = {
+  rate_limited: 'planCard.rateLimited',
+  paid_plan_active: 'planCard.paidActive',
+  plan_active: 'planCard.planActive',
+  other_plan_active: 'planCard.otherActive',
+};
+
 /** Account settings: the current plan, and redeeming an eval license key. */
 export function PlanCard() {
   const { profile, refreshProfile } = useAuth();
@@ -27,7 +35,7 @@ export function PlanCard() {
         try {
           const r = await redeemLicense(key);
           if (r.ok) { setMsg({ ok: true, text: t('planCard.activated', { plan: PLAN_LABEL[r.plan!], date: date(r.expires_at!) }) }); setKey(''); await refreshProfile(); }
-          else setMsg({ ok: false, text: r.error === 'rate_limited' ? t('planCard.rateLimited') : t('planCard.invalid') });
+          else setMsg({ ok: false, text: t(REDEEM_ERROR_KEY[r.error ?? ''] ?? 'planCard.invalid') });
         } catch { setMsg({ ok: false, text: t('planCard.failed') }); } finally { setBusy(false); }
       }}>
         <input dir="ltr" value={key} onChange={(e) => setKey(e.target.value)} placeholder="OSF-PRO-14-XXXX-XXXX" maxLength={40}
