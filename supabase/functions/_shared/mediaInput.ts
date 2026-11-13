@@ -26,6 +26,7 @@ export const MEDIA_LIMITS = {
   inFlight: 2,
   reserveUsd: 0.1,
   retryMin: 10,
+  speechTries: 2, // route failures before an 'off' video stops counting as new media
 } as const;
 
 export type SpeechState = 'ok' | 'none' | 'unreadable' | 'too_big' | 'too_long' | 'unavailable' | 'off' | 'limit';
@@ -66,10 +67,18 @@ export function mediaItems(rows: MediaRow[]): MediaItem[] {
 }
 
 /** The items a run reads: not read yet, or speech left 'off' while speech is now on; all on redo; at most 8. */
-export function pickTodo(items: MediaItem[], readings: { media_id: string; speech_state: string | null }[], o: { speechOn: boolean; redo: boolean }): MediaItem[] {
+export function pickTodo(
+  items: MediaItem[],
+  readings: { media_id: string; speech_state: string | null; speech_tries?: number }[],
+  o: { speechOn: boolean; redo: boolean },
+): MediaItem[] {
   if (o.redo) return items.slice(0, MEDIA_LIMITS.items);
-  const read = new Map(readings.map((r) => [r.media_id, r.speech_state]));
-  return items.filter((i) => !read.has(i.id) || (o.speechOn && i.kind === 'video' && read.get(i.id) === 'off')).slice(0, MEDIA_LIMITS.items);
+  const read = new Map(readings.map((r) => [r.media_id, r]));
+  const retry = (id: string) => {
+    const r = read.get(id);
+    return r?.speech_state === 'off' && (r.speech_tries ?? 0) < MEDIA_LIMITS.speechTries;
+  };
+  return items.filter((i) => !read.has(i.id) || (o.speechOn && i.kind === 'video' && retry(i.id))).slice(0, MEDIA_LIMITS.items);
 }
 
 /** What to do about one video's speech. */
@@ -82,7 +91,7 @@ export function speechPlan(item: MediaItem, o: { speechOn: boolean; videosSoFar:
   return 'unavailable';
 }
 
-export interface RouteSpeech { state: SpeechState; lang: string; seconds: number | null; speech: string; onScreen: string[]; cut: boolean }
+export interface RouteSpeech { state: SpeechState; lang: string; seconds: number | null; speech: string; onScreen: string[]; cut: boolean; tries?: number }
 
 const lang = (v: unknown) => (typeof v === 'string' && /^[a-z]{2,3}$/.test(v.trim().toLowerCase()) ? v.trim().toLowerCase() : 'und');
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -193,6 +202,7 @@ export function mediaUserContent(event: { title: string; summary: string }, item
 export interface TextPair { orig: string; lang: string; he: string; en: string; where_he: string; where_en: string; from: 'frame' | 'video' }
 export interface SavedSpeech {
   state: SpeechState; lang: string; seconds: number | null; orig: string; he: string; en: string; summary_he: string; summary_en: string; cut: boolean;
+  tries?: number; // route failures so far (an 'off' after a failure only)
 }
 export interface CleanReading {
   media_id: string; kind: 'image' | 'video'; description_he: string; description_en: string; texts: TextPair[]; speech: SavedSpeech | null;
@@ -225,7 +235,7 @@ function cleanSpeechPart(route: RouteSpeech, raw: unknown): SavedSpeech {
     state: route.state, lang: route.lang, seconds: route.seconds, orig: route.state === 'ok' ? route.speech : '', he: '', en: '',
     summary_he: '', summary_en: '', cut: route.cut,
   };
-  if (route.state !== 'ok') return { ...base, orig: '' };
+  if (route.state !== 'ok') return route.state === 'off' && route.tries ? { ...base, orig: '', tries: route.tries } : { ...base, orig: '' };
   const r = raw && typeof raw === 'object' ? (raw as any) : {};
   if (r.has_speech === false) return { ...base, state: 'none', orig: '', cut: false };
   const heRaw = typeof r.he === 'string' ? r.he.trim() : '';
@@ -305,9 +315,9 @@ export function speechBudgetMs(deadline: number, now: number): number {
   return ms < 15000 ? 0 : ms;
 }
 
-/** A failed route call leaves that video's speech 'off' (retried once speech works), and the run goes on. */
-export function routeOutcome(sp: RouteSpeech | 'failed'): RouteSpeech {
-  return sp === 'failed' ? { state: 'off', lang: 'und', seconds: null, speech: '', onScreen: [], cut: false } : sp;
+/** A failed route call leaves that video's speech 'off' with one more try counted, and the run goes on. */
+export function routeOutcome(sp: RouteSpeech | 'failed', prevTries = 0): RouteSpeech {
+  return sp === 'failed' ? { state: 'off', lang: 'und', seconds: null, speech: '', onScreen: [], cut: false, tries: prevTries + 1 } : sp;
 }
 
 /** Why a speech-route call gave no speech (null when it answered with a known state). Never speech text. */

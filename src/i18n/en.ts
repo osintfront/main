@@ -779,6 +779,7 @@ export const en = {
   'mt.retry': "Try again",
   'mt.noMedia': "This event has no picture or video to translate.",
   'mt.aiLine': "Made by AI — may contain mistakes. People are described, not identified.",
+  'mt.staffNote': "Speech (staff): {note}",
   'mt.redo': "Run again",
   'mt.redoConfirm': "Run again with AI — the saved translation will be replaced",
   'mt.lang.ar': "Arabic",

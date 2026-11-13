@@ -15,6 +15,8 @@ export interface MediaReadingItem {
 }
 export interface MediaTranslation {
   items: MediaReadingItem[]; todo: number; working: boolean; failed: boolean; staff: boolean; used: number; limit: number | null; budgetLeft: boolean;
+  /** Staff only: why the last run's video speech was not read. */
+  speechNote: string | null;
 }
 
 type Obj = Record<string, unknown>;
@@ -56,6 +58,7 @@ export function mapTranslation(raw: unknown): MediaTranslation | null {
     items, todo: count(raw.todo), working: raw.working === true, failed: raw.failed === true, staff: raw.staff === true,
     used: count(raw.used), limit: typeof raw.limit === 'number' && Number.isFinite(raw.limit) ? raw.limit : null,
     budgetLeft: 'budget_left' in raw ? raw.budget_left === true : true,
+    speechNote: typeof raw.speech_note === 'string' && raw.speech_note.trim() ? raw.speech_note.trim().slice(0, 300) : null,
   };
 }
 

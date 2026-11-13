@@ -224,3 +224,19 @@ test('cleanReading: bare numbers are not texts to translate', () => {
   const r = cleanReading({ items: [{ n: 1, description_he: 'מפה', description_en: 'A map', texts: [pair('64'), pair('27 · 3'), pair('C-130'), pair('تزويد بالوقود')] }] }, [pic])!;
   assert.deepEqual(r[0].texts.map((t) => t.orig), ['C-130', 'تزويد بالوقود']);
 });
+
+test('retry cap: a route failure counts a try; an off video is new again only while tries < 2', async () => {
+  const { routeOutcome } = await import('../../supabase/functions/_shared/mediaInput.ts');
+  assert.equal(routeOutcome('failed').tries, 1);
+  assert.equal(routeOutcome('failed', 1).tries, 2);
+  const v = { id: 'v', kind: 'video', imageUrl: null, videoUrl: 'https://x/v.mp4', videoBytes: 1, fetchable: false, videoState: null } as MediaItem;
+  const todo = (tries: number | undefined) => pickTodo([v], [{ media_id: 'v', speech_state: 'off', speech_tries: tries }], { speechOn: true, redo: false }).length;
+  assert.equal(todo(undefined), 1, 'off because the switch was off: new once speech is on');
+  assert.equal(todo(1), 1, 'one failure: one more try');
+  assert.equal(todo(2), 0, 'two failures: no more paid retries');
+  // the saved speech keeps the count only for an off answer
+  const sent: SentItem = { n: 1, id: 'v', kind: 'video', imageUrl: null, speech: routeOutcome('failed', 1) };
+  const r = cleanReading({ items: [{ n: 1, description_he: 'ו', description_en: 'v' }] }, [sent])!;
+  assert.equal(r[0].speech!.state, 'off');
+  assert.equal(r[0].speech!.tries, 2);
+});

@@ -103,6 +103,18 @@ begin
   r := public.media_translation(ev);
   reset role;
   if (r->>'todo')::int <> 2 then raise exception 'todo with speech on: %', r; end if;
+  -- retry cap (128): after two route failures the 'off' video is no longer new media
+  update public.media_readings set speech = '{"state":"off","tries":1}' where media_id = s;
+  set local role authenticated;
+  r := public.media_translation(ev);
+  reset role;
+  if (r->>'todo')::int <> 2 then raise exception 'one failure still retried: %', r; end if;
+  update public.media_readings set speech = '{"state":"off","tries":2}' where media_id = s;
+  set local role authenticated;
+  r := public.media_translation(ev);
+  reset role;
+  if (r->>'todo')::int <> 1 then raise exception 'two failures not capped: %', r; end if;
+  update public.media_readings set speech = '{"state":"off"}' where media_id = s;
   update public.app_settings set value = 'false'::jsonb where key = 'media_audio_enabled';
 
   -- a vanished item's saved row is hidden
@@ -135,6 +147,18 @@ begin
   r := public.media_translation(ev);
   reset role;
   if not (r->>'budget_left')::boolean or not (r->>'staff')::boolean or r->>'limit' is not null then raise exception 'staff view: %', r; end if;
+  -- the speech note (128): staff see it, readers get null
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  update public.media_jobs set speech_note = 'route 502 busy' where event_id = ev;
+  perform set_config('request.jwt.claims', json_build_object('sub', an, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  if public.media_translation(ev)->>'speech_note' is distinct from 'route 502 busy' then raise exception 'staff note missing'; end if;
+  reset role;
+  perform set_config('request.jwt.claims', json_build_object('sub', pro, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  if jsonb_typeof(public.media_translation(ev)->'speech_note') <> 'null' then raise exception 'reader sees the note'; end if;
+  reset role;
   perform set_config('request.jwt.claims', '', true);
 
   -- in flight: one staff lease and one reader lease

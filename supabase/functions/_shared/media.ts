@@ -37,7 +37,10 @@ export async function speechOn(db: Db): Promise<boolean> {
 const MEDIA_COLS = "id,kind,public_url,bytes,thumb_id,source_msg_key,source_url,video_state,ready,created_at";
 
 /** The event's items and the saved readings' speech states (by media id: a merged event's media keeps its readings). */
-export async function loadItems(db: Db, eventId: string): Promise<{ items: MediaItem[]; readings: { media_id: string; speech_state: string | null }[] }> {
+export async function loadItems(
+  db: Db,
+  eventId: string,
+): Promise<{ items: MediaItem[]; readings: { media_id: string; speech_state: string | null; speech_tries: number }[] }> {
   const { data: rows } = await db.from("event_media").select(MEDIA_COLS).eq("event_id", eventId);
   const items = mediaItems((rows ?? []) as MediaRow[]);
   const { data: reads } = items.length
@@ -45,7 +48,7 @@ export async function loadItems(db: Db, eventId: string): Promise<{ items: Media
     : { data: [] };
   return {
     items,
-    readings: ((reads ?? []) as any[]).map((r) => ({ media_id: r.media_id, speech_state: r.speech?.state ?? null })),
+    readings: ((reads ?? []) as any[]).map((r) => ({ media_id: r.media_id, speech_state: r.speech?.state ?? null, speech_tries: Number(r.speech?.tries ?? 0) || 0 })),
   };
 }
 
@@ -118,6 +121,7 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
   let cost = 0;
   let ok = false;
   let speechNote: string | null = null;
+  let hadVideo = false;
   try {
     const on = await speechOn(db);
     const { items, readings } = await loadItems(db, job.eventId);
@@ -168,7 +172,7 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
           const r = ms ? await speechFor(url, purpose, ms) : { out: "failed" as const, note: "skipped: no time left for the route" };
           note(item.id, r.note);
           if (r.out !== "failed") videosSoFar++;
-          s.speech = routeOutcome(r.out);
+          s.speech = routeOutcome(r.out, readings.find((x) => x.media_id === item.id)?.speech_tries ?? 0);
         } else {
           s.speech = noSpeech(plan === "route" ? "unavailable" : plan);
         }
@@ -176,6 +180,7 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
       sent.push(s);
     }
     speechNote = speechNotes(notes);
+    hadVideo = todo.some((t) => t.kind === "video");
 
     let raw: unknown = { items: [] };
     let model = MEDIA_MODELS[0];
@@ -217,6 +222,10 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
   } catch (e) {
     console.warn("media translate failed", job.eventId, String((e as Error)?.message ?? e).slice(0, 300));
   } finally {
+    // Staff see why video speech was not read (best effort; works before migration 128 too).
+    if (hadVideo) {
+      await db.from("media_jobs").update({ speech_note: speechNote }).eq("event_id", job.eventId).eq("busy_token", job.token).then(() => {}, () => {});
+    }
     // Ending the lease first: when it is no longer ours, the stale-lease takeover already gave the use back.
     const { data: owned, error } = await db.rpc("media_done", { p_event: job.eventId, p_token: job.token, p_fail: ok ? null : "failed", p_cost: cost });
     if (error) console.warn("media_done", error.message);

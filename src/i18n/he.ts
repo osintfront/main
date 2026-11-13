@@ -781,6 +781,7 @@ export const he: Record<TranslationKey, string> = {
   'mt.retry': "נסו שוב",
   'mt.noMedia': "לאירוע הזה אין תמונה או סרטון לתרגום.",
   'mt.aiLine': "נוצר בידי AI — ייתכנו טעויות. אנשים מתוארים, לא מזוהים.",
+  'mt.staffNote': "דיבור (צוות): {note}",
   'mt.redo': "הרץ שוב",
   'mt.redoConfirm': "הרצה חוזרת עם AI — התרגום השמור יוחלף",
   'mt.lang.ar': "ערבית",

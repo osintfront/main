@@ -78,3 +78,9 @@ test('buttonState', () => {
   assert.equal(b({ data: { ...data, todo: 0 } }), 'show');
   assert.equal(b({ data: { ...data, todo: 2 } }), 'show_more');
 });
+
+test('mapTranslation: the staff speech note', () => {
+  assert.equal(mapTranslation({ items: [], speech_note: ' route 502 busy ' })!.speechNote, 'route 502 busy');
+  for (const v of [undefined, 5, '']) assert.equal(mapTranslation({ items: [], speech_note: v })!.speechNote, null);
+  assert.equal(mapTranslation({ items: [], speech_note: 'x'.repeat(1000) })!.speechNote!.length, 300);
+});

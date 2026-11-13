@@ -55,7 +55,7 @@ test('the time mismatch, pinned', () => {
 
 test('wiring', () => {
   const job = read('supabase/functions/_shared/media.ts');
-  for (const w of ['budget_ms', 'routeNote(', 'speechNotes(', '"media speech"']) assert.ok(job.includes(w), w);
+  for (const w of ['budget_ms', 'routeNote(', 'speechNotes(', '"media speech"', 'speech_note']) assert.ok(job.includes(w), w);
   const route = read('api/transcribe.ts');
   for (const w of ['routeDeadlineMs(', 'busyDetail(', 'detail']) assert.ok(route.includes(w), w);
   assert.ok(!/console\.(log|warn)\([^)]*speech[^_]/.test(route), 'no speech text in route logs');

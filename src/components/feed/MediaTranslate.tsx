@@ -179,6 +179,11 @@ export function useMediaTranslate(event: PublicEvent, expandOpen: boolean): { bu
               </button>
             ) : null}
           </p>
+          {staff && data.speechNote ? (
+            <p data-mt-staff-note className="text-[11px] text-amber-700 dark:text-amber-300">
+              {t('mt.staffNote', { note: data.speechNote })}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>
