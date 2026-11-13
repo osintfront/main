@@ -1,4 +1,4 @@
-import { memo, type CSSProperties, type MouseEvent } from 'react';
+import { memo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { Crosshair, ExternalLink, FileText, MapPin, MapPinOff, Star } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
@@ -9,6 +9,7 @@ import { hostnameOf } from '@/utils/url';
 import { BreakingBadge, CategoryBadge, SecondaryBadges, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
 import { EventText, eventTexts } from './EventText';
+import { useMediaTranslate } from './MediaTranslate';
 import { whereLabel } from '@/utils/places';
 
 interface EventCardProps {
@@ -94,7 +95,7 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
       <h3 className="mt-2 text-[15px] font-semibold leading-snug text-slate-900 dark:text-white" dir="auto">
         {title}
       </h3>
-      <EventText event={event} compact />
+      <CardText event={event} />
 
       <EventMedia eventId={event.id} occurredAt={event.occurredAt} kinds={event.mediaKinds} />
 
@@ -190,3 +191,10 @@ function EventCardImpl({ event, selected, now, onLocate, isNew = false, onOpenDe
 }
 
 export const EventCard = memo(EventCardImpl);
+
+/** The card's text with "Translate image/video" after Expand (as in the details window). */
+function CardText({ event }: { event: PublicEvent }) {
+  const [expOpen, setExpOpen] = useState(false);
+  const mt = useMediaTranslate(event, expOpen);
+  return <EventText event={event} compact onExpandedChange={setExpOpen} expandButtons={mt.button} expandPanel={mt.panel} />;
+}

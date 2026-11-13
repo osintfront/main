@@ -19,6 +19,7 @@ import { DeepEntryDialog, type DeepTarget } from './DeepEntryDialog';
 import { segmentsInOrder, selectionTerm, type EventTerm } from '@/lib/deepTerms';
 import { fetchEventTerms } from '@/services/deepService';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useMediaTranslate } from './MediaTranslate';
 
 interface EventDetailsDialogProps {
   event: PublicEvent;
@@ -53,6 +54,10 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
   const [terms, setTerms] = useState<EventTerm[]>([]);
   const [deep, setDeep] = useState<DeepTarget | null>(null);
   const [analyze, setAnalyze] = useState<{ text: string; x: number; y: number } | null>(null);
+  // Media translation: a button and a panel under the expansion while it is open.
+  const [expOpen, setExpOpen] = useState(false);
+  useEffect(() => setExpOpen(false), [event.id]);
+  const mt = useMediaTranslate(event, expOpen);
   const textArea = useRef<HTMLDivElement>(null);
   const headArea = useRef<HTMLHeadingElement>(null);
   const termsFor = useRef(event.id);
@@ -203,7 +208,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
             </ul>
           ) : null}
           <div ref={textArea} onContextMenu={onContextMenu}>
-            <EventText event={event} terms={terms} usedTerms={headlineUsed} onTerm={onTerm} />
+            <EventText event={event} terms={terms} usedTerms={headlineUsed} onTerm={onTerm} onExpandedChange={setExpOpen} expandButtons={mt.button} expandPanel={mt.panel} />
           </div>
           {related && related.length ? (
             <section aria-labelledby="event-related-title" className="mt-4 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">

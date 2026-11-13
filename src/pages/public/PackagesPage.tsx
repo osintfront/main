@@ -170,6 +170,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
     { label: t('pk.c.search'), cell: (p) => (on(p, 'feed_search') ? true : p === 'guest' ? false : t('pk.c.categories')) },
     { label: t('pk.c.eei'), cell: (p) => on(p, 'eei_text') },
     { label: t('pk.c.deep'), cell: perDay('deep_analysis') },
+    { label: t('pk.c.mediaTranslate'), cell: perDay('media_translate') },
     { label: t('pk.c.sets'), cell: (p) => (on(p, 'filter_sets') ? String(lim(p, 'filter_sets') ?? 6) : false) },
     { label: t('pk.c.archive'), cell: (p) => { const f = planFeature(p, 'archive_days'); if (!f?.enabled || f.limit === 0) return false; return f.limit == null ? t('pk.c.unlimited') : f.limit === 1 ? t('pk.c.oneDay') : t('pk.c.days', { n: f.limit }); } },
     { label: t('pk.c.push'), cell: (p) => (!on(p, 'push') ? false : lim(p, 'push') === 4 ? t('pk.c.criticalOnly') : lim(p, 'push') === 3 ? t('pk.c.highUp') : t('pk.c.allLevels')) },

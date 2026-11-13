@@ -21,6 +21,7 @@ const FILES = [
   'src/components/admin/SecondaryTypesField.tsx',
   'src/components/feed/TermText.tsx',
   'src/components/feed/DeepEntryDialog.tsx',
+  'src/components/feed/MediaTranslate.tsx',
   'src/components/common/InfoTip.tsx',
   'src/pages/admin/AccountPage.tsx',
 ];
