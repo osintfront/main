@@ -1,4 +1,4 @@
-# Truth score (source-confirmation %) — design (draft for the owner, 2026-11-13; NOT approved yet)
+# Truth score (source-confirmation %) — design (approved by the owner 2026-11-13: "מאשר הכל")
 
 Owner's request (ציון אמיתות): every event / news item carries a percentage. In his words:
 1. Heavy weight for official channels — IDF Spokesperson, CENTCOM and similar government / military sources.
@@ -10,11 +10,14 @@ Owner's request (ציון אמיתות): every event / news item carries a perce
 6. (added the same day) Visual evidence counts: footage (תיעודים) and photos attached to the
    event raise the score; the same picture reposted by many channels counts once; an old picture
    seen before on another event gives nothing and lowers the score.
+7. (added after approval) "Official" must cover the official channels of **every country we
+   cover**, not only Israel and the US — see "Official sources by country".
 
 Owner: Ben. Planner: Fable (this spec). Implementation: Opus, only after the owner approves.
 Branch `feat/truth-score` (from main c87c1d0). The owner could not be asked questions while this was
-written: every call below is the planner's, and the ones only he can make are listed at the end
-under **Open decisions**, each with a recommended default. No implementation plan yet.
+written; the thirteen calls only he could make were put to him with a recommended default each and
+he approved all of them (last section). He then added requirement 7. Plan:
+`docs/superpowers/plans/2026-11-13-truth-score.md`.
 
 ## Goal
 1. Every published event gets a score from 5 to 99, computed by plain code (no AI) from who
@@ -60,7 +63,7 @@ under **Open decisions**, each with a recommended default. No implementation pla
   two different outlets of `mainstream_outlet(name, url)` appear. It matches on the *name*, so a
   channel that only writes "/ Reuters" counts as Reuters. Of 349 ticks in 14 days, about 23 (7%)
   rest on a cited name and not on the outlet itself. This spec does not change the tick (see
-  Open decisions 7).
+  decision 7).
 - Money: editing costs about $20 a day today (`ai_usage`, purpose `edit`); a Haiku 5.5 call for
   classification costs about $0.0005. Budgets live in `app_settings` (`deep_daily_budget_usd`,
   `eei_daily_budget_usd`); plans in `plan_features` (`guest`, `free`, `pro`, `max`, `intel`).
@@ -86,7 +89,7 @@ under **Open decisions**, each with a recommended default. No implementation pla
 - **What the number means: how well the report is confirmed by sources — not "this is true".**
   The UI name is "אימות מקורות" / "Source confirmation" with the percentage, and every breakdown
   ends with a fixed sentence saying so. The owner's working name "ציון אמיתות" stays internal
-  (Open decisions 1). The score never shows 0 or 100: it is kept between 5 and 99.
+  (decision 1). The score never shows 0 or 100: it is kept between 5 and 99.
 - **A source is recognised by its key:** `tg:<username>` from a `t.me` link, `web:<domain>` from
   any other link (without `www.`, `m.`, `english.`, `arabic.`, `edition.`), `name:<normalised
   name>` only when there is no link. Five posts of one channel are one source.
@@ -99,7 +102,11 @@ under **Open decisions**, each with a recommended default. No implementation pla
   `mainstream` — news agencies and established newsrooms; `state_media` — a state's news agency or
   channel (IRNA, SANA, Press TV); `partisan` — a party's or armed group's own media and channels
   aligned with one side (Hezbollah military media, Al Mayadeen, Hamas channels); `unknown` — the
-  rest. Armed groups' official outlets are `partisan`, not `official` (Open decisions 3).
+  rest. Hezbollah's, Hamas's and the Houthis' own outlets are `partisan`, not `official`, even
+  where they run a de-facto government; the IRGC is a state military and is `official`.
+- **Only approved rows count.** Every outlet row has a `status`: `approved` (counts),
+  `suggested` (the handle is verified, waiting for a staff yes) or `to_check` (the handle itself
+  still has to be verified by a person). A row that is not approved scores as `unknown`.
 - **Side (per outlet):** `israel`, `west` (US, Europe), `axis` (Iran, Hezbollah, Hamas, Houthis,
   Iraqi militias and their media), `arab` (Lebanese, Syrian, Palestinian, Gulf, pan-Arab not in
   the axis), `neutral` (news agencies, UN bodies), `unknown`. Opposing pairs: israel–axis,
@@ -124,8 +131,8 @@ under **Open decisions**, each with a recommended default. No implementation pla
      with a side, so an Israeli channel relaying "reports in Lebanon" is not counted as an
      Israeli confirmation.
   4. **Copy:** sources with the same text key (`tk`, the first 400 characters normalised and
-     hashed — the rule `telegram-worker` already uses to drop copies) or a "forwarded from" name
-     are one origin: the earliest, or the channel it was forwarded from.
+     hashed — the rule `telegram-worker` already uses to drop copies) are one origin: the
+     earliest. A "forwarded from" name is treated like a cited outlet (rule 3).
   5. **No link, no credit:** a source without a link (for example a name the editor wrote from
      the text) is a citation of that outlet, never an origin of a high class.
   6. A cited name that matches no outlet is ignored and the source stands for itself.
@@ -190,7 +197,7 @@ under **Open decisions**, each with a recommended default. No implementation pla
   - **Old picture penalty (part G), −6 once:** the event has an *old* picture and no *new* one.
     When new footage sits next to an old picture, the old one is taken as illustration: no credit
     for it, no penalty. Why not harsher: outlets attach file photos as a matter of routine, and
-    our memory of pictures starts on 2026-10-20 (Open decisions 12).
+    our memory of pictures starts on 2026-10-20 (decision 12).
   - **Does the footage show this place? Only from data that already exists — no new paid call.**
     A small table `truth_media_checks` holds a verdict per picture: `match`, `mismatch`,
     `illustration`. Three writers: (1) staff, by hand, in the event editor; (2) terrain
@@ -205,6 +212,44 @@ under **Open decisions**, each with a recommended default. No implementation pla
     queue and the 5-minute tick recomputes each queued event once.
   - **Dark or blank frames** (a `phash` with fewer than 8 or more than 56 bits set) are compared
     by `sha256` only, so two black video stills are not called the same picture.
+- **Official sources by country (requirement 7).** Every outlet has a `country`. The covered
+  countries are a list (`truth_countries`): Israel, USA, Lebanon, Syria, Iraq, Iran, Yemen, Saudi
+  Arabia, Jordan, Egypt, UAE, Qatar, Kuwait, Bahrain, Oman, Turkey, Cyprus, Palestinian Authority
+  (planner's addition, for the owner to keep or remove), and "international bodies".
+  - **Seed = a suggested list, not a decision.** Approved from the start (named by the owner and
+    present in our own channel table): IDF Spokesperson `tg:idf_telegram`, CENTCOM
+    `tg:U_S_CENTCOM`, Israel Police `tg:Israel_Police_100`, Home Front Command
+    `tg:PikudHaOref_all`. Everything else is seeded `suggested` or `to_check`:
+
+    | Country | Suggested (handle seen in our tables or a well-known official site) | To check (handle not verified) |
+    |---|---|---|
+    | Israel | PMO `web:gov.il`, IDF `web:idf.il`, Home Front `web:oref.org.il` | `tg:mossad_telegram` (claims to be official), X handles |
+    | USA | CENTCOM `web:centcom.mil`, State Department `web:state.gov` | Department of Defense site (`defense.gov` / `war.gov`), X handles |
+    | Lebanon | Army `web:lebarmy.gov.lb`, NNA `web:nna-leb.gov.lb` (state agency) | Prime Minister's office, Health Ministry, their Telegram / X |
+    | Syria | SANA `tg:sana_gov`, `web:sana.sy` (state agency); Daraa and Quneitra governorates `tg:DaraaGov1`, `tg:QuneitraGov1` | Defense Ministry |
+    | Iraq | — | Joint Operations Command / Security Media Cell, PMO, INA (state agency) |
+    | Iran | IRNA `tg:Irna_en`, `tg:irna_1313`, `web:irna.ir` (state agency) | Government, Foreign Ministry, IRGC (`tg:sepah_pasdaran` and the other "sepah" channels we know claim it) |
+    | Yemen (recognised government) | Saba `web:sabanew.net` (state agency) | Government and army spokesman; `tg:Saba_Newsye` — which Saba is it? (`saba.ye` is the Houthi-run one → partisan) |
+    | Saudi Arabia | SPA `web:spa.gov.sa` (state agency) | Defense Ministry, coalition spokesperson |
+    | Jordan | Petra `web:petra.gov.jo` (state agency) | Armed forces, government |
+    | Egypt | — | Military spokesman, Foreign Ministry, MENA (state agency) |
+    | UAE, Qatar, Kuwait, Bahrain, Oman | WAM `web:wam.ae`, QNA `web:qna.org.qa`, KUNA `web:kuna.net.kw`, BNA `web:bna.bh`, ONA `web:omannews.gov.om` (state agencies) | Each foreign and defense ministry |
+    | Turkey | Defense Ministry `web:msb.gov.tr` | Its X account, Anadolu (state agency) |
+    | Cyprus | — | Defense Ministry, Press and Information Office |
+    | Palestinian Authority | — | Government, WAFA (state agency) |
+    | International bodies | UNIFIL `tg:UNIFIL_Lebanon`, `web:unifil.unmissions.org`; IAEA `web:iaea.org`; UN `web:un.org` | X handles |
+
+    Sides: Israel → `israel`; USA, Cyprus → `west`; Iran → `axis`; Lebanon, Syria, Iraq, Yemen
+    government, Saudi Arabia, Jordan, Egypt, the Gulf states, Palestinian Authority → `arab`;
+    Turkey and international bodies → `neutral`. Language per key.
+  - **X accounts** get keys of the form `x:<handle>` (from `x.com` / `twitter.com` links). We do
+    not collect X, so an X key matters only when a link to it appears among an event's sources.
+  - **Coverage gaps.** A country with no approved `official` outlet that we can actually read
+    (a Telegram channel or a feed) is a gap. The admin section shows one row per country:
+    approved officials, how many of them are readable, suggested and to-check counts, and a
+    **"no official source yet"** mark. Staff can write a gap note per country ("no Telegram
+    channel exists", "looked on 14 Nov, nothing reliable") and tick "checked", so a known gap
+    stops looking like forgotten work.
 - **No decay with time.** The score changes only when the sources, a citation result, the tick or
   the override change. Why: half of our events are small local reports nobody else will ever
   repeat; lowering them by the clock would punish them for being local. An archived event keeps
@@ -222,7 +267,7 @@ under **Open decisions**, each with a recommended default. No implementation pla
   score" with presets *Confirmed by the desk (95)*, *Disputed (10, red)*, a free number, and a
   required note; "Clear" returns to the computed score. Stored on the event, written to
   `event_history`. The public breakdown then says "Set by the editorial desk".
-- **Plans (Open decisions 5):** two keys. `truth_score` = the badge: guest off (locked chip →
+- **Plans (decision 5):** two keys. `truth_score` = the badge: guest off (locked chip →
   sign-up), **Free, Pro, Max, Intel on**. `truth_detail` = the "why" list and the minimum-score
   filter: guest and Free off (→ upgrade window), **Pro, Max, Intel on**. Staff: always
   everything. Names and links inside the breakdown follow the existing `sources_detail` and
@@ -295,11 +340,18 @@ highest severity first, at most 20 pairs per run.
 ## Data model
 Migrations, next free numbers after `20261113000125` (the words `drop` / `delete` kept out of the
 first file, as in deep analysis — see Rollout):
-`…126_truth_score.sql` (tables, columns, functions, trigger, settings, plan rows, seed),
-`…127_truth_views.sql` (the two public views), `…128_truth_fk_cron.sql` (foreign keys, cron).
+`…126_truth_core.sql` (the list and state tables and the pure formula — touches no existing
+table, so it also loads in a local test database), `…127_truth_seed.sql` (countries, outlets,
+keys), `…128_truth_wiring.sql` (event columns, triggers, functions, settings, plan rows),
+`…129_truth_views.sql` (the two public views), `…130_truth_owner.sql` (foreign keys, the trigger
+for removed pictures, cron — run by the owner).
 
+- `truth_countries` — `code text primary key` (`il`, `us`, `lb`, `sy`, `iq`, `ir`, `ye`, `sa`,
+  `jo`, `eg`, `ae`, `qa`, `kw`, `bh`, `om`, `tr`, `cy`, `ps`, `int`), `name_he`, `name_en`,
+  `gap_note`, `gap_checked boolean`, `updated_by`, `updated_at`.
 - `truth_outlets` — `key text primary key` (`idf`, `aljazeera`, `generic:hebrew_media` …),
-  `name_he`, `name_en`, `class` (`official` | `mainstream` | `state_media` | `partisan` |
+  `name_he`, `name_en`, `country` (a `truth_countries` code or null), `status` (`approved` |
+  `suggested` | `to_check`), `class` (`official` | `mainstream` | `state_media` | `partisan` |
   `unknown`), `suggested_class` (the AI's idea, counts for nothing), `side`, `aliases text[]`
   (normalised names in Hebrew, Arabic, English, Persian — what a channel may write when citing),
   `check_tg text[]`, `check_feed text`, `reviewed boolean`, `note`, `updated_by`, `updated_at`.
@@ -313,12 +365,12 @@ first file, as in deep analysis — see Rollout):
   (`[{ at, text, url }]`), `ok`, `error`; trimmed daily.
 - `truth_media_checks` — `media_id uuid primary key`, `event_id`, `verdict` (`match` | `mismatch`
   | `illustration`), `by` (`staff` | `geoloc` | `media_translate`), `note`, `set_by`, `at`.
-- `truth_dirty` — `event_id uuid primary key`, `at`: events whose pictures changed since the last
-  tick (filled with "on conflict do nothing").
+- `truth_dirty` — `event_id uuid primary key`, `at`, `done boolean`: events whose pictures
+  changed since the last tick (upsert sets `done = false`).
 - `event_media`: two new indexes, on `(sha256)` and on `(phash)` (today's index is per event),
   and a small `after insert or update of event_id, sha256, phash or delete` trigger that only
   writes the event's id into `truth_dirty` (and nothing when `compute` is off).
-- All six: RLS on, no policies (service role; staff through functions).
+- All seven: RLS on, no policies (service role; staff through functions).
 - `events`, new columns: `truth_score smallint` (5–99 or null), `truth_why jsonb`, `truth_at`,
   `truth_override smallint` (0–100), `truth_override_note text`, `truth_override_by uuid`,
   `truth_override_at`.
@@ -359,12 +411,14 @@ first file, as in deep analysis — see Rollout):
     with points per origin.
   - `truth_spent_today()` — sum of `ai_usage.cost_usd` for purpose `truth_cite`.
   - `truth_tick()` — cron `osintfront-truth-tick`, every 5 minutes: (1) when `compute` is on,
-    recomputes up to 300 events waiting in `truth_dirty` and empties them from the queue;
+    recomputes up to 300 events waiting in `truth_dirty` and marks them done;
     `truth_recompute` writes the row only when the score or the "why" really changed; (2) when
     `citation_check` is on, there are due pairs and budget is left, calls `event-agent`
     `{action:"truth_check"}` (the `eei_tick` pattern). Otherwise nothing.
-  - Staff functions for the admin screen: list / save an outlet, attach a key to an outlet,
-    "sources seen in the last 7 days with no outlet" (by number of events), score distribution.
+  - Staff functions for the admin screen: list / save an outlet (class, side, country, status),
+    attach a key to an outlet, "sources seen in the last 7 days with no outlet" (by number of
+    events), score distribution, `truth_country_coverage()` (the per-country row described
+    above) and saving a country's gap note.
 - Views `published_events` and `archived_events`: the same columns in the same order plus
   **`truth_score`** at the end = `coalesce(truth_override, truth_score)` when the caller is staff,
   or `truth_score.public` is on and `my_feature('truth_score')`; else null. The helper keys `tk`
@@ -373,12 +427,12 @@ first file, as in deep analysis — see Rollout):
   "web_search": false, "initial_minutes": 30 }`; `truth_weights` = the table above;
   `truth_daily_budget_usd` = `0.5`.
 - `plan_features`: `truth_score` and `truth_detail` rows for the five plans, as in Decisions.
-- Seed: the 30 outlets of `mainstream_outlet()` as `mainstream`, with their name forms as aliases
-  and their monitored Telegram channels (matched by hand from `telegram_channels` while writing
-  the migration); IDF Spokesperson (`tg:idf_telegram`), CENTCOM (`tg:U_S_CENTCOM`), Israel Police,
-  Home Front Command as `official`; SANA and IRNA as `state_media`; six generic pseudo-outlets.
-  Seeded rows count from the start and are marked `reviewed = false` so the admin section lists
-  them first; the full seed list is shown to the owner in rollout step 3.
+- Seed (migration 127): the 30 outlets of `mainstream_outlet()` as `mainstream`, `approved`,
+  with their name forms as aliases and their monitored Telegram channels (matched by hand from
+  `telegram_channels`); the four approved officials; the per-country table above as `suggested`
+  / `to_check`; the mainstream additions of decision 4 as `suggested`; six generic
+  pseudo-outlets. Nothing is invented: a handle that is not in our tables and is not a well-known
+  official site goes in as `to_check` with a note, never as `suggested`.
 
 ## Server (`supabase/functions/`)
 - `whatsapp-ingest/index.ts` — the four places that build a source entry and the insert of a new
@@ -438,7 +492,7 @@ Details window:
   The score shows how well sources confirm this report. It is not a statement that
   the report is true. Official sources can also be wrong.
 ```
-- Points are shown to staff only; readers see the lines without numbers (Open decisions 6).
+- Points are shown to staff only; readers see the lines without numbers (decision 6).
 - In the details window the picture itself carries a small corner mark when it is *old*
   ("seen before · 3 Nov") — for everyone who sees the picture, whatever the plan. *Shared* and
   *stock* pictures get no mark and no line.
@@ -491,7 +545,7 @@ Details window:
   `match` +4, `mismatch` as old, a blank-frame `phash` is not a match, a media insert only writes
   `truth_dirty` and the tick recomputes once; the trigger does nothing with `compute` off and for drafts; `truth_recompute` queues
   no editor run and no push; the views give null to a guest, the score to Free; `truth_details` is null
-  for Free, without links for Pro, full for staff; `anon` / `authenticated` cannot read the six
+  for Free, without links for Pro, full for staff; `anon` / `authenticated` cannot read the seven
   tables; budget reached → the tick does not call out.
 - Unit, `node:test` (`tests/truth/`): `truth.test.ts` — text key equals the worker's for the same
   text, script → language, claim window, candidate ranking, the decision order with fake readers
@@ -509,10 +563,11 @@ Details window:
 
 ## Rollout (each numbered step only after the owner approves it; everything starts off)
 1. Build on `feat/truth-score`; local tests and the faked-server Playwright run.
-2. Apply migrations 126–127 (nothing computes: `compute` off). Migration 128 has foreign keys
+2. Apply migrations 126–129 (nothing computes: `compute` off). Migration 130 has foreign keys
    with `on delete cascade`; as with deep-analysis migration 113, **the owner runs it himself in
    the Supabase SQL editor** and the constraints are then checked.
-3. The owner and staff go over the seeded outlets in the admin section; run the one-time AI
+3. The owner and staff go over the seeded outlets in the admin section, country by country:
+   approve, fix or reject each suggested and to-check row, and note the gaps; run the one-time AI
    suggestion (≈ $0.02) and approve or fix the busiest 50 channels.
 4. Merge to `main` (functions deploy by themselves, flags off). Deploy check: nothing changed.
 5. `compute` on — **silent**: staff see scores, readers do not. Two days.
@@ -551,31 +606,26 @@ Details window:
 - **Database load.** The project overloaded once (October). The trigger is a handful of key
   lookups and the tick is bounded (20 pairs, 4 reads); step 5 is where this is watched.
 
-## Open decisions for the owner (recommended default in bold)
-1. **Public name.** **"אימות מקורות — 62%" / "Source confirmation"**, or "ציון אמיתות" / "Truth
-   score" as he called it (stronger, legally riskier).
-2. **The weights** in the table (official 55, mainstream 42, …) — **start with them and tune in
-   step 6** on real events.
-3. **Who is "official".** **States' armies, governments and emergency bodies only**; Hezbollah,
-   Hamas and Houthi official media are "partisan" (18), state agencies such as IRNA and SANA are
-   "state media" (28). Or: treat all sides' official outlets alike.
-4. **The mainstream list.** **Today's 30 outlets**, plus his yes / no on adding Lebanese
-   newsrooms (LBCI, MTV, Annahar, L'Orient Today, Naharnet), Sky News Arabia, Asharq News,
-   Al Araby TV, Iran International, Fox News, Financial Times.
-5. **Who sees it.** **Badge: Free and up (guests see a lock). "Why" + filter: Pro, Max, Intel.**
-   Or everything for paying plans only.
-6. **Points in the "why" list.** **Staff only**; readers see the lines without numbers.
-7. **The "verified" tick.** **Leave it as it is for now**; after step 6 decide whether the tick
-   should follow the new rules (which would also fix the 7% that rest on a cited name).
-8. **Low scores in public.** **Show them, in grey**, with "Initial report" for the first 30
-   minutes. Or hide the badge under 35.
-9. **Paid web search for outlets we cannot read.** **Off.** Later, perhaps, for critical events only.
-10. **Daily budget for citation checks.** **$0.50** (expected use: a few cents).
-11. **Weight of footage.** **Video +8, photos +5, second independent source +3 (+4 other side),
-    checked footage +4, at most 12** — modest, because nothing looks at the picture. Or heavier
-    (for example video +15) once footage can really be checked.
-12. **Old picture.** **No credit, and −6 only when the event has no new footage** (file photos
-    are routine). Or stricter: −10 whenever any old picture is attached.
-13. **"Does the footage match the place" check.** **Free sources only** (staff click,
-    geolocation results, the future media-translation click). Or a paid look at every video of
-    high-severity events — about $0.002–0.01 each, not recommended now.
+## Decisions (approved by owner 13 Nov 2026)
+The thirteen open decisions were approved as recommended ("מאשר הכל"):
+1. **Public name:** "אימות מקורות — 62%" / "Source confirmation". "ציון אמיתות" stays internal.
+2. **Weights:** the table above; tuned on real events in the quiet stage before anything is public.
+3. **Who is "official":** states' armies, governments and emergency bodies, and international
+   bodies. Hezbollah, Hamas and the Houthis are side-affiliated (`partisan`) even where they run
+   a de-facto government. State news agencies are `state_media`. (Widened by requirement 7 to
+   every covered country; the IRGC is Iran's state military and therefore `official`.)
+4. **Mainstream list:** today's 30 outlets. The proposed additions (LBCI, MTV, Annahar, L'Orient
+   Today, Naharnet, Sky News Arabia, Asharq News, Al Araby TV, Iran International, Fox News,
+   Financial Times) are seeded as *suggested* and count only after staff approve each.
+5. **Who sees it:** badge for Free and up (guests see a lock); "why" and the minimum-score filter
+   for Pro, Max, Intel.
+6. **Points in the "why" list:** staff only.
+7. **The "verified" tick:** unchanged for now; revisited after the quiet stage.
+8. **Low scores:** shown, in grey; "Initial report" for the first 30 minutes.
+9. **Paid web search:** off.
+10. **Daily budget for citation checks:** $0.50.
+11. **Footage:** video +8, photos +5, further independent footage source +3 (+4 other side),
+    checked footage +4, at most 12.
+12. **Old picture:** no credit; −6 only when the event has no new footage.
+13. **"Footage matches the place":** free sources only (staff click, geolocation result, the
+    future media-translation click).
