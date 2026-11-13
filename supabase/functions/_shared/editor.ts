@@ -16,6 +16,7 @@
 //  - Foreign-letter check now catches any non-Hebrew script (not only Arabic/Latin).
 
 import { CATEGORY_RULES } from "./categoryRules.ts";
+import { COUNTRY_RULE, COUNTRY_RULE_HE } from "./countryRule.ts";
 import { cleanSecondary } from "./secondaryCats.ts";
 import { cleanTerms, TERM_RULES, TERMS_PROP, type TermMark } from "./terms.ts";
 import { logUsage } from "./usage.ts";
@@ -151,7 +152,7 @@ UNIFIL ← יוניפי"ל (כוח האו"ם הזמני בלבנון) | Blue Lin
 - קואורדינטות רק למקום ספציפי שאתה בטוח בו (יישוב, אתר, שכונה), בדיוק של 4–5 ספרות אחרי הנקודה.
 - מקום הכתיבה בראש ידיעה (dateline, כמו "TEL AVIV —" או "صوفيا - سبأنت") אינו מקום האירוע. אל תשים עליו נעץ, אלא אם האירוע עצמו התרחש שם.
 - ברשימת locations רשום כל מקום ספציפי שהידיעה מזכירה כמקום שבו משהו קרה או נמצא (עיר, כפר, שכונה, בסיס, נמל, מחוז, אזור, מצר וכד'), לפי סדר החשיבות — המקום העיקרי ראשון. עד 10 מקומות. כשהידיעה מפרטת כמה מקומות שהותקפו, נפגעו או שבהם קרה משהו — רשום כל אחד מהם בנפרד (כל אחד יקבל סימון במפה). לא מדינות שלמות, ולא מקום הכתיבה (dateline). אל תרשום אזור, מחוז או עיר שרק מתארים איפה נמצא מקום שכבר רשמת ("הכפר X באזור הכפרי של Y" → רק X); רשום מקום נוסף רק אם גם בו קרה משהו. מקום שמתואר ביחס למקום אחר — "X שבנפת/במחוז/בגזרת Y", "X מצפון/מדרום/ממזרח/ממערב ל-Y", "בצפון Y" — רשום רק את X, המקום עצמו (ואם אין X, רק את Y). אירוע שבין שני מקומות — "מחסום בדרך A–B", "ירי מכיוון A לעבר B", "תנועה מ-A ל-B" — רשום את שני המקומות (A ו-B), העיקרי ראשון. לכל מקום מלא name ו-name_en, וקואורדינטות רק אם אתה בטוח (אחרת null — המערכת תאתר לפי השם). מוסד או אתר בתוך עיר (אוניברסיטה, בית חולים, בית ספר, מסגד, מגדל, מחנה, צומת, רחוב, שכונה) הוא המקום עצמו — רשום אותו (name_en מלא ומזוהה, כמו "Islamic University of Gaza", "Al-Shifa Hospital, Gaza City"), ולא את העיר שבה הוא נמצא; ה-location_name הוא אותו מקום.
-- country (באנגלית): תמיד מלא את המדינה העיקרית שהידיעה עוסקת בה, גם כשאין שום מקום ספציפי. countries: כל המדינות המעורבות, העיקרית ראשונה.
+- ${COUNTRY_RULE_HE} countries: כל המדינות המעורבות, העיקרית ראשונה.
 
 כללי דיוק:
 - אל תמציא עובדות, שמות, תפקידים, מספרים, קואורדינטות או קישורים. אם אינך בטוח — השמט. קישור מצרפים רק אם ראית אותו בפועל (בידיעה עצמה או בתוצאות החיפוש).
@@ -226,7 +227,7 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
     location_name: { type: "string", description: "Most specific place, in Hebrew; empty if none" },
     city: { type: "string" },
     region: { type: "string" },
-    country: { type: "string", description: "Main country the report is about, in English (Lebanon, Syria, Israel, Iran, Yemen, Iraq, United States…). Always fill it, even when no specific place is named." },
+    country: { type: "string", description: `${COUNTRY_RULE}` },
     severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
     is_breaking: { type: "boolean" },
   };

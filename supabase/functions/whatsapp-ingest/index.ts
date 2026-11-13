@@ -12,6 +12,7 @@ import { inRegion } from "../_shared/region.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor, type EditResult } from "../_shared/editor.ts";
 import { withEditorMain } from "../_shared/secondaryCats.ts";
+import { COUNTRY_RULE } from "../_shared/countryRule.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
@@ -298,7 +299,7 @@ const CLASSIFY_TOOL = {
       location_name_en: { type: "string", description: "The same place in English (common international spelling, e.g. Yater, Bint Jbeil, Khan Younis); empty if none" },
       city: { type: "string" },
       region: { type: "string" },
-      country: { type: "string", description: "Main country the report is about, in English, e.g. Lebanon, Syria, Israel, Iran, Yemen, United States. Fill it whenever the country is clear, even if no specific place is named." },
+      country: { type: "string", description: COUNTRY_RULE },
       original_source: { type: "string", description: "Outlet/source named in the message (e.g. Reuters, Al Jazeera, IDF Spokesperson, 'ד.ע'); empty if none" },
       is_summary: {
         type: "boolean",
