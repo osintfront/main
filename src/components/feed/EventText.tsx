@@ -11,7 +11,7 @@ import { hasFeature, myPlan, usePlanVersion } from '@/lib/plans';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { previewText } from '@/utils/text';
 import { localizedTitle } from '@/lib/localizedTitle';
-import type { EventTerm } from '@/lib/deepTerms';
+import { linkSegments, type EventTerm } from '@/lib/deepTerms';
 import { TermText } from './TermText';
 
 const SITE = 'https://osintfront.com';
@@ -128,7 +128,8 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
 
   // One fresh set per render: summary first, then the expansion (a term links once).
   const used = new Set(usedTerms ?? []);
-  const linked = (s: string) => (terms && onTerm ? <TermText text={s} terms={terms} used={used} onTerm={onTerm} /> : s);
+  // Worked out here, in this render and in reading order (not inside TermText): the same on a second render.
+  const linked = (s: string) => (terms && onTerm ? <TermText parts={linkSegments(s, terms, used)} onTerm={onTerm} /> : s);
   const raw = expanded ? (lang === 'en' ? expanded.en ?? expanded.he : expanded.he) : null;
   // "None" answers are not shown.
   const real = (v: string) => (/^\s*(אין|none|n\/a|no)\.?\s*$/i.test(v ?? '') ? '' : v);

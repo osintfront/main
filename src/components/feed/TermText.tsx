@@ -1,17 +1,17 @@
 import { Lock } from 'lucide-react';
-import { linkSegments, type EventTerm } from '@/lib/deepTerms';
+import type { EventTerm, Segment } from '@/lib/deepTerms';
 import { hasFeature, usePlanVersion } from '@/lib/plans';
 import { cn } from '@/utils/cn';
 
 /**
  * Event text with its terms as links to their deep-analysis entry: a solid underline when the
  * entry exists, dotted when it is not written yet, a lock for readers without the feature.
- * Plain text only — never HTML. `used` makes a term link once across the window's texts.
+ * Plain text only — never HTML. The parent works out `parts` (linkSegments / segmentsInOrder) in its own
+ * render, so a term links once across the window's texts even when React renders twice.
  */
-export function TermText({ text, terms, used, onTerm }: { text: string; terms: EventTerm[]; used?: Set<string>; onTerm: (t: EventTerm) => void }) {
+export function TermText({ parts, onTerm }: { parts: Segment[]; onTerm: (t: EventTerm) => void }) {
   usePlanVersion();
   const locked = !hasFeature(undefined, 'deep_analysis');
-  const parts = linkSegments(text, terms, used);
   return (
     <>
       {parts.map((p, i) =>

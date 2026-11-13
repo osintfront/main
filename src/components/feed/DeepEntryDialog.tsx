@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { useI18n, type TranslationKey } from '@/i18n';
 import { usePermissions } from '@/hooks/usePermissions';
-import { hasFeature } from '@/lib/plans';
+import { featureLimit, hasFeature } from '@/lib/plans';
 import { openGateFor } from '@/components/plans/GateDialog';
-import { SECTION_KEYS, type DeepEntry, type EventTerm } from '@/lib/deepTerms';
+import { SECTION_KEYS, entrySources, type DeepEntry, type EventTerm } from '@/lib/deepTerms';
 import {
   DeepError, fetchDeepQuota, fetchEntry, refreshEntry, removeEntry, updateEntry, writeEntry, type DeepQuota,
 } from '@/services/deepService';
@@ -233,10 +233,13 @@ export function DeepEntryDialog({ target, onClose, onOpenEvent, onChanged }: {
                 <section className="mt-4">
                   <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t('deep.sources')}</h3>
                   <ol className="list-decimal space-y-0.5 ps-5 text-[13px]">
-                    {entry.sources.filter((s) => s.from !== 'event' || hasFeature(undefined, 'source_link')).map((s) => {
-                      const href = safeExternalUrl(s.url);
+                    {entrySources(entry.sources, {
+                      sourceLink: hasFeature(undefined, 'source_link'),
+                      detail: !hasFeature(undefined, 'sources_detail') ? 'none' : featureLimit('sources_detail') === 1 ? 'names' : 'links',
+                    }).map((s, i) => {
+                      const href = s.url ? safeExternalUrl(s.url) : null;
                       return (
-                        <li key={s.url}>
+                        <li key={`${i}-${s.title}`}>
                           {href ? <a href={href} target="_blank" rel="noopener noreferrer" className="text-sky-700 hover:underline dark:text-sky-400" dir="auto">{s.title}</a> : <span dir="auto">{s.title}</span>}
                         </li>
                       );
