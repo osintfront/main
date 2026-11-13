@@ -1539,7 +1539,7 @@ export const en = {
   "satsr.fail.other": "Processing failed. This request was not counted.",
   "satsr.quota": "You've used today's {limit} enhancements. They renew at midnight.",
   "satsr.busy": "The processing queue is full right now. Try again in a few minutes.",
-  "satsr.badInput": "This spot or date can't be enhanced (Sentinel-2 covers latitudes up to 60°, from April 2017).",
+  "satsr.badInput": "This spot or date can't be enhanced (latitudes between 60°S and 60°N, dates from April 2017).",
   "satsr.error": "The request failed. Try again.",
   "satsr.cached": "Existing picture — not counted",
   "satsr.done": "Ready",
