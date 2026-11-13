@@ -170,6 +170,21 @@ test('the same notification posted as form fields reads the same', () => {
   assert.equal(n.processId, '555');
 });
 
+test('a real first monthly payment (form fields, as Grow sent it) carries the standing-order id', () => {
+  const form = new URLSearchParams({
+    err: '', status: '1', 'data[sum]': '1', 'data[status]': 'שולם', 'data[statusCode]': '2', 'data[asmachta]': '533278517',
+    'data[processId]': '37494911', 'data[paymentType]': '1', 'data[directDebitId]': '55556463', 'data[transactionId]': '89430984',
+    'data[paymentLinkProcessId]': '4291822', 'data[payerPhone]': '0500000000',
+  }).toString();
+  const n = readGrowNotice(parseWebhookBody('application/x-www-form-urlencoded', form));
+  assert.equal(n.type, 'payment');
+  if (n.type !== 'payment') return;
+  assert.equal(n.paid, true);
+  assert.equal(n.amountAgorot, 100);
+  assert.equal(n.processId, '4291822');
+  assert.equal(n.directDebitId, '55556463');
+});
+
 test('a declined payment is not paid', () => {
   const n = readGrowNotice({ status: '1', data: { statusCode: '3', status: 'נדחה', sum: '59', transactionId: '1', paymentLinkProcessId: '2' } });
   assert.equal(n.type === 'payment' && n.paid, false);

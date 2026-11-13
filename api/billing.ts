@@ -228,6 +228,23 @@ async function webhook(req: Request, token: string | null): Promise<Response> {
         p_status_text: n.statusText,
         p_payload: payload,
       });
+      // A new charge on an order that is already paid = the standing order charged again (a later month),
+      // if Grow reports it to the payment link's notifyUrl too. It is applied as a renewal.
+      if (r.duplicate === true && r.user_id && n.paid && n.transactionId) {
+        await rpc('billing_renewal', {
+          p_event_key: `ren:${n.transactionId}`, p_direct_debit_id: n.directDebitId, p_transaction_id: n.transactionId,
+          p_amount_agorot: n.amountAgorot, p_phone: n.phone, p_email: n.email, p_payload: payload,
+        });
+      }
+      // The first monthly payment names its standing order: remember it, so renewals and failed charges
+      // are matched by that id (not by phone and price).
+      if (r.paid === true && n.directDebitId && n.transactionId) {
+        await fetch(`${SUPABASE_URL()}/rest/v1/billing_subscriptions?grow_transaction_id=eq.${encodeURIComponent(n.transactionId)}&grow_subscription_id=is.null`, {
+          method: 'PATCH',
+          headers: serviceHeaders({ prefer: 'return=minimal' }),
+          body: JSON.stringify({ grow_subscription_id: n.directDebitId }),
+        }).catch(() => {});
+      }
       // Grow resends an unacknowledged notification after about 10, 20 and 30 minutes; billing_pay_order is
       // idempotent, so a repeat changes nothing.
       // An upgrade replaced a monthly plan: its standing order at Grow is stopped so it is not charged again.

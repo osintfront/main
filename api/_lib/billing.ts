@@ -168,6 +168,8 @@ export type GrowNotice =
       phone: string | null;
       email: string | null;
       statusText: string;
+      /** The standing order a monthly payment opened (Grow sends it with the first payment). */
+      directDebitId: string | null;
     }
   | { type: 'renewal'; eventKey: string; directDebitId: string | null; transactionId: string | null; amountAgorot: number | null; phone: string | null; email: string | null }
   | { type: 'failed'; eventKey: string; directDebitId: string | null; amountAgorot: number | null; phone: string | null; email: string | null; error: string; attempts: number | null }
@@ -221,6 +223,7 @@ export function readGrowNotice(body: Record<string, unknown>): GrowNotice {
       phone: f.payerPhone || null,
       email: f.payerEmail || null,
       statusText: f.status || f.topErr || '',
+      directDebitId: firstDigits(f.directDebitId),
     };
   }
 
