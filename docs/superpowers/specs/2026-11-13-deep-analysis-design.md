@@ -290,3 +290,17 @@ even in comments — see Rollout):
 7. Deploy `whatsapp-ingest`, then `intel-crawler` (new reports get marks from here on).
 8. After 50 new events: a list of the marks for the owner (too many? wrong? missing?) and the
    editor's cost before and after.
+
+## Open questions for the owner (answers change the numbers above, not the structure)
+1. **Links only in the event details window** — not in feed cards or the map popup. Agreed?
+2. **Free users and guests see the links with a lock** (click → upgrade / sign-up window) instead
+   of plain text. Agreed, or plain text for them?
+3. **The $5 daily budget also stops staff** (new entries and refreshes) when it is used up; the
+   super admin can raise the setting. Agreed, or should staff be outside the budget?
+4. **$5 buys about 11–16 new entries a day**, while Pro may ask for 3 and Max for 10 each — two
+   Max users can use the day up. Keep $5 / 3 / 10, or change one of them?
+5. **Intel plan = 10 a day, like Max** (the plan text names only Pro and Max). Agreed?
+6. **Analysts count as staff here** (anyone who may edit any event): they can analyze, edit,
+   refresh and remove entries. Agreed, or admins only for refresh / remove?
+7. **Migration 113** (clean-up links between tables) has to be run by you in the Supabase SQL
+   editor, or skipped. Which?
