@@ -7,7 +7,7 @@
 // over) and soft-deleted.
 import { callClaude, CHEAP_MODELS, isTransient, STRONG_MODELS } from "./editor.ts";
 import { hashImage, repeatsIn } from "./imageHash.ts";
-import { couldBeSame, focusedPass, textTwin, worthConfirming } from "./dedupeMatch.ts";
+import { couldBeSame, focusedBatches, textTwin, worthConfirming } from "./dedupeMatch.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -217,13 +217,16 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
 
   // Focused pass: each NEW event next to its few closest look-alikes (by headline), so a re-post
   // of one statement in another language is not lost among a hundred other statements.
-  const focus = focusedPass(fresh, rows, slug);
-  if (focus) {
-    const list = focus.rows as Row[];
-    const text = `${list.map(lineOf).join("\n")}\n\nCompare each NEW line with the lines listed after it (its closest look-alikes):\n${focus.compare}`;
-    // One answer per NEW event at most: a busy run (dozens of NEW events) needs room, or the
-    // tool call is cut off and every pair in it is lost.
-    propose(list, await ask(text, CHEAP_MODELS, Math.min(4000, 400 + 60 * focus.groups.length)), "focused");
+  // Packed into batches of up to 100 lines, so a busy run never skips a NEW event; a few at a time.
+  const batches = focusedBatches(fresh, rows, slug);
+  for (let i = 0; i < batches.length; i += 4) {
+    const answers = await Promise.all(batches.slice(i, i + 4).map((focus) => {
+      const text = `${(focus.rows as Row[]).map(lineOf).join("\n")}\n\nCompare each NEW line with the lines listed after it (its closest look-alikes):\n${focus.compare}`;
+      // One answer per NEW event at most: a batch with dozens of NEW events needs room, or the
+      // tool call is cut off and every pair in it is lost.
+      return ask(text, CHEAP_MODELS, Math.min(4000, 400 + 60 * focus.groups.length));
+    }));
+    answers.forEach((found, j) => propose(batches[i + j].rows as Row[], found, "focused"));
   }
 
   // Only the proposed pairs go to the strong model to confirm (a few lines) — a wrong merge hides
@@ -237,7 +240,7 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
       .map((c) => [sub[Number(c.new) - 1]?.id, sub[Number(c.same_as) - 1]?.id].sort().join("|")));
     pairs = [...proposals.entries()].filter(([k]) => ok.has(k)).map(([, p]) => p);
   }
-  if (dry) console.log(JSON.stringify({ broad: broad.length, focused: focus?.rows.length ?? 0, proposed: proposals.size, pairs: pairs.length }));
+  if (dry) console.log(JSON.stringify({ broad: broad.length, focused: batches.reduce((n, b) => n + b.rows.length, 0), proposed: proposals.size, pairs: pairs.length }));
   const merged: { keep: string; dup: string; keep_title: string; dup_title: string; incident?: string }[] = [];
   const gone = new Set<string>();
   // Keep the earliest-created event of each pair.
@@ -251,8 +254,8 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   return {
     checked: fresh.size, merged,
     ...(dry ? {
-      considered: broad.length + (focus?.rows.length ?? 0), proposed: merged,
-      trace: { groups: focus?.groups ?? [], cheap: trace, confirmed: pairs.map((p) => [p.a.id, p.b.id]) },
+      considered: broad.length + batches.reduce((n, b) => n + b.rows.length, 0), proposed: merged,
+      trace: { groups: batches.flatMap((b) => b.groups), cheap: trace, confirmed: pairs.map((p) => [p.a.id, p.b.id]) },
     } : {}),
   };
 }

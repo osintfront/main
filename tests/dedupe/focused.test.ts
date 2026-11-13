@@ -6,7 +6,7 @@
 // the few older events whose headlines (Hebrew + English) look most like it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { couldBeSame, focusedPass, headlineSimilarity, textTwin, worthConfirming } from '../../supabase/functions/_shared/dedupeMatch.ts';
+import { couldBeSame, focusedBatches, focusedPass, headlineSimilarity, textTwin, worthConfirming } from '../../supabase/functions/_shared/dedupeMatch.ts';
 
 const slug = new Map([
   ['c-st', 'statements'], ['c-mil', 'military-activity'], ['c-art', 'artillery-shelling'], ['c-air', 'airstrike'],
@@ -113,4 +113,25 @@ test('medium proposals from the cheap model go on to be confirmed; low ones do n
   assert.equal(worthConfirming('medium'), true);
   assert.equal(worthConfirming('low'), false);
   assert.equal(worthConfirming(undefined), false);
+});
+
+// 13 Nov: a run with many NEW events filled the 100-line cap and the rest were silently skipped
+// (the UN-headquarters protest in Nabaa al-Fawar never reached the model). Batches instead.
+test('focused batches: every NEW event with a look-alike is asked, no batch over the cap', () => {
+  const rows: any[] = [];
+  const fresh = new Set<string>();
+  for (let i = 0; i < 40; i++) {
+    const old = ev({ title: `מחאה של משפחות עצורים מול מפקדה מספר ${i} באזור ${i}`, at: '2026-11-13T08:00:00Z' });
+    const neu = ev({ title: `מחאה של משפחות עצורים מול מפקדה מספר ${i} באזור ${i} נמשכת`, at: '2026-11-13T10:00:00Z' });
+    rows.push(old, neu);
+    fresh.add(neu.id);
+  }
+  const batches = focusedBatches(fresh, rows, slug, { perEvent: 3, maxRows: 20 });
+  const asked = new Set(batches.flatMap((b) => b.groups.map((g) => g.fresh)));
+  assert.equal(asked.size, 40);
+  for (const b of batches) {
+    assert.ok(b.rows.length <= 20, `batch of ${b.rows.length}`);
+    // Every id the compare section names is a line of this batch.
+    for (const g of b.groups) for (const id of [g.fresh, ...g.candidates]) assert.ok(b.rows.some((r) => r.id === id));
+  }
 });

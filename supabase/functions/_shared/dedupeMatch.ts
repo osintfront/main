@@ -118,17 +118,17 @@ export interface FocusedPass {
 
 /**
  * For each NEW event, its perEvent closest look-alikes (headline similarity ≥ minSim) among the
- * events the broad rule or textTwin allows. Two NEW events are compared once. null when no NEW
- * event has a look-alike (no model call).
+ * events the broad rule or textTwin allows. Two NEW events are compared once. The groups are packed
+ * into batches of at most maxRows lines (one model call each), so a busy run never skips a NEW
+ * event. Empty when no NEW event has a look-alike (no model call).
  */
-export function focusedPass(
+export function focusedBatches(
   fresh: Set<string>, rows: MatchRow[], slug: Map<string, string>,
   opts: { perEvent?: number; minSim?: number; maxRows?: number } = {},
-): FocusedPass | null {
-  const perEvent = opts.perEvent ?? 8, minSim = opts.minSim ?? 0.12, maxRows = opts.maxRows ?? 100;
+): FocusedPass[] {
+  const perEvent = opts.perEvent ?? 8, minSim = opts.minSim ?? 0.12, maxRows = Math.max(opts.maxRows ?? 100, perEvent + 1);
   const order = (r: MatchRow) => `${r.created_at}|${r.id}`;
   const groups: { fresh: string; candidates: string[] }[] = [];
-  const keep = new Set<string>();
   for (const f of rows.filter((r) => fresh.has(r.id)).sort((a, b) => order(a).localeCompare(order(b)))) {
     const cands = rows
       // Older events, or NEW ones created earlier (so two NEW events are compared once).
@@ -137,17 +137,31 @@ export function focusedPass(
       .filter((x) => x.s >= minSim && (couldBeSame(f, x.r, slug) || textTwin(f, x.r, slug)))
       .sort((a, b) => b.s - a.s)
       .slice(0, perEvent);
-    if (!cands.length) continue;
-    if (keep.size + 1 + cands.length > maxRows && groups.length) break;
-    groups.push({ fresh: f.id, candidates: cands.map((x) => x.r.id) });
-    keep.add(f.id);
-    for (const x of cands) keep.add(x.r.id);
+    if (cands.length) groups.push({ fresh: f.id, candidates: cands.map((x) => x.r.id) });
   }
-  if (!groups.length) return null;
-  const list = rows.filter((r) => keep.has(r.id)).sort((a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id.localeCompare(b.id));
-  const no = new Map(list.map((r, i) => [r.id, i + 1]));
-  const compare = groups.map((g) => `NEW [${no.get(g.fresh)}]: ${g.candidates.map((c) => `[${no.get(c)}]`).join(" ")}`).join("\n");
-  return { rows: list, groups, compare };
+  // Pack groups into batches; a group's lines all go in the same batch.
+  const packs: { groups: typeof groups; ids: Set<string> }[] = [];
+  for (const g of groups) {
+    const ids = [g.fresh, ...g.candidates];
+    let pack = packs[packs.length - 1];
+    if (!pack || new Set([...pack.ids, ...ids]).size > maxRows) packs.push((pack = { groups: [], ids: new Set() }));
+    pack.groups.push(g);
+    for (const id of ids) pack.ids.add(id);
+  }
+  return packs.map(({ groups: gs, ids }) => {
+    const list = rows.filter((r) => ids.has(r.id)).sort((a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id.localeCompare(b.id));
+    const no = new Map(list.map((r, i) => [r.id, i + 1]));
+    const compare = gs.map((g) => `NEW [${no.get(g.fresh)}]: ${g.candidates.map((c) => `[${no.get(c)}]`).join(" ")}`).join("\n");
+    return { rows: list, groups: gs, compare };
+  });
+}
+
+/** The first focused batch (null when there is nothing to ask). */
+export function focusedPass(
+  fresh: Set<string>, rows: MatchRow[], slug: Map<string, string>,
+  opts: { perEvent?: number; minSim?: number; maxRows?: number } = {},
+): FocusedPass | null {
+  return focusedBatches(fresh, rows, slug, opts)[0] ?? null;
 }
 
 /**
