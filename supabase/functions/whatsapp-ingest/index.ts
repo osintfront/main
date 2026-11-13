@@ -11,7 +11,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { inRegion } from "../_shared/region.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor, type EditResult } from "../_shared/editor.ts";
-import { withEditorMain } from "../_shared/secondaryCats.ts";
+import { normalizeTypes, withEditorMain } from "../_shared/secondaryCats.ts";
 import { COUNTRY_RULE } from "../_shared/countryRule.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
@@ -878,7 +878,10 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   // Killed / Wounded / Assassination is kept even when triage chose another main type (withEditorMain).
   const allCats = await categories();
   const rowSlug = allCats.find((x) => x.id === row.category_id)?.slug ?? null;
-  const types = withEditorMain(rowSlug, edited.category_slug, edited.secondary_category_slugs, allCats.map((x) => x.slug));
+  const slugs = allCats.map((x) => x.slug);
+  const picked = withEditorMain(rowSlug, edited.category_slug, edited.secondary_category_slugs, slugs);
+  // Then the agreed rules that need no AI (assassination → Killed, a death in a statement, Wounded only).
+  const types = normalizeTypes(picked.main, picked.secondary, slugs);
   update.secondary_categories = types.secondary;
   const newMain = types.main && types.main !== rowSlug ? allCats.find((x) => x.slug === types.main) : undefined;
   if (newMain) update.category_id = newMain.id;

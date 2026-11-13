@@ -35,3 +35,32 @@ test('a never-secondary triage type (alerts / other) is not moved into secondary
 test('an unknown editor main is ignored', () => {
   assert.deepEqual(withEditorMain('airstrike', 'mystery', ['uav'], ALLOWED), { main: 'airstrike', secondary: ['uav'] });
 });
+
+test('wounded from the editor does not take the main place from a known attack (rule: wounded only → attack main)', () => {
+  assert.deepEqual(withEditorMain('shooting-gunfire', 'wounded', ['statements'], [...ALLOWED, 'shooting-gunfire']), { main: 'shooting-gunfire', secondary: ['statements', 'wounded'] });
+  // no kind of attack known (triage gave "other"): wounded may be the main type
+  assert.deepEqual(withEditorMain('other', 'wounded', [], ALLOWED), { main: 'wounded', secondary: [] });
+});
+
+test('normalizeTypes: the agreed rules that need no AI', async () => {
+  const { normalizeTypes } = await import('../../supabase/functions/_shared/secondaryCats.ts');
+  const A = [...ALLOWED, 'shooting-gunfire', 'artillery-shelling', 'humanitarian-event'];
+  // an assassination always has Killed
+  assert.deepEqual(normalizeTypes('assassination', [], A), { main: 'assassination', secondary: ['killed'] });
+  assert.deepEqual(normalizeTypes('assassination', ['airstrike', 'uav'], A), { main: 'assassination', secondary: ['killed', 'airstrike'] });
+  // a death announced in a statement: Killed main, the statement secondary
+  assert.deepEqual(normalizeTypes('statements', ['killed'], A), { main: 'killed', secondary: ['statements'] });
+  // wounded main with a known attack and nobody killed: the attack is main
+  assert.deepEqual(normalizeTypes('wounded', ['statements', 'shooting-gunfire'], A), { main: 'shooting-gunfire', secondary: ['statements', 'wounded'] });
+  // left alone
+  assert.deepEqual(normalizeTypes('killed', ['artillery-shelling', 'wounded'], A), { main: 'killed', secondary: ['artillery-shelling', 'wounded'] });
+  assert.deepEqual(normalizeTypes('wounded', [], A), { main: 'wounded', secondary: [] });
+  assert.deepEqual(normalizeTypes('humanitarian-event', ['killed'], A), { main: 'humanitarian-event', secondary: ['killed'] });
+  assert.deepEqual(normalizeTypes(null, [], A), { main: null, secondary: [] });
+});
+
+test('whatsapp-ingest applies normalizeTypes after withEditorMain', async () => {
+  const { readFileSync } = await import('node:fs');
+  const s = readFileSync('supabase/functions/whatsapp-ingest/index.ts', 'utf8');
+  assert.match(s, /const picked = withEditorMain\([\s\S]{0,200}const types = normalizeTypes\(picked\.main, picked\.secondary/);
+});
