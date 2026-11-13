@@ -534,6 +534,9 @@ export function MapView({
                   categoryLabel: categoryLabel(own?.slug ?? event.category.slug, own?.name ?? event.category.name),
                   categorySlug: own?.slug ?? event.category.slug,
                   chipColor: own?.color ?? event.category.color,
+                  secondary: (event.secondaryCategories ?? [])
+                    .filter((c) => c.slug !== (own?.slug ?? event.category.slug))
+                    .map((c) => ({ slug: c.slug, label: categoryLabel(c.slug, c.name), color: c.color })),
                   categories: canMove
                     ? DEFAULT_CATEGORIES.filter((c) => !['home-front-alerts', 'other', 'uncategorized'].includes(c.slug)).map((c) => ({ slug: c.slug, label: categoryLabel(c.slug, c.name) }))
                     : undefined,

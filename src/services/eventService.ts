@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
-import { FALLBACK_CATEGORY, safeColor } from '@/data/categoryRegistry';
+import { FALLBACK_CATEGORY, categoryRefBySlug, safeColor } from '@/data/categoryRegistry';
+import type { CategoryRef } from '@/types/category';
 import { LOCATION_PRECISIONS, SEVERITIES, SOURCE_TYPES, type EventPlace, type EventSource, type LocationPrecision, type MediaKind, type PublicEvent, type Severity, type SourceType } from '@/types/event';
 import { safeExternalUrl } from '@/utils/url';
 import { sameNamedPlace } from '@/utils/places';
@@ -44,6 +45,7 @@ const PUBLIC_EVENT_COLUMNS = [
   'media_kinds',
   'report_group',
   'source_count',
+  'secondary_categories',
 ].join(',');
 
 interface PublishedEventRow {
@@ -79,6 +81,19 @@ interface PublishedEventRow {
   media_kinds?: string[] | null;
   report_group?: string | null;
   source_count?: number | null;
+  secondary_categories?: string[] | null;
+}
+
+/** Secondary type slugs → known categories, without the main one, at most two. */
+function secondaryRefs(raw: unknown, main: string): CategoryRef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CategoryRef[] = [];
+  for (const s of raw) {
+    if (typeof s !== 'string' || s === main || out.some((c) => c.slug === s)) continue;
+    const ref = categoryRefBySlug(s);
+    if (ref) out.push(ref);
+  }
+  return out.slice(0, 2);
 }
 
 function toNumber(value: number | string | null): number | null {
@@ -227,7 +242,7 @@ export function mapPublishedEventRow(row: PublishedEventRow): PublicEvent | null
     isBreaking: !!row.is_breaking,
     isVerified: !!row.is_verified,
     category,
-    secondaryCategories: [],
+    secondaryCategories: secondaryRefs(row.secondary_categories, category.slug),
     translations: row.translations && typeof row.translations === 'object' ? (row.translations as PublicEvent['translations']) : {},
     reportGroup: typeof row.report_group === 'string' && row.report_group ? row.report_group : null,
     mediaKinds: Array.isArray(row.media_kinds) ? (row.media_kinds.filter((k) => k === 'image' || k === 'video' || k === 'document') as MediaKind[]) : [],

@@ -94,6 +94,8 @@ export const he: Record<TranslationKey, string> = {
   'filters.source.other': 'אחר',
   'filters.more': 'עוד',
   'filters.breakingOnly': 'מבזקים בלבד',
+  'filters.includeSecondary': 'כולל סוגים משניים',
+  'event.alsoTypes': 'גם: {types}',
   'filters.verifiedOnly': 'מאומתים בלבד',
   'filters.location': 'מיקום',
   'filters.location.place': 'מקום מדויק',

@@ -78,6 +78,7 @@ function lean(r: any): PublicEvent {
     isBreaking: !!r.is_breaking,
     isVerified: !!r.is_verified,
     category: { slug: r.category_slug ?? 'other' },
+    secondaryCategories: (r.secondary_categories ?? []).map((slug: string) => ({ slug })),
     mediaKinds: Array.isArray(r.media_kinds) ? r.media_kinds : [],
   } as unknown as PublicEvent;
 }
@@ -93,7 +94,7 @@ async function send(): Promise<Record<string, unknown>> {
   const keys = await vapid(cfg);
   webpush.setVapidDetails('mailto:service@osintfront.com', keys.publicKey, keys.privateKey);
   const since = cfg.cursor || new Date(Date.now() - 5 * 60_000).toISOString();
-  const cols = 'id,title,severity,latitude,longitude,location_name,location_name_he,location_name_en,location_precision,locations,country,source_name,source_url,source_type,occurred_at,published_at,is_breaking,is_verified,translations,category_slug,category_name,media_kinds';
+  const cols = 'id,title,severity,latitude,longitude,location_name,location_name_he,location_name_en,location_precision,locations,country,source_name,source_url,source_type,occurred_at,published_at,is_breaking,is_verified,translations,category_slug,category_name,media_kinds,secondary_categories';
   const events: any[] = await rest(`published_events?select=${cols}&published_at=gt.${encodeURIComponent(since)}&order=published_at.asc&limit=60`);
   if (!events.length) return { events: 0 };
   await setConfig('cursor', events[events.length - 1].published_at);

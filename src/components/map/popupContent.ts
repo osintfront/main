@@ -24,6 +24,8 @@ export interface PopupLabels {
   categories?: { slug: string; label: string }[];
   categorySlug?: string;
   chipColor?: string;
+  /** The event's secondary types: outlined chips after the type chip. */
+  secondary?: { slug: string; label: string; color: string }[];
 }
 
 export interface PopupStaffActions {
@@ -76,6 +78,12 @@ export function buildPopupContent(
     const category = el('span', 'ofm-popup__category', labels.categoryLabel);
     category.style.setProperty('--chip-color', labels.chipColor ?? event.category.color);
     meta.append(category);
+  }
+  for (const s of labels.secondary ?? []) {
+    const chip = el('span', 'ofm-popup__category ofm-popup__category--secondary', s.label);
+    chip.style.setProperty('--chip-color', s.color);
+    chip.dataset.secondaryType = s.slug;
+    meta.append(chip);
   }
   const sev = el('span', `ofm-popup__severity ofm-popup__severity--${event.severity}`, labels.severityLabel);
   meta.append(sev);

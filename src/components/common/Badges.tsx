@@ -10,17 +10,33 @@ import { SEVERITY_STYLES } from '@/utils/severity';
 
 const BASE = 'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset';
 
-export function CategoryBadge({ category }: { category: CategoryRef }) {
+/** A type chip. `secondary`: another type of the same event — outlined, no fill, a little smaller. */
+export function CategoryBadge({ category, secondary = false }: { category: CategoryRef; secondary?: boolean }) {
   const { categoryLabel } = useI18n();
   const Icon = getCategoryIcon(category.icon);
   return (
     <span
-      className={cn(BASE, 'ofm-category-chip')}
+      className={cn(BASE, 'ofm-category-chip', secondary && 'ofm-category-chip--secondary text-[10px]')}
       style={{ '--chip-color': category.color } as CSSProperties}
+      {...(secondary ? { 'data-secondary-type': category.slug } : {})}
     >
       <Icon className="size-3" aria-hidden />
       {categoryLabel(category.slug, category.name)}
     </span>
+  );
+}
+
+/** The event's secondary types after its main badge (screen readers hear "Also: …" first). */
+export function SecondaryBadges({ categories }: { categories?: CategoryRef[] }) {
+  const { t, categoryLabel } = useI18n();
+  if (!categories?.length) return null;
+  return (
+    <>
+      <span className="sr-only">{t('event.alsoTypes', { types: categories.map((c) => categoryLabel(c.slug, c.name)).join(', ') })}</span>
+      {categories.map((c) => (
+        <span key={c.slug} aria-hidden className="contents"><CategoryBadge category={c} secondary /></span>
+      ))}
+    </>
   );
 }
 

@@ -92,6 +92,8 @@ export const en = {
   'filters.source.other': 'Other',
   'filters.more': 'More',
   'filters.breakingOnly': 'Breaking only',
+  'filters.includeSecondary': 'Include secondary types',
+  'event.alsoTypes': 'Also: {types}',
   'filters.verifiedOnly': 'Verified only',
   'filters.location': 'Location',
   'filters.location.place': 'Specific place',

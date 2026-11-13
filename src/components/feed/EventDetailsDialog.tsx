@@ -8,7 +8,7 @@ import { useI18n } from '@/i18n';
 import { isApproximateLocation, type PublicEvent } from '@/types/event';
 import { formatDateTime, formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
-import { BreakingBadge, CategoryBadge, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
+import { BreakingBadge, CategoryBadge, SecondaryBadges, SeverityBadge, VerifiedBadge } from '@/components/common/Badges';
 import { EventMedia } from './EventMedia';
 import { EventText, eventTexts } from './EventText';
 import { whereLabel } from '@/utils/places';
@@ -76,6 +76,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
             <div className="flex flex-wrap items-center gap-1.5">
               {event.isBreaking ? <BreakingBadge /> : null}
               <CategoryBadge category={event.category} />
+              <SecondaryBadges categories={event.secondaryCategories} />
               <SeverityBadge severity={event.severity} />
             </div>
             <h2 id="event-details-title" className="mt-2 text-lg font-bold leading-snug text-slate-900 sm:text-xl dark:text-white" dir="auto">
@@ -140,6 +141,7 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
                       className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-start text-sm text-slate-700 hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       <CategoryBadge category={r.category} />
+                      <SecondaryBadges categories={r.secondaryCategories} />
                       <span className="min-w-0 flex-1 truncate" dir="auto">
                         {eventTexts(r, lang).title}
                       </span>
