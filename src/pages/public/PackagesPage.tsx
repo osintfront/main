@@ -256,6 +256,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
             period={buying.period}
             quote={buying.quote}
             returnTo="/packages-test"
+            testPrice={opts?.test_price_agorot ?? null}
             onClose={() => setBuying(null)}
           />
         ) : null}

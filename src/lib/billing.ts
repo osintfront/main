@@ -38,6 +38,8 @@ export interface BillingOptions {
   plan_source?: string;
   plan_expires_at?: string | null;
   billing_period?: Period | null;
+  /** Super admin test mode: the amount actually charged (agorot), e.g. 100 = ₪1. */
+  test_price_agorot?: number | null;
   subscription?: Subscription | null;
   options?: Record<`${PaidPlan}_${Period}`, Quote>;
 }

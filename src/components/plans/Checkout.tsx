@@ -85,7 +85,7 @@ export function BillingCta({ plan, period, opts, onBuy, primary }: { plan: PaidP
 }
 
 /** The details form shown before Grow's payment page (Grow asks sites to have one). */
-export function CheckoutDialog({ plan, period, quote, returnTo, onClose }: { plan: PaidPlan; period: Period; quote: Quote; returnTo: string; onClose: () => void }) {
+export function CheckoutDialog({ plan, period, quote, returnTo, testPrice, onClose }: { plan: PaidPlan; period: Period; quote: Quote; returnTo: string; testPrice?: number | null; onClose: () => void }) {
   const { t, locale } = useI18n();
   const { profile } = useAuth();
   const [fullName, setFullName] = useState(profile?.fullName ?? '');
@@ -101,7 +101,8 @@ export function CheckoutDialog({ plan, period, quote, returnTo, onClose }: { pla
     return () => window.removeEventListener('keydown', esc);
   }, [busy, onClose]);
 
-  const price = shekels((quote.amount_agorot ?? 0) / 100, locale);
+  const test = testPrice != null && testPrice < (quote.amount_agorot ?? 0);
+  const price = shekels((test ? testPrice! : quote.amount_agorot ?? 0) / 100, locale);
   const errText = (code: string) => {
     const key = `bill.err.${code}` as TranslationKey;
     const s = t(key);
@@ -137,6 +138,11 @@ export function CheckoutDialog({ plan, period, quote, returnTo, onClose }: { pla
             <span className="font-semibold" translate="no">{LABEL[plan]}</span> · {period === 'monthly' ? t('pk.monthly') : t('pk.yearly').split('·')[0].trim()} · <span className="font-semibold tabular-nums">{price}</span>
           </p>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('bill.formLead')}</p>
+          {test ? (
+            <p dir="rtl" className="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white">
+              מצב בדיקה (רק למנהל ראשי): יחויב {price} במקום {shekels((quote.amount_agorot ?? 0) / 100, locale)}
+            </p>
+          ) : null}
         </div>
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
           {t('bill.fullName')}
