@@ -61,13 +61,13 @@ type Pair = { new: number; same_as: number; incident?: string; confidence?: stri
 
 export { couldBeSame };
 
-async function ask(lines: string, models: string[]): Promise<Pair[]> {
+async function ask(lines: string, models: string[], maxTokens = 800): Promise<Pair[]> {
   let last: unknown = null;
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const out = await callClaude(model, {
-          max_tokens: 800,
+          max_tokens: maxTokens,
           system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
           tools: [TOOL],
           tool_choice: { type: "tool", name: "duplicates" },
@@ -217,7 +217,9 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   if (focus) {
     const list = focus.rows as Row[];
     const text = `${list.map(lineOf).join("\n")}\n\nCompare each NEW line with the lines listed after it (its closest look-alikes):\n${focus.compare}`;
-    propose(list, await ask(text, CHEAP_MODELS));
+    // One answer per NEW event at most: a busy run (dozens of NEW events) needs room, or the
+    // tool call is cut off and every pair in it is lost.
+    propose(list, await ask(text, CHEAP_MODELS, Math.min(4000, 400 + 60 * focus.groups.length)));
   }
 
   // Only the proposed pairs go to the strong model to confirm (a few lines) — a wrong merge hides
@@ -226,7 +228,7 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   if (proposals.size) {
     const sub = [...new Map([...proposals.values()].flatMap((p) => [[p.a.id, p.a], [p.b.id, p.b]] as [string, Row][])).values()]
       .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
-    const confirmed = await ask(sub.map(lineOf).join("\n"), STRONG_MODELS);
+    const confirmed = await ask(sub.map(lineOf).join("\n"), STRONG_MODELS, Math.min(4000, 400 + 60 * proposals.size));
     const ok = new Set(confirmed.filter((c) => c.confidence === "high")
       .map((c) => [sub[Number(c.new) - 1]?.id, sub[Number(c.same_as) - 1]?.id].sort().join("|")));
     pairs = [...proposals.entries()].filter(([k]) => ok.has(k)).map(([, p]) => p);
