@@ -113,7 +113,11 @@ function siteOrigin(req: Request): string {
 async function checkout(req: Request): Promise<Response> {
   const user = await sessionUser(req);
   if (!user) return json({ error: 'signin_required' }, 401);
-  if (env('BILLING_OPEN') !== '1' && user.role !== 'super_admin') return json({ error: 'not_open_yet' }, 403);
+  // Until payments open to everyone (BILLING_OPEN=1), only testers may pay: super admins and the
+  // emails listed in app_settings.billing_testers.
+  if (env('BILLING_OPEN') !== '1' && user.role !== 'super_admin' && (await rpc<boolean>('billing_is_tester', { p_user: user.id })) !== true) {
+    return json({ error: 'not_open_yet' }, 403);
+  }
 
   let body: Record<string, unknown> = {};
   try {

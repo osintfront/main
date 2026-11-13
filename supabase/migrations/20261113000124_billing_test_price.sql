@@ -1,15 +1,41 @@
--- Billing test mode: while app_settings.billing_test_price_agorot is set, orders opened by a super admin
--- are charged that amount (e.g. 100 = ₪1) instead of the plan price. Everyone else always pays the real price.
--- Turn it off with:  delete from public.app_settings where key = 'billing_test_price_agorot';
+-- Billing test mode.
+--  * Testers: super admins, plus the accounts whose email is listed in app_settings.billing_testers
+--    (a JSON array). Only testers may use /packages-test and pay online while payments are not open.
+--  * While app_settings.billing_test_price_agorot is set, a tester's order is charged that amount
+--    (e.g. 100 = ₪1) instead of the plan price. Everyone else always pays the real price.
+-- Turn test pricing off with:  delete from public.app_settings where key = 'billing_test_price_agorot';
+
+create or replace function public.billing_is_tester(p_user uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.profiles p
+     where p.id = p_user and p.status = 'active'
+       and (p.role = 'super_admin'
+            or exists (select 1 from public.app_settings s
+                        where s.key = 'billing_testers' and jsonb_typeof(s.value) = 'array'
+                          and s.value ? lower(p.email))))
+$$;
+revoke all on function public.billing_is_tester(uuid) from public, anon, authenticated;
+grant execute on function public.billing_is_tester(uuid) to service_role;
+
+-- For the site: may the signed-in user open the test page?
+create or replace function public.billing_can_test() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce(public.billing_is_tester(auth.uid()), false)
+$$;
+revoke all on function public.billing_can_test() from public, anon;
+grant execute on function public.billing_can_test() to authenticated;
 
 create or replace function public._billing_test_price(p_user uuid) returns int
 language sql stable security definer set search_path = '' as $$
   select greatest(100, (s.value #>> '{}')::int)
     from public.app_settings s
-    join public.profiles p on p.id = p_user and p.role = 'super_admin' and p.status = 'active'
    where s.key = 'billing_test_price_agorot' and jsonb_typeof(s.value) = 'number'
+     and public.billing_is_tester(p_user)
 $$;
 revoke all on function public._billing_test_price(uuid) from public, anon, authenticated;
+
+insert into public.app_settings (key, value) values ('billing_testers', '[]'::jsonb) on conflict (key) do nothing;
 
 create or replace function public.billing_create_order(p_user uuid, p_plan text, p_period text, p_sandbox boolean default false)
 returns jsonb language plpgsql security definer set search_path = '' as $$

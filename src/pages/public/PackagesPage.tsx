@@ -13,7 +13,7 @@ import { INTRO_PRICES, shekels } from '@/content/packages';
 import { SITE_EMAIL } from '@/content/sitePages';
 import { cn } from '@/utils/cn';
 import { BillingAdminPanel, BillingCta, CheckoutDialog, OrderBanner, SubscriptionPanel, useBilling } from '@/components/plans/Checkout';
-import type { PaidPlan, Period, Quote } from '@/lib/billing';
+import { canTestBilling, type PaidPlan, type Period, type Quote } from '@/lib/billing';
 import type { PlanId } from '@/types/user';
 
 type Sold = 'free' | 'pro' | 'max';
@@ -24,8 +24,15 @@ type Sold = 'free' | 'pro' | 'max';
  */
 export function PackagesTestPage() {
   const { status, profile } = useAuth();
-  if (status === 'loading') return null;
-  if (profile?.role !== 'super_admin') return <Navigate to="/packages" replace />;
+  // Testers: super admins, and the accounts listed in app_settings.billing_testers (asked from the database).
+  const [tester, setTester] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (status !== 'signed_in') return;
+    if (profile?.role === 'super_admin') return setTester(true);
+    void canTestBilling().then(setTester);
+  }, [status, profile?.role]);
+  if (status === 'loading' || (status === 'signed_in' && tester === null)) return null;
+  if (!tester) return <Navigate to="/packages" replace />;
   return <PackagesPage grow />;
 }
 

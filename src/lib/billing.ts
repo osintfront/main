@@ -59,6 +59,13 @@ export async function loadBillingOptions(): Promise<BillingOptions | null> {
   return error ? null : (data as BillingOptions);
 }
 
+/** May the signed-in user use the payments test page (super admin or listed tester)? */
+export async function canTestBilling(): Promise<boolean> {
+  if (!supabase) return false;
+  const { data, error } = await supabase.rpc('billing_can_test');
+  return !error && data === true;
+}
+
 export async function loadOrder(id: string): Promise<OrderState | null> {
   if (!supabase) return null;
   const { data } = await supabase.from('billing_orders').select('id,status,plan,period,kind,failure_reason').eq('id', id).maybeSingle();
