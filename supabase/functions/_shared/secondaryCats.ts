@@ -50,8 +50,39 @@ export function afterSplit(a: { own: string | null; secondary: string[]; groups:
  */
 export function withEditorMain(rowMain: string | null, editorMain: string | null, editorSecondary: string[], allowed: Iterable<string>): { main: string | null; secondary: string[] } {
   const ok = new Set(allowed);
-  const sticky = !!editorMain && ok.has(editorMain) && STICKY_MAIN.includes(editorMain) && editorMain !== rowMain;
-  if (!sticky) return { main: rowMain, secondary: cleanSecondary(editorSecondary, ok, rowMain) };
+  // Wounded takes the main place only when no kind of attack is known (triage gave none / other).
+  const knownKind = !!rowMain && !NEVER_SECONDARY.includes(rowMain) && rowMain !== "statements";
+  const sticky = !!editorMain && ok.has(editorMain) && STICKY_MAIN.includes(editorMain) && editorMain !== rowMain &&
+    !(editorMain === "wounded" && knownKind);
+  if (!sticky) {
+    // Wounded that did not take the main place is kept as a secondary type.
+    const extra = editorMain === "wounded" && ok.has("wounded") && editorMain !== rowMain ? [...editorSecondary, "wounded"] : editorSecondary;
+    return { main: rowMain, secondary: cleanSecondary(extra, ok, rowMain) };
+  }
   if (rowMain && STICKY_MAIN.includes(rowMain)) return { main: rowMain, secondary: cleanSecondary([editorMain, ...editorSecondary], ok, rowMain) };
   return { main: editorMain, secondary: cleanSecondary([rowMain, ...editorSecondary], ok, editorMain) };
+}
+
+/** Kinds that describe the attack or incident itself (not a result, a statement or a catch-all). */
+const NOT_A_KIND = new Set(["killed", "wounded", "assassination", "statements", ...NEVER_SECONDARY]);
+
+/**
+ * The agreed type rules that need no AI, applied to the final main + secondary types:
+ * an assassination always has Killed; a death announced in a statement is Killed (statement secondary);
+ * Wounded is main only when no attack kind is known — otherwise the attack is main and Wounded secondary.
+ */
+export function normalizeTypes(main: string | null, secondary: string[], allowed: Iterable<string>): { main: string | null; secondary: string[] } {
+  const ok = new Set(allowed);
+  const sec = [...secondary];
+  if (main === "assassination" && !sec.includes("killed") && ok.has("killed")) {
+    return { main, secondary: cleanSecondary(["killed", ...sec], ok, main) };
+  }
+  if (main === "statements" && sec.includes("killed")) {
+    return { main: "killed", secondary: cleanSecondary(["statements", ...sec.filter((s) => s !== "killed")], ok, "killed") };
+  }
+  if (main === "wounded" && !sec.includes("killed")) {
+    const attack = sec.find((s) => !NOT_A_KIND.has(s));
+    if (attack) return { main: attack, secondary: cleanSecondary([...sec.filter((s) => s !== attack), "wounded"], ok, attack) };
+  }
+  return { main, secondary: cleanSecondary(sec, ok, main) };
 }
