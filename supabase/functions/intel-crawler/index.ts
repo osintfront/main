@@ -430,6 +430,8 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         // or else on the country it is about (shown as an approximate location).
         city: r.city, region: r.region, country: mainCountry(r),
         locations: locationsForDb(r, 15),
+        // A new row: nothing set by hand yet (manual_secondary), so the editor's secondary types go in.
+        secondary_categories: r.secondary_category_slugs,
         latitude: pt?.lat ?? null, longitude: pt?.lng ?? null,
         location_precision: pt ? pt.precision : null,
         source_type: "news_website",

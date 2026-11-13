@@ -2,8 +2,12 @@
 // The editor tags every place with what happened there (locations[].category_slug).
 // When an event's places span several categories, the event keeps its own category's
 // places and a sibling event is created for each other category.
+// Secondary types (secondaryCats.ts): a single place kind that differs from the main type is kept as
+// a secondary type; after a split a Killed / Wounded / Assassination main survives and takes the kept
+// kind as secondary; siblings start with none. Hand-set lists (manual_secondary) only lose sibling kinds.
 // Siblings carry ai_suggestions.split_from = the original id (the dedupe agent skips them).
 
+import { afterSplit, singleKind } from "./secondaryCats.ts";
 // deno-lint-ignore no-explicit-any
 type Db = any;
 
@@ -67,6 +71,8 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
   const { data: ev } = await db.from("events").select("*").eq("id", eventId).maybeSingle();
   if (!ev || ev.deleted_at || ev.ai_suggestions?.split_from || ev.ai_suggestions?.split_into) return [];
   const places: Place[] = Array.isArray(ev.locations) ? ev.locations : [];
+  const oldSecondary: string[] = Array.isArray(ev.secondary_categories) ? ev.secondary_categories : [];
+  const manual = ev.ai_suggestions?.manual_secondary === true;
   const groups = new Map<string, Place[]>();
   for (const p of places) if (p?.category_slug) groups.set(p.category_slug, [...(groups.get(p.category_slug) ?? []), p]);
   if (groups.size < 2) {
@@ -74,9 +80,11 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
     // "assassination" carried out by an airstrike must not show a second, airstrike pin icon).
     if (groups.size === 1) {
       const { data: own } = await db.from("event_categories").select("slug").eq("id", ev.category_id).maybeSingle();
-      if (own?.slug && !groups.has(own.slug)) {
+      const [kind] = groups.keys();
+      const r = singleKind({ own: own?.slug ?? null, secondary: oldSecondary, kind });
+      if (r.relabelPlaces) {
         const fixed = places.map((p) => (p?.category_slug ? { ...p, category_slug: own.slug } : p));
-        const { error } = await db.from("events").update({ locations: fixed }).eq("id", ev.id);
+        const { error } = await db.from("events").update({ locations: fixed, ...(manual ? {} : { secondary_categories: r.secondary }) }).eq("id", ev.id);
         if (error) console.error("place category update failed", error.message);
       }
     }
@@ -85,8 +93,13 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
 
   const { data: cats } = await db.from("event_categories").select("id,slug,name").in("slug", [...groups.keys()]);
   const bySlug = new Map<string, { id: string; slug: string; name: string }>((cats ?? []).map((c: any) => [c.slug, c]));
-  const own = (cats ?? []).find((c: any) => c.id === ev.category_id)?.slug;
-  const keepSlug = own && groups.has(own) ? own : [...groups.keys()].find((s) => bySlug.has(s))!;
+  const { data: ownCat } = await db.from("event_categories").select("id,slug,name").eq("id", ev.category_id).maybeSingle();
+  const own: string | null = ownCat?.slug ?? null;
+  const kinds = [...groups.keys()].filter((s) => bySlug.has(s));
+  if (kinds.length < 2) return [];
+  const kept = afterSplit({ own, secondary: oldSecondary, groups: kinds });
+  const keepSlug = kept.keepSlug;
+  if (ownCat && !bySlug.has(ownCat.slug)) bySlug.set(ownCat.slug, ownCat);
   // Places without a tag stay with the original event.
   const untagged = places.filter((p) => !p?.category_slug);
   const ids: string[] = [];
@@ -126,17 +139,21 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
   if (!ids.length) return [];
 
   // The original keeps its own category's places (+ untagged ones); move its pin if it pointed elsewhere.
-  const keep = [...(groups.get(keepSlug) ?? []), ...untagged];
-  const keepCat = bySlug.get(keepSlug);
-  const heKeep = `${HE[keepSlug] ?? keepCat?.name ?? ""}: ${names(keep, "name")}`.slice(0, 200);
-  const enKeep = `${EN[keepSlug] ?? (keepCat?.name ?? "").replace(/\s*\(.*\)$/, "")}: ${names(keep, "name_en")}`.slice(0, 200);
+  const keptPlaces = groups.get(keepSlug) ?? [];
+  const keep = [...(kept.relabelPlaces ? keptPlaces.map((p) => ({ ...p, category_slug: kept.main })) : keptPlaces), ...untagged];
+  const main = kept.main;
+  const keepCat = bySlug.get(main);
+  const heKeep = `${HE[main] ?? keepCat?.name ?? ""}: ${names(keep, "name")}`.slice(0, 200);
+  const enKeep = `${EN[main] ?? (keepCat?.name ?? "").replace(/\s*\(.*\)$/, "")}: ${names(keep, "name_en")}`.slice(0, 200);
+  const siblingKinds = kinds.filter((s) => s !== keepSlug);
   const tr0 = (ev.translations ?? {}) as Record<string, any>;
   const update: Record<string, unknown> = {
     // The report's own headline covered every kind; now it is only one of them.
     title: heKeep,
     translations: { ...tr0, he: { ...(tr0.he ?? {}), title: heKeep }, en: { ...(tr0.en ?? {}), title: enKeep } },
     locations: keep,
-    category_id: bySlug.get(keepSlug)?.id ?? ev.category_id,
+    category_id: bySlug.get(main)?.id ?? ev.category_id,
+    secondary_categories: manual ? oldSecondary.filter((s) => !siblingKinds.includes(s)) : kept.secondary,
     ai_suggestions: { ...(ev.ai_suggestions ?? {}), split_into: ids },
   };
   const onPin = keep.some((p) => p.lat != null && Math.abs(Number(p.lat) - Number(ev.latitude)) < 1e-4 && Math.abs(Number(p.lng) - Number(ev.longitude)) < 1e-4);
