@@ -231,13 +231,14 @@ async function routeAll(page) {
       out.c7_upgradeGate = (await page.locator('[data-gate="upgrade"]').count()) === 1;
       out.c7_noCalls = calls.read === 0 && calls.start === 0;
     } else {
-      // 1. the button only after Expand, only in the details window, only with media
+      // 1. the button only after Expand (details window and list card), only with media
       const cardExpand = page.locator(`#event-card-${A.id}`).getByRole('button', { name: T.expand });
       if (await cardExpand.count()) {
         await cardExpand.first().click();
         await page.waitForTimeout(1200);
       }
-      out.c1_feedCardNone = (await page.locator(`#event-card-${A.id} [data-mt-button]`).count()) === 0;
+      out.c1_feedCard = (await page.locator(`#event-card-${A.id} [data-mt-button]`).count()) === 1; // the list card too
+      out.c1_feedCardNoAuto = calls.start === 0;
       await openDetails(page, B);
       await expand(page);
       out.c1_noMediaNone = (await mtBtn(page).count()) === 0;
