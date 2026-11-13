@@ -7,7 +7,7 @@
 // over) and soft-deleted.
 import { callClaude, CHEAP_MODELS, isTransient, STRONG_MODELS } from "./editor.ts";
 import { hashImage, repeatsIn } from "./imageHash.ts";
-import { couldBeSame, focusedPass, textTwin } from "./dedupeMatch.ts";
+import { couldBeSame, focusedPass, textTwin, worthConfirming } from "./dedupeMatch.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -200,7 +200,7 @@ export async function dedupeRecent(db: Db, sinceMinutes?: number, dry = false): 
   const propose = (list: Row[], found: Pair[], pass = "") => {
     if (dry) for (const p of found) trace.push({ pass, a: list[Number(p.new) - 1]?.id, b: list[Number(p.same_as) - 1]?.id, confidence: p.confidence, incident: String(p.incident ?? "").slice(0, 120) });
     for (const p of found) {
-      if (p.confidence !== "high") continue;
+      if (!worthConfirming(p.confidence)) continue;
       const a = list[Number(p.new) - 1], b = list[Number(p.same_as) - 1];
       if (!a || !b || a.id === b.id || (!fresh.has(a.id) && !fresh.has(b.id))) continue;
       const key = [a.id, b.id].sort().join("|");

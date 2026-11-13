@@ -149,3 +149,10 @@ export function focusedPass(
   const compare = groups.map((g) => `NEW [${no.get(g.fresh)}]: ${g.candidates.map((c) => `[${no.get(c)}]`).join(" ")}`).join("\n");
   return { rows: list, groups, compare };
 }
+
+/**
+ * Which cheap-model proposals go on to the strong model. The strong model is the gate (a merge
+ * needs its "high"); the cheap one only proposes, and it rates true re-reports "medium" when the
+ * wording differs (a road "built" at 09:35, "widened" in another outlet at 13:45). Low: never.
+ */
+export const worthConfirming = (confidence: string | undefined) => confidence === "high" || confidence === "medium";

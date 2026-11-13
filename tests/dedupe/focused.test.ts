@@ -6,7 +6,7 @@
 // the few older events whose headlines (Hebrew + English) look most like it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { couldBeSame, focusedPass, headlineSimilarity, textTwin } from '../../supabase/functions/_shared/dedupeMatch.ts';
+import { couldBeSame, focusedPass, headlineSimilarity, textTwin, worthConfirming } from '../../supabase/functions/_shared/dedupeMatch.ts';
 
 const slug = new Map([
   ['c-st', 'statements'], ['c-mil', 'military-activity'], ['c-art', 'artillery-shelling'], ['c-air', 'airstrike'],
@@ -103,4 +103,14 @@ test('focused pass: two NEW twins in one run are compared once', () => {
   assert.ok(out);
   assert.equal(out!.groups.length, 1);
   assert.equal(out!.rows.length, 2);
+});
+
+// 13 Nov: the cheap model found "Israeli forces widening the road from the Sayhan post" (09:35)
+// and its re-report four hours later, but at medium confidence, and only high went on to the
+// strong model. The strong model is the gate (it must say high); the cheap one only proposes.
+test('medium proposals from the cheap model go on to be confirmed; low ones do not', () => {
+  assert.equal(worthConfirming('high'), true);
+  assert.equal(worthConfirming('medium'), true);
+  assert.equal(worthConfirming('low'), false);
+  assert.equal(worthConfirming(undefined), false);
 });
