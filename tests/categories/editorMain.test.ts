@@ -64,3 +64,16 @@ test('whatsapp-ingest applies normalizeTypes after withEditorMain', async () => 
   const s = readFileSync('supabase/functions/whatsapp-ingest/index.ts', 'utf8');
   assert.match(s, /const picked = withEditorMain\([\s\S]{0,200}const types = normalizeTypes\(picked\.main, picked\.secondary/);
 });
+
+test('triage chose a result (Killed / Wounded), the editor chose the attack: the attack is not lost', () => {
+  const A = [...ALLOWED, 'shooting-gunfire', 'artillery-shelling'];
+  // wounded only, the attack known → the attack is main, Wounded secondary
+  assert.deepEqual(withEditorMain('wounded', 'shooting-gunfire', [], A), { main: 'shooting-gunfire', secondary: ['wounded'] });
+  assert.deepEqual(withEditorMain('wounded', 'shooting-gunfire', ['statements'], A), { main: 'shooting-gunfire', secondary: ['statements', 'wounded'] });
+  // deaths → Killed stays main, the attack becomes secondary (first)
+  assert.deepEqual(withEditorMain('killed', 'airstrike', [], A), { main: 'killed', secondary: ['airstrike'] });
+  assert.deepEqual(withEditorMain('killed', 'artillery-shelling', ['wounded'], A), { main: 'killed', secondary: ['artillery-shelling', 'wounded'] });
+  assert.deepEqual(withEditorMain('assassination', 'airstrike', [], A), { main: 'assassination', secondary: ['airstrike'] });
+  // a statement or catch-all from the editor is not "an attack"
+  assert.deepEqual(withEditorMain('killed', 'statements', [], A), { main: 'killed', secondary: [] });
+});

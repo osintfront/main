@@ -72,6 +72,14 @@ export function withEditorMain(rowMain: string | null, editorMain: string | null
   const sticky = !!editorMain && ok.has(editorMain) && STICKY_MAIN.includes(editorMain) && editorMain !== rowMain &&
     !(editorMain === "wounded" && knownKind);
   if (!sticky) {
+    // Triage chose a result (Killed / Wounded / Assassination) and the editor the attack itself: keep the attack.
+    const editorAttack = !!editorMain && ok.has(editorMain) && editorMain !== rowMain && !NOT_A_KIND.has(editorMain);
+    if (editorAttack && rowMain === "wounded") {
+      return { main: editorMain, secondary: cleanSecondary([...editorSecondary.filter((x) => x !== "wounded"), "wounded"], ok, editorMain) };
+    }
+    if (editorAttack && rowMain && STICKY_MAIN.includes(rowMain)) {
+      return { main: rowMain, secondary: cleanSecondary([editorMain!, ...editorSecondary], ok, rowMain) };
+    }
     // Wounded that did not take the main place is kept as a secondary type.
     const extra = editorMain === "wounded" && ok.has("wounded") && editorMain !== rowMain ? [...editorSecondary, "wounded"] : editorSecondary;
     return { main: rowMain, secondary: cleanSecondary(extra, ok, rowMain) };
