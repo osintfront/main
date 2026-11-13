@@ -20,6 +20,9 @@ export function QuickLocationDialog({ event, iconName, color, busy, onCancel, on
   const [lat, setLat] = useState<number | null>(event.latitude);
   const [lng, setLng] = useState<number | null>(event.longitude);
   const [name, setName] = useState(event.locationName ?? '');
+  // A name typed in this dialog stands; otherwise a new spot on the map brings its own name
+  // (the old one, e.g. "Gaza", must not ride along to Lebanon).
+  const [typed, setTyped] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCancel();
@@ -59,7 +62,10 @@ export function QuickLocationDialog({ event, iconName, color, busy, onCancel, on
             {t('form.locationName')}
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setTyped(true);
+                setName(e.target.value);
+              }}
               maxLength={200}
               dir="auto"
               className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
@@ -73,13 +79,15 @@ export function QuickLocationDialog({ event, iconName, color, busy, onCancel, on
             onPick={(a, b) => {
               setLat(a);
               setLng(b);
+              if (!typed) setName('');
             }}
             onSelectResult={(r) => {
               setLat(r.latitude);
               setLng(r.longitude);
               setName(r.locationName || r.city || r.label);
+              setTyped(false);
             }}
-            onReverse={(r) => setName((n) => n || r.locationName || r.city || '')}
+            onReverse={(r) => setName((n) => (typed && n ? n : r.locationName || r.city || n))}
           />
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('list.quickLocationHint')}</p>
         </div>
