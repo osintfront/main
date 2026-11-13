@@ -33,6 +33,8 @@ export function openLightbox(src: string, alt = '', ov?: LightboxOverlay): void 
   close.textContent = '×';
   overlay.append(img, close);
   let unmount: (() => void) | null = null;
+  let pending: (() => void) | null = null; // a mount waiting for the picture to load
+  let closed = false;
   if (ov && ov.boxes.length) {
     const bar = document.createElement('div');
     bar.className = 'ofm-ov__switch ofm-ov__switch--viewer';
@@ -55,10 +57,18 @@ export function openLightbox(src: string, alt = '', ov?: LightboxOverlay): void 
       hint.hidden = !on;
       unmount?.();
       unmount = null;
+      if (pending) img.removeEventListener('load', pending);
+      pending = null;
       if (on) {
-        const go = () => (unmount = mountOverlay(overlay, img, ov.boxes, { fit: 'contain', interactive: true }));
+        const go = () => {
+          pending = null;
+          if (!closed) unmount = mountOverlay(overlay, img, ov.boxes, { fit: 'contain', interactive: true });
+        };
         if (img.complete && img.naturalWidth) go();
-        else img.addEventListener('load', go, { once: true });
+        else {
+          pending = go;
+          img.addEventListener('load', go, { once: true });
+        }
       }
       if (user) ov.onChange?.(on);
     };
@@ -70,6 +80,8 @@ export function openLightbox(src: string, alt = '', ov?: LightboxOverlay): void 
   document.addEventListener('keydown', onKey);
   (overlay as HTMLElement & { _off?: () => void })._off = () => {
     document.removeEventListener('keydown', onKey);
+    closed = true;
+    if (pending) img.removeEventListener('load', pending);
     unmount?.();
   };
   document.body.append(overlay);

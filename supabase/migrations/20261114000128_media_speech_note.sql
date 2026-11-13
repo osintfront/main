@@ -42,7 +42,7 @@ begin
   left join public.media_readings r on r.media_id = i.media_id
   where r.media_id is null
      or (v_audio and r.kind = 'video' and r.speech->>'state' = 'off'
-         and coalesce((r.speech->>'tries')::int, 0) < 2);
+         and (case when r.speech->>'tries' ~ '^[0-9]+$' then (r.speech->>'tries')::int else 0 end) < 2);
 
   select busy_until, retry_after, speech_note into v_job from public.media_jobs where event_id = p_event;
   return jsonb_build_object(

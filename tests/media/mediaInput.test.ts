@@ -245,7 +245,8 @@ test('cleanBox', async () => {
   const { cleanBox } = await import('../../supabase/functions/_shared/mediaInput.ts');
   assert.deepEqual(cleanBox([100, 200, 300, 600]), [100, 200, 300, 600]);
   assert.deepEqual(cleanBox([0.1, 0.2, 0.3, 0.6]), [100, 200, 300, 600]);
-  assert.deepEqual(cleanBox([-5, 0, 1200, 500]), [0, 0, 1000, 500]);
+  assert.equal(cleanBox([-5, 0, 1200, 500]), null);
+  assert.deepEqual(cleanBox([-5, 0, 1040, 500]), [0, 0, 1000, 500]);
   assert.equal(cleanBox([100, 200, 104, 600]), null);
   assert.equal(cleanBox([300, 200, 100, 600]), null);
   for (const v of [['1', 2, 3, 4], [1, 2, 3], [1, 2, 3, 4, 5], null, 'x']) assert.equal(cleanBox(v), null, JSON.stringify(v));

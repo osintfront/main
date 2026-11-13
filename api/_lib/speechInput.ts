@@ -120,47 +120,67 @@ export interface SpeechAnswer { state: 'ok' | 'none'; lang: string; speech: stri
 export function timeSec(v: unknown): number | null {
   if (typeof v === 'number') return Number.isFinite(v) && v >= 0 ? v : null;
   if (typeof v !== 'string') return null;
-  const m = /^\s*(?:(\d+):)?(?:(\d+):)?(\d+(?:\.\d+)?)\s*$/.exec(v);
+  // "1.5", "1,5", "1.5s", "01:05", "00:00:01,500" (SRT commas)
+  const m = /^\s*(?:(\d+):)?(?:(\d+):)?(\d+(?:[.,]\d+)?)\s*s?\s*$/i.exec(v);
   if (!m) return null;
-  const parts = [m[1], m[2], m[3]].filter((x) => x !== undefined).map(Number);
+  const parts = [m[1], m[2], m[3]].filter((x) => x !== undefined).map((x) => Number(x.replace(',', '.')));
   return parts.reduce((acc, n) => acc * 60 + n, 0);
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Timed lines cleaned (spec "Timed lines — cleaning rules"); cut = something left out by a limit. */
-export function cleanSegments(raw: unknown, o: { maxChars: number; durationSec: number | null }): { segments: SpeechSegment[]; cut: boolean } {
-  if (!Array.isArray(raw)) return { segments: [], cut: false };
+/**
+ * Timed lines cleaned (spec "Timed lines — cleaning rules"); cut = something left out by a limit.
+ * Text is never lost to timing: lines that share a start are merged into one cue; when any line with
+ * letters has no usable timing, `lost` is true (the caller keeps all the text and shows no subtitles).
+ */
+export function cleanSegments(
+  raw: unknown,
+  o: { maxChars: number; durationSec: number | null },
+): { segments: SpeechSegment[]; cut: boolean; lost: boolean; texts: string[] } {
+  if (!Array.isArray(raw)) return { segments: [], cut: false, lost: false, texts: [] };
   const L = SPEECH_LIMITS;
   const lines: { start: number; end: number | null; text: string }[] = [];
+  const texts: string[] = [];
+  let lost = false;
   for (const x of raw) {
     if (!x || typeof x !== 'object') continue;
     const r = x as Record<string, unknown>;
-    const start = timeSec(r.start);
     const text = typeof r.text === 'string' ? r.text.trim().slice(0, L.segmentText) : '';
-    if (start === null || !/\p{L}/u.test(text)) continue;
-    if (o.durationSec != null && start >= o.durationSec) continue;
+    if (!/\p{L}/u.test(text)) continue;
+    texts.push(text);
+    const start = timeSec(r.start);
+    if (start === null || (o.durationSec != null && start >= o.durationSec)) {
+      lost = true;
+      continue;
+    }
     lines.push({ start, end: timeSec(r.end), text });
   }
   lines.sort((a, b) => a.start - b.start);
   const out: SpeechSegment[] = [];
   let cut = false;
   let chars = 0;
+  let carry = '';
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
+    const text = carry ? `${carry} ${l.text}` : l.text;
+    carry = '';
     let end = l.end != null && l.end > l.start ? l.end : l.start + L.cueDefaultSec;
     end = Math.min(end, l.start + L.cueMaxSec);
     const next = lines[i + 1];
     if (next && end > next.start) end = next.start;
-    if (end - l.start < L.cueMinSec) continue;
-    if (out.length >= L.segments || chars + l.text.length > o.maxChars) {
+    if (end - l.start < L.cueMinSec) {
+      if (next) carry = text; // too short to show: its words go into the next cue
+      continue;
+    }
+    if (out.length >= L.segments || chars + text.length > o.maxChars) {
       cut = true;
       break;
     }
-    chars += l.text.length;
-    out.push({ start: round2(l.start), end: round2(end), text: l.text });
+    chars += text.length;
+    out.push({ start: round2(l.start), end: round2(end), text: text.slice(0, L.segmentText * 2) });
   }
-  return { segments: out, cut };
+  return { segments: out, cut, lost, texts };
 }
 
 /** Gemini's answer cleaned; null = it could not be read. */
@@ -179,7 +199,13 @@ export function cleanSpeech(raw: unknown, durationSec: number | null = null): Sp
   const timed = cleanSegments(r.segments, { maxChars: SPEECH_LIMITS.text, durationSec });
   let speech = '';
   let cut = false;
-  if (timed.segments.length) {
+  if (timed.lost) {
+    // Some line had no usable timing: keep every word, show no subtitles.
+    const all = timed.texts.join('\n');
+    speech = all.slice(0, SPEECH_LIMITS.text);
+    cut = all.length > SPEECH_LIMITS.text;
+    timed.segments = [];
+  } else if (timed.segments.length) {
     speech = timed.segments.map((x) => x.text).join('\n');
     cut = timed.cut;
   } else {

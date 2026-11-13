@@ -20,7 +20,7 @@ export const MEDIA_LIMITS = {
   summary: 500,
   maxTokens: 8000,
   segments: 120,
-  segmentText: 300,
+  segmentText: 600, // a cue may hold merged lines that shared a start
   boxMin: 8,
   routeMs: 100000,
   claudeMs: 75000,
@@ -234,6 +234,8 @@ export function cleanBox(v: unknown): Box | null {
   if (!Array.isArray(v) || v.length !== 4 || !v.every((n) => typeof n === 'number' && Number.isFinite(n))) return null;
   let n = v as number[];
   if (n.every((x) => x <= 1) && n.some((x) => !Number.isInteger(x))) n = n.map((x) => x * 1000);
+  // Far outside the picture (over 5%) is a wrong answer, not a small overshoot: not drawn.
+  if (n.some((x) => x < -50 || x > 1050)) return null;
   const [y0, x0, y1, x1] = n.map((x) => Math.min(1000, Math.max(0, Math.round(x))));
   return y1 - y0 >= MEDIA_LIMITS.boxMin && x1 - x0 >= MEDIA_LIMITS.boxMin ? [y0, x0, y1, x1] : null;
 }
@@ -371,8 +373,11 @@ export function speechBudgetMs(deadline: number, now: number): number {
 }
 
 /** A failed route call leaves that video's speech 'off' with one more try counted, and the run goes on. */
-export function routeOutcome(sp: RouteSpeech | 'failed', prevTries = 0): RouteSpeech {
-  return sp === 'failed' ? { state: 'off', lang: 'und', seconds: null, speech: '', onScreen: [], cut: false, segments: [], tries: prevTries + 1 } : sp;
+export function routeOutcome(sp: RouteSpeech | 'failed', prevTries = 0, counted = true): RouteSpeech {
+  if (sp !== 'failed') return sp;
+  // A skip (no time left, no call made) keeps the count: it never spends the one retry.
+  const tries = counted ? prevTries + 1 : prevTries;
+  return { state: 'off', lang: 'und', seconds: null, speech: '', onScreen: [], cut: false, segments: [], ...(tries ? { tries } : {}) };
 }
 
 /** Why a speech-route call gave no speech (null when it answered with a known state). Never speech text. */

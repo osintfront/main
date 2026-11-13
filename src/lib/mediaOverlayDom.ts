@@ -18,7 +18,7 @@ export function mountOverlay(host: HTMLElement, img: HTMLImageElement, boxes: Ov
       el.style.cursor = 'pointer';
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const orig = el.getAttribute('data-ov-state') !== 'orig';
+        const orig = el.dataset.mode !== 'orig'; // the mode, not the drawn state (a frame keeps its mode)
         paint(el, b, orig);
         place();
       });

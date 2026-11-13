@@ -70,7 +70,7 @@ export function toVtt(segments: Segment[], lang: string): string | null {
   for (const s of segments) {
     const text = pick(s.he, s.en, lang).trim();
     if (!text) continue;
-    const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/-->/g, '→').replace(/\n{2,}/g, '\n');
+    const safe = text.replace(/\r\n?/g, '\n').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/-->/g, '→').replace(/\n{2,}/g, '\n');
     out += `${vttTime(s.start)} --> ${vttTime(s.end)}\n${safe}\n\n`;
     any = true;
   }

@@ -21,10 +21,14 @@ export function SubtitledVideo({ src, poster, autoPlay, preload, aspect, maxHeig
   const video = useRef<HTMLVideoElement>(null);
   const [on, setOn] = useState(true);
   const vtt = useMemo(() => toVtt(segments, lang), [segments, lang]);
-  const url = useMemo(() => (vtt ? URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' })) : null), [vtt]);
-  useEffect(() => () => {
-    if (url) URL.revokeObjectURL(url);
-  }, [url]);
+  // Made and revoked in one effect (StrictMode-safe: a revoked address is never left on the track).
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!vtt) return setUrl(null);
+    const u = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [vtt]);
   // The browser draws the cues; the switch only changes the track's mode.
   useEffect(() => {
     const tt = video.current?.textTracks?.[0];

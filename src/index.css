@@ -636,6 +636,7 @@ a, button, input, label, select, textarea, [role='button'] {
 }
 .ofm-lightbox__close {
   position: absolute;
+  z-index: 2; /* above the translation boxes */
   top: 12px;
   inset-inline-end: 12px;
   width: 40px;

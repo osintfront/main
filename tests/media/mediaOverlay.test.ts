@@ -95,3 +95,7 @@ test('the shared store', () => {
   assert.equal(calls, before);
   void ({} as MediaReadingItem);
 });
+
+test('toVtt: carriage returns never split a cue', () => {
+  assert.equal(toVtt([{ start: 0, end: 1, orig: 'x', he: '', en: 'a\r\n\r\nb\r\rc' }], 'en'), 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\na\nb\nc\n\n');
+});

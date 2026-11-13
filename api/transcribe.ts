@@ -190,12 +190,12 @@ export async function POST(req: Request) {
     console.log('transcribe', clean.state, file.length, seconds, Date.now() - t0);
     return json({ ...clean, seconds, model, usage });
   } catch (e) {
-    const detail = e instanceof Busy ? e.detail : busyDetail('generate', null, null);
+    const detail = e instanceof Busy ? e.detail : 'internal ' + String((e as Error)?.name ?? 'error').slice(0, 40);
     console.warn('transcribe busy', detail, file.length);
     return json({ error: 'busy', detail }, 502);
   } finally {
     if (uploaded) {
-      await fetch(`${GEMINI}/v1beta/${uploaded.name}`, { method: 'DELETE', headers: { 'x-goog-api-key': key } }).catch(() => {});
+      await fetch(`${GEMINI}/v1beta/${uploaded.name}`, { method: 'DELETE', headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(3000) }).catch(() => {});
     }
   }
 }

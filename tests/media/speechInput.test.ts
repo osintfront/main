@@ -96,24 +96,27 @@ test('timeSec', () => {
 
 test('cleanSegments', () => {
   const o = { maxChars: 6000, durationSec: null };
+  const sc = (r: ReturnType<typeof cleanSegments>) => ({ segments: r.segments, cut: r.cut });
   assert.deepEqual(
-    cleanSegments([{ start: 5, end: 7, text: 'ب ب' }, { start: 0, end: 9, text: 'ا ا' }, { start: '00:07', text: 'ج ج' }], o),
+    sc(cleanSegments([{ start: 5, end: 7, text: 'ب ب' }, { start: 0, end: 9, text: 'ا ا' }, { start: '00:07', text: 'ج ج' }], o)),
     { segments: [{ start: 0, end: 5, text: 'ا ا' }, { start: 5, end: 7, text: 'ب ب' }, { start: 7, end: 11, text: 'ج ج' }], cut: false },
   );
   assert.equal(cleanSegments([{ start: 0, end: 40, text: 'ab' }], o).segments[0].end, 12);
-  assert.equal(cleanSegments([{ start: 11, end: 12, text: 'ab' }], { maxChars: 6000, durationSec: 10 }).segments.length, 0);
+  const past = cleanSegments([{ start: 11, end: 12, text: 'ab' }], { maxChars: 6000, durationSec: 10 });
+  assert.equal(past.segments.length, 0);
+  assert.equal(past.lost, true);
   assert.equal(cleanSegments([{ start: 0, end: 2, text: '...' }], o).segments.length, 0);
   assert.equal(cleanSegments([{ start: 'x', end: 2, text: 'ab' }], o).segments.length, 0);
   const two = cleanSegments([{ start: 3, end: 5, text: 'first' }, { start: 3, end: 6, text: 'second' }], o).segments;
-  assert.deepEqual(two.map((x) => x.text), ['second']);
+  assert.deepEqual(two.map((x) => x.text), ['first second'], 'same start: merged, no text lost');
   const many = cleanSegments(Array.from({ length: 130 }, (_, i) => ({ start: i, end: i + 1, text: 'ab' })), o);
   assert.equal(many.segments.length, 120);
   assert.equal(many.cut, true);
   const chars = cleanSegments([{ start: 0, end: 1, text: 'aaaaa' }, { start: 1, end: 2, text: 'bbbbb' }, { start: 2, end: 3, text: 'ccccc' }], { maxChars: 12, durationSec: null });
   assert.equal(chars.segments.length, 2);
   assert.equal(chars.cut, true);
-  assert.deepEqual(cleanSegments('x', o), { segments: [], cut: false });
-  assert.deepEqual(cleanSegments(null, o), { segments: [], cut: false });
+  assert.deepEqual(sc(cleanSegments('x', o)), { segments: [], cut: false });
+  assert.deepEqual(sc(cleanSegments(null, o)), { segments: [], cut: false });
   assert.equal(cleanSegments([{ start: 0, end: 2, text: 'a'.repeat(500) }], o).segments[0].text.length, 300);
   assert.equal(cleanSegments([{ start: 0.123456, end: 1.98765, text: 'ab' }], o).segments[0].start, 0.12);
 });
@@ -130,4 +133,22 @@ test('cleanSpeech with timed lines', () => {
   assert.equal(old.speech, 'مرحبا بكم');
   const short = cleanSpeech({ segments: [{ start: 0, end: 2, text: 'ab' }], language: 'en' }, 60)!;
   assert.equal(short.state, 'none');
+});
+
+test('review fixes: speech text is never lost to timing', () => {
+  assert.equal(timeSec('00:00:01,500'), 1.5);
+  assert.equal(timeSec('1.5s'), 1.5);
+  assert.equal(timeSec('2,25'), 2.25);
+  const srt = cleanSpeech({ segments: [{ start: '00:00:01,500', end: '00:00:03,000', text: 'hello there friends' }, { start: '3.5s', end: '5s', text: 'and welcome back' }], language: 'en' })!;
+  assert.equal(srt.state, 'ok');
+  assert.equal(srt.segments.length, 2);
+  const same = cleanSpeech({ segments: ['first one', 'second one', 'third one'].map((text) => ({ start: '00:01', end: '00:02', text })), language: 'en' })!;
+  assert.equal(same.speech, 'first one second one third one');
+  const untimed = cleanSpeech({ segments: [{ start: 0, end: 2, text: 'timed words here' }, { start: 'soon', text: 'untimed words here' }], language: 'en' })!;
+  assert.equal(untimed.state, 'ok');
+  assert.equal(untimed.speech, 'timed words here\nuntimed words here');
+  assert.deepEqual(untimed.segments, [], 'a line without usable timing: no subtitles, all text kept');
+  const past = cleanSpeech({ segments: [{ start: 70, end: 72, text: 'said after the end' }], language: 'en' }, 60)!;
+  assert.equal(past.state, 'ok');
+  assert.equal(past.speech, 'said after the end');
 });

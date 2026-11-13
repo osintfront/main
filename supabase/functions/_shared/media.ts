@@ -172,7 +172,7 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
           const r = ms ? await speechFor(url, purpose, ms) : { out: "failed" as const, note: "skipped: no time left for the route" };
           note(item.id, r.note);
           if (r.out !== "failed") videosSoFar++;
-          s.speech = routeOutcome(r.out, readings.find((x) => x.media_id === item.id)?.speech_tries ?? 0);
+          s.speech = routeOutcome(r.out, readings.find((x) => x.media_id === item.id)?.speech_tries ?? 0, ms > 0);
         } else {
           s.speech = noSpeech(plan === "route" ? "unavailable" : plan);
         }
