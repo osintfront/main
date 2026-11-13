@@ -43,8 +43,10 @@ export interface ChainResult {
 }
 
 class ProviderError extends Error {
-  constructor(message: string, public status?: number) {
+  status?: number;
+  constructor(message: string, status?: number) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -288,15 +290,43 @@ const PROVIDERS: Provider[] = [
   },
 ];
 
+/** Hashtags, @handles and links are not content: left in, they come back untranslated and fail the script check. */
+export function stripTags(text: string): string {
+  return text
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/(^|[\s(])[#@][\p{L}\p{N}_]+/gu, '$1')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .trim();
+}
+
+/** Arabic script → Arabic, or Persian when it has Persian letters (پ چ ژ گ ک ی ۀ or the zero-width joiner); Hebrew; else English. */
+export function detectLang(text: string): Lang {
+  const ar = (text.match(/[\u0600-\u06FF]/g) ?? []).length;
+  const he = (text.match(/[\u0590-\u05FF]/g) ?? []).length;
+  const la = (text.match(/[A-Za-z]/g) ?? []).length;
+  if (ar >= he && ar >= la && ar > 0) return (text.match(/[پچژگکیۀ\u200c]/g) ?? []).length >= 2 ? 'fa' : 'ar';
+  if (he >= la && he > 0) return 'he';
+  return 'en';
+}
+
+const ARABIC = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g;
+
 /**
- * Is this really a translation into the target language? Rejects an answer that kept Arabic
- * letters, or that is not mostly in the target script (e.g. a model's "thinking" in English).
+ * Is this really a translation into the target language? Rejects an answer that is still in Arabic
+ * script, or that is not mostly in the target script (e.g. a model's "thinking" in English). A quoted
+ * original word, a hashtag or a name in brackets may keep its letters (a few, under 5% of the text):
+ * rejecting those sent every such headline down to the paid fallback and then left it untranslated.
  */
 export function badOutput(out: string, target: Lang): string | null {
-  const ar = (out.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) ?? []).length;
   const he = (out.match(/[\u0590-\u05FF]/g) ?? []).length;
   const la = (out.match(/[A-Za-z]/g) ?? []).length;
-  if (ar > 0) return 'answer still contains Arabic letters';
+  const kept = out
+    .replace(/(^|\s)#\S+/g, '$1')
+    .replace(/["“”«»„(][^"“”«»„()\n]{1,40}["“”«»”)]/g, '');
+  const ar = (kept.match(ARABIC) ?? []).length;
+  const all = (out.match(ARABIC) ?? []).length + he + la;
+  if (ar > 2 && ar > all * 0.05) return 'answer still contains Arabic letters';
   if (target === 'he' && he < (he + la) * 0.6) return 'answer is not in Hebrew';
   if (target === 'en' && la < (he + la) * 0.6) return 'answer is not in English';
   return null;

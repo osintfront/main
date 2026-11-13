@@ -7,7 +7,7 @@
 // or our own Supabase functions (header x-translate-secret = TRANSLATE_SECRET).
 // Never fails because of the providers: if every one of them fails, the original text comes back.
 import { createHash } from 'node:crypto';
-import { activeProviders, testProviders, translateWithFallback, type ChainResult, type Lang } from './_lib/translateChain.js';
+import { activeProviders, detectLang, stripTags, testProviders, translateWithFallback, type ChainResult, type Lang } from './_lib/translateChain.js';
 
 const env = (k: string) => (process.env[k] ?? '').trim();
 const SUPABASE_URL = () => env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
@@ -45,16 +45,6 @@ async function authorized(req: Request): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/** Arabic script → Arabic, Hebrew letters → Hebrew, otherwise English (no translation when it is already the target). */
-function detect(text: string): Lang {
-  const ar = (text.match(/[؀-ۿ]/g) ?? []).length;
-  const he = (text.match(/[֐-׿]/g) ?? []).length;
-  const la = (text.match(/[A-Za-z]/g) ?? []).length;
-  if (ar >= he && ar >= la && ar > 0) return /[پچژگک]/.test(text) ? 'fa' : 'ar';
-  if (he >= la && he > 0) return 'he';
-  return 'en';
 }
 
 const hashOf = (text: string, target: string) => createHash('sha256').update(`${target}\u0000${text}`).digest('hex');
@@ -163,25 +153,27 @@ export async function POST(req: Request): Promise<Response> {
       out.push({ text: hit.translated_text, provider: hit.provider, cached: true, translated: true });
       continue;
     }
-    const source = sourceIn === 'auto' ? detect(text) : (sourceIn as Lang);
-    // Already in the target language: nothing to translate.
-    if (source === target) {
+    // Hashtags, @handles and links are not translated (the cache key stays the original text).
+    const body = stripTags(text);
+    const source = sourceIn === 'auto' ? detectLang(body || text) : (sourceIn as Lang);
+    // Already in the target language, or nothing left but tags: nothing to translate.
+    if (source === target || !body) {
       out.push({ text: raw, provider: 'none', cached: false, translated: false });
       continue;
     }
     const started = Date.now();
-    const r = await translateWithFallback(text, target as Lang, source, log, deadline);
+    const r = await translateWithFallback(body, target as Lang, source, log, deadline);
     if (!r) {
       log('[translate] all providers failed — returning the original text');
       out.push({ text: raw, provider: 'none', cached: false, translated: false });
-      await logRow({ provider: 'none', target_lang: target, chars: text.length, paid: false, ok: false, duration_ms: Date.now() - started, detail: lines.slice(-7).join(' | ').slice(0, 1000) });
+      await logRow({ provider: 'none', target_lang: target, chars: body.length, paid: false, ok: false, duration_ms: Date.now() - started, detail: lines.slice(-7).join(' | ').slice(0, 1000) });
       continue;
     }
     cached.set(hashes[i], { translated_text: r.text, provider: r.provider });
     out.push({ text: r.text, provider: r.provider, cached: false, translated: true });
     await Promise.all([
       cacheSave(hashes[i], text, source, target, r),
-      logRow({ provider: r.provider, model: r.model, target_lang: target, chars: text.length, paid: r.paid, ok: true, duration_ms: Date.now() - started }),
+      logRow({ provider: r.provider, model: r.model, target_lang: target, chars: body.length, paid: r.paid, ok: true, duration_ms: Date.now() - started }),
       logClaudeCost(r),
     ]);
   }
