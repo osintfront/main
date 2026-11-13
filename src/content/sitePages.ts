@@ -251,7 +251,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         },
         {
           h: 'רכישת חבילה בתשלום',
-          p: ['את חבילות Pro ו-Max אפשר לרכוש ישירות ב[דף החבילות](/packages). לרכישת חבילת API, או לכל שאלה על חבילה, כתבו לנו ב-' + mail + '. לביטול מנוי ראו [ביטול מנוי](/cancel-subscription).'],
+          p: ['לרכישת חבילה (Pro, Max או API), או לכל שאלה על חבילה, כתבו לנו ב-' + mail + ' וציינו את החבילה הרצויה (חודשית או שנתית) ואת כתובת המייל של החשבון באתר. המחירים מופיעים ב[דף החבילות](/packages). לביטול מנוי ראו [ביטול מנוי](/cancel-subscription).'],
         },
         {
           h: 'דיווחים, שיתופי פעולה ופרסום',
@@ -471,7 +471,7 @@ export const PAGES: Record<'he' | 'en', Record<PageId, SitePage>> = {
         },
         {
           h: 'Buying a paid plan',
-          p: ['Pro and Max can be bought directly on the [plans page](/packages). For an API plan, or any question about plans, write to ' + mail + '. To cancel, see [cancel subscription](/cancel-subscription).'],
+          p: ['To buy a plan (Pro, Max or API), or for any question about plans, write to ' + mail + ' with the plan you want (monthly or yearly) and the email of your site account. Prices are on the [plans page](/packages). To cancel, see [cancel subscription](/cancel-subscription).'],
         },
         { h: 'Tips, partnerships and advertising', p: ['Want to suggest a source, work with us or advertise on the site? Write to the same address.'] },
       ],
