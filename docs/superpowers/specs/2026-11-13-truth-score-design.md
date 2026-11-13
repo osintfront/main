@@ -7,6 +7,9 @@ Owner's request (ציון אמיתות): every event / news item carries a perce
 4. Confirmation across languages and across sides (Israeli vs Lebanese sources) raises the score.
 5. When an item cites a mainstream outlet ("according to Al Jazeera …"), the system checks that
    outlet itself and scores by the result (found there / not found / could not be checked).
+6. (added the same day) Visual evidence counts: footage (תיעודים) and photos attached to the
+   event raise the score; the same picture reposted by many channels counts once; an old picture
+   seen before on another event gives nothing and lowers the score.
 
 Owner: Ben. Planner: Fable (this spec). Implementation: Opus, only after the owner approves.
 Branch `feat/truth-score` (from main c87c1d0). The owner could not be asked questions while this was
@@ -15,7 +18,7 @@ under **Open decisions**, each with a recommended default. No implementation pla
 
 ## Goal
 1. Every published event gets a score from 5 to 99, computed by plain code (no AI) from who
-   reported it, and a short "why" list a reader can open.
+   reported it and what footage came with it, and a short "why" list a reader can open.
 2. The score moves by itself when a new source joins the event (merge, duplicate fold, edit).
 3. A cited outlet is really checked, almost always for free, and the result is shown in words.
 4. Staff can classify sources, tune the weights, and override the score of one event.
@@ -41,6 +44,16 @@ under **Open decisions**, each with a recommended default. No implementation pla
   (`msg_key = tg:<username>/<post id>`, `message_text`, `sent_at`, `event_id`). The channels of
   Al Jazeera, Al Arabiya, Al Hadath, SANA, ynet, Kan, IRNA, the IDF (`idf_telegram`) and CENTCOM
   (`U_S_CENTCOM`) are among the monitored ones. This is the free place to check a citation.
+- **Pictures and video.** 48% of events have at least one picture or video still
+  (`event_media`, kinds `image` and `video_thumb`), 21% have video, 8% have media from two or more
+  channels. Every row has `sha256` (exact bytes) and almost every one `phash` (64-bit picture
+  hash, `_shared/imageHash.ts`), and `source_msg_key` says which channel posted it. The media
+  dedupe (`event-agent` `media_dedupe`, every 10 minutes, and `attachMedia` at ingest) already
+  keeps one copy of each picture **per event** — so the rows that remain are different pictures.
+  Nothing today looks for the same picture on **another** event: in 14 days 71 pictures (exact
+  bytes) or 146 (same picture hash) had already appeared on a different event more than 24 hours
+  earlier — about 1%. 61 pictures appear on three or more events (logos, portraits, file photos).
+  Terrain geolocation (`geoloc_jobs`) has no accepted results at the moment.
 - `intel-crawler` is **switched off** (`app_settings.intel_crawler.enabled = false`; the last row
   in `intel_items` is from 2026-11-10). The design does not depend on it.
 - Today's "verified" tick: trigger `events_auto_verify` (migration 28) sets `is_verified` when
@@ -123,11 +136,13 @@ under **Open decisions**, each with a recommended default. No implementation pla
   |---|---|---|
   | **A. Best origin** — the highest class among the origins | official 55 · mainstream 42 · state_media 28 · partisan 18 · unknown 12 | one value |
   | **B. More strong origins** — every other official / mainstream / state_media origin | official +15 · first mainstream +20, each further +8 · state_media +6 | 25 |
-  | **C. Other independent origins** — partisan and unknown ones not counted above | +5, +4, +3, +2, +1 | 15 |
-  | **D. Variety** — sides: an opposing pair +12, two other different sides +6; languages: two +4, three or more +8 | | 20 |
+  | **C. Other independent origins** — partisan and unknown ones not counted above | +5, +4, +3 | 12 |
+  | **D. Variety** — sides: an opposing pair +12, two other different sides +6; languages: two or more +4 | | 16 |
+  | **F. Visual evidence** — new footage or photos (rules below) | video +8 or photo only +5 · each further independent footage origin +3, +4 when it is from an opposing side · footage checked and matching the place +4 | 12 |
   | **E. Citation not found** at the outlet | −8, once per event | |
+  | **G. Old or mismatching picture** and no new footage | −6, once per event | |
 
-  `score = clamp(A + B + C + D + E, 5, 99)`, then:
+  `score = clamp(A + B + C + D + F + E + G, 5, 99)`, then:
   - **One-side ceiling 45:** no official and no mainstream origin, and every origin on one side.
   - **Staff tick floor 90:** `is_verified` set by a person — true, and
     `ai_suggestions.verified_by` (which `events_auto_verify` writes) is absent.
@@ -146,7 +161,50 @@ under **Open decisions**, each with a recommended default. No implementation pla
   | IDF Spokesperson alone | 55 |
   | IDF Spokesperson + a Hezbollah channel, two languages | 55+5+12+4 = 76 |
   | IDF + two mainstream outlets + other side + two languages | 55+25+12+4 = 96 |
+  | One partisan channel with a new video | 18+8 = 26 |
+  | One partisan channel with a picture seen on an older event | 18−6 = 12 |
+  | Two Lebanese channels + one Israeli, each side with its own footage | 43+8+4 = 55 |
+  | One mainstream outlet + a video from a local channel | 42+5+8 = 55 |
+  | IDF + two mainstream + other side + two languages + video | 96+8 → 99 |
 
+  **Making room for media.** Part F is new (ceiling 12). To pay for it, C went from 15 to 12
+  (a fifth and sixth extra channel no longer add) and D from 20 to 16 (a third language no longer
+  adds). The ceilings still add up to more than 99 (55+25+12+16+12 = 120) on purpose: there are
+  several different roads to a high score, and the final clamp keeps the top at 99 whatever is
+  added. A table whose ceilings sum to exactly 99 was tried and dropped: two mainstream outlets
+  came out at 52 and the IDF alone at 45, against requirement 1.
+
+- **Visual evidence (part F).**
+  - **What is counted:** the event's `event_media` rows of kind `image` / `video_thumb` that
+    survived the existing dedupe. The same photo reposted by ten channels is one row and counts
+    once, credited to the channel whose copy was kept. Nothing new is hashed or downloaded.
+  - **Each picture is one of:** *new*; *shared* — the same picture (same `sha256`, or same
+    `phash`) is on another event from the last 24 hours (probably a missed duplicate or a file
+    photo): no credit, no penalty; *old* — the same picture is on another event more than 24
+    hours older: no credit; *stock* — the picture is on three or more other events (logo,
+    portrait, file photo): no credit, no penalty.
+  - **Points are per footage origin, not per file.** The origin is the outlet of the channel in
+    `source_msg_key`. Ten new photos from one channel are one footage origin. The first origin
+    gives +8 when it has new video, +5 for photos only. Each further origin with its own new
+    pictures gives +3, or +4 when it is on an opposing side to one already counted. Ceiling 12.
+  - **Old picture penalty (part G), −6 once:** the event has an *old* picture and no *new* one.
+    When new footage sits next to an old picture, the old one is taken as illustration: no credit
+    for it, no penalty. Why not harsher: outlets attach file photos as a matter of routine, and
+    our memory of pictures starts on 2026-10-20 (Open decisions 12).
+  - **Does the footage show this place? Only from data that already exists — no new paid call.**
+    A small table `truth_media_checks` holds a verdict per picture: `match`, `mismatch`,
+    `illustration`. Three writers: (1) staff, by hand, in the event editor; (2) terrain
+    geolocation, when a job for the picture has an accepted result within 5 km of the event's
+    point; (3) the planned "translate image / video" button in Expand — when it is built, its one
+    Claude call also returns "does this show what the report says: yes / no / unclear", and that
+    answer is stored. `match` → +4 inside the ceiling of 12; `mismatch` → the picture is treated
+    as *old* (no credit, −6 when there is no other new footage); `illustration` → like *stock*.
+    With no verdict the picture simply counts as unchecked footage (the +8 / +5 above).
+  - **Timing.** Pictures arrive seconds to minutes after the event row and repeats are removed
+    every 10 minutes, so media changes do not recompute at once: they put the event in a small
+    queue and the 5-minute tick recomputes each queued event once.
+  - **Dark or blank frames** (a `phash` with fewer than 8 or more than 56 bits set) are compared
+    by `sha256` only, so two black video stills are not called the same picture.
 - **No decay with time.** The score changes only when the sources, a citation result, the tick or
   the override change. Why: half of our events are small local reports nobody else will ever
   repeat; lowering them by the clock would punish them for being local. An archived event keeps
@@ -219,6 +277,9 @@ highest severity first, at most 20 pairs per run.
 ## Cost (prices from `supabase/functions/_shared/usage.ts`; volumes measured above)
 - **The score itself: $0.** Plain SQL inside the write that already happens.
 - **Detecting the citation: $0.** The classifier already returns it.
+- **Visual evidence: $0.** Fingerprints are already made at ingest; the new work is two indexed
+  lookups per picture. The optional "matches the place" verdict rides on calls other features
+  already make (geolocation, the future media-translation click) or on a staff click.
 - **Checking the citation:** about 46 events a day cite an outlet of today's list; with official
   bodies and more outlets, assume about 150 pairs a day. Most end at steps 0–1 with no AI. Assume
   90 model calls a day × about 1,500 tokens in and 20 out on Haiku 5.5 ($0.10 / $0.50 per million)
@@ -250,15 +311,25 @@ first file, as in deep analysis — see Rollout):
   `attempts smallint`, `next_try_at`, `checked_at`. Index on (`status`, `next_try_at`).
 - `truth_outlet_cache` — `outlet_key`, `via`, `fetched_at`, `covers_from`, `items jsonb`
   (`[{ at, text, url }]`), `ok`, `error`; trimmed daily.
-- All four: RLS on, no policies (service role; staff through functions).
+- `truth_media_checks` — `media_id uuid primary key`, `event_id`, `verdict` (`match` | `mismatch`
+  | `illustration`), `by` (`staff` | `geoloc` | `media_translate`), `note`, `set_by`, `at`.
+- `truth_dirty` — `event_id uuid primary key`, `at`: events whose pictures changed since the last
+  tick (filled with "on conflict do nothing").
+- `event_media`: two new indexes, on `(sha256)` and on `(phash)` (today's index is per event),
+  and a small `after insert or update of event_id, sha256, phash or delete` trigger that only
+  writes the event's id into `truth_dirty` (and nothing when `compute` is off).
+- All six: RLS on, no policies (service role; staff through functions).
 - `events`, new columns: `truth_score smallint` (5–99 or null), `truth_why jsonb`, `truth_at`,
   `truth_override smallint` (0–100), `truth_override_note text`, `truth_override_by uuid`,
   `truth_override_at`.
 - `truth_why` (small; never sent with the feed):
   `{ v: 1, parts: [{ k: 'best', class, outlet, pts }, { k: 'strong', outlets: [], pts },
   { k: 'others', n, pts }, { k: 'sides', sides: [], pts }, { k: 'langs', langs: [], pts },
+  { k: 'media', video: bool, origins: n, cross_side: bool, checked: bool, pts },
+  { k: 'media_old', media_id, seen_event, seen_at, why: 'old' | 'mismatch', pts },
   { k: 'cite_not_found', outlet, pts }, { k: 'cap', to: 45 }, { k: 'staff_tick', floor: 90 }],
-  origins: n, sources: n, cites: [{ outlet, status, url }] }`.
+  origins: n, sources: n, cites: [{ outlet, status, url }],
+  media: { new: n, shared: n, old: n, stock: n } }`.
 - Source entries gain optional keys, written from now on: `cited` (the classifier's
   `original_source`, raw), `tk` (text key), `fwd` (forwarded-from name), `lang`. The main source's
   same four values go in `events.ai_suggestions.truth_primary`. Old entries: `cited` is read from
@@ -267,8 +338,12 @@ first file, as in deep analysis — see Rollout):
   - `truth_norm(text)` — the same normalising as `normTerm` in `_shared/terms.ts` (NFKC, lower
     case, Hebrew points and Arabic marks removed, alef forms unified).
   - `truth_source_key(name, url)` — immutable.
+  - `truth_media(event id)` → per picture: kind, footage origin (outlet, side), and *new* /
+    *shared* / *old* / *stock* with the earlier event's id and date, plus any verdict. Exact
+    matches on the two new indexes; no picture is opened.
   - `truth_compute(event row)` → `{ score, why }` — stable; reads the two list tables, the
-    event's `truth_citations` and `truth_weights`. This is the whole formula, in one place.
+    event's `truth_citations`, `truth_media(id)` and `truth_weights`. This is the whole formula,
+    in one place.
   - Trigger function `events_truth_score()` — `before insert or update of sources, source_name,
     source_url, is_verified, truth_override, status`, named to run **after every other
     `before` trigger** (they run in name order; today's last is `events_zzzzzz_gaza_country`).
@@ -283,9 +358,11 @@ first file, as in deep analysis — see Rollout):
     without `sources_detail`, links without `source_link`, are left out; staff get all parts
     with points per origin.
   - `truth_spent_today()` — sum of `ai_usage.cost_usd` for purpose `truth_cite`.
-  - `truth_tick()` — cron `osintfront-truth-tick`, every 5 minutes: when `citation_check` is on,
-    there are due pairs and budget is left, calls `event-agent` `{action:"truth_check"}` (the
-    `eei_tick` pattern); otherwise nothing.
+  - `truth_tick()` — cron `osintfront-truth-tick`, every 5 minutes: (1) when `compute` is on,
+    recomputes up to 300 events waiting in `truth_dirty` and empties them from the queue;
+    `truth_recompute` writes the row only when the score or the "why" really changed; (2) when
+    `citation_check` is on, there are due pairs and budget is left, calls `event-agent`
+    `{action:"truth_check"}` (the `eei_tick` pattern). Otherwise nothing.
   - Staff functions for the admin screen: list / save an outlet, attach a key to an outlet,
     "sources seen in the last 7 days with no outlet" (by number of events), score distribution.
 - Views `published_events` and `archived_events`: the same columns in the same order plus
@@ -315,6 +392,10 @@ first file, as in deep analysis — see Rollout):
   `truth_suggest_sources` (staff; Haiku reads title + username + region of channels without a
   reviewed outlet, the `classifyChannels` pattern, and fills `suggested_class`, side, language).
 - `intel-crawler` — unchanged. Its events already carry the outlet's own link.
+- Media: `attachMedia`, `media_dedupe` and `dropRepeats` are **not changed** — the score reads
+  what they leave. The geolocation worker's "result accepted" step writes a `truth_media_checks`
+  row; the media-translation feature will do the same when it is built (one extra field in the
+  call it makes anyway). Neither is needed for version 1 to work.
 - Every new path returns at once when its flag is off.
 
 ## Client
@@ -332,7 +413,9 @@ first file, as in deep analysis — see Rollout):
 - Admin: `NewsAgentsPage.tsx` gets a section "Source reliability" (outlets table; "seen, not
   classified" list with one-click class and side; AI suggestions to approve; "recompute last 48
   hours"); `SettingsPage.tsx` gets the four switches, the budget and the weights (numbers, with
-  "back to defaults"); `EventEditorPage.tsx` shows the score, the full breakdown and the override.
+  "back to defaults"); `EventEditorPage.tsx` shows the score, the full breakdown, the override,
+  and under each picture a small choice "matches the place / does not match / illustration /
+  not checked" with, for an *old* picture, a link to the earlier event.
   Outlets and keys: `event.edit.any`. Switches, budget, weights: `settings.manage`.
 
 ## UI
@@ -347,11 +430,18 @@ Details window:
   ✓ 1 more independent source                                  +5
   ✓ Reported by both sides (Israel, Lebanon)                  +12
   ✓ 2 languages (Hebrew, Arabic)                               +4
+  ✓ New video footage, from 2 independent sources              +11
+     (or: "✓ New photos" · "✓ Footage checked: matches the place")
+  ⚠ Picture seen before, on an event from 3 Nov ↗               −6
+     (shown instead of the footage line when the only pictures are old)
   ● Cites Al Jazeera — found at Al Jazeera ↗
   The score shows how well sources confirm this report. It is not a statement that
   the report is true. Official sources can also be wrong.
 ```
 - Points are shown to staff only; readers see the lines without numbers (Open decisions 6).
+- In the details window the picture itself carries a small corner mark when it is *old*
+  ("seen before · 3 Nov") — for everyone who sees the picture, whatever the plan. *Shared* and
+  *stock* pictures get no mark and no line.
 - Hebrew: right-to-left, the percentage stays in Western digits.
 - Colour is never the only signal: the chip always carries the number or words.
 
@@ -366,6 +456,15 @@ Details window:
 - Two outlets named in one message: the classifier returns one name; the other is missed (v1).
 - The outlet's page is unreachable three runs in a row: its pairs become "could not be checked";
   the admin section shows the outlet in red.
+- The score is computed before the pictures arrive: the event starts without part F and gains it
+  at the next tick (up to 5 minutes).
+- Two events are folded: the pictures move to the kept event, repeats are removed by the existing
+  dedupe, the kept event goes through the queue once.
+- The same picture on two events of the same day: neither gets credit for it and neither is
+  penalised; if the two are later folded into one, it becomes one *new* picture and counts.
+- A recycled video usually has a different still each time it is cut, so only straight
+  re-forwards (same thumbnail bytes) are caught; rewritten copies are not (v1 limit).
+- A picture older than our database (before 2026-10-20) cannot be recognised as old.
 - Flags off after being on: stored scores stay, the views return null, the tick does nothing.
 - The model answers with a number outside 0–6, or fails twice: "could not be checked".
 
@@ -378,15 +477,21 @@ Details window:
 - Changing or removing the "verified" tick and `events_auto_verify`.
 - Backfill of old events; checking citations of archived events.
 - Several cited outlets per message; citations inside news-site articles.
+- Reverse image search on the web, reading what a picture shows with AI as a default step,
+  near-match (a few bits apart) search for old pictures across events, hashing whole videos.
 
 ## Testing
 - Database (`supabase/tests/truth_score.sql`, rolled-back dry run, as the other files there):
   every row of the examples table gives its score; echo, copy, "no link no credit" and the
   generic pseudo-outlets; `kind: 'context'` ignored; the one-side ceiling; staff tick floor;
   override and clear; each citation status; an AI-suggested `official` does not count before
-  approval; the trigger does nothing with `compute` off and for drafts; `truth_recompute` queues
+  approval; media: one video +8, photos only +5, ten photos of one channel count once, a second
+  channel's own picture +3 and +4 from the opposing side, ceiling 12, *shared* gives nothing,
+  *old* alone −6, *old* next to *new* no penalty, *stock* (three other events) no penalty,
+  `match` +4, `mismatch` as old, a blank-frame `phash` is not a match, a media insert only writes
+  `truth_dirty` and the tick recomputes once; the trigger does nothing with `compute` off and for drafts; `truth_recompute` queues
   no editor run and no push; the views give null to a guest, the score to Free; `truth_details` is null
-  for Free, without links for Pro, full for staff; `anon` / `authenticated` cannot read the four
+  for Free, without links for Pro, full for staff; `anon` / `authenticated` cannot read the six
   tables; budget reached → the tick does not call out.
 - Unit, `node:test` (`tests/truth/`): `truth.test.ts` — text key equals the worker's for the same
   text, script → language, claim window, candidate ranking, the decision order with fake readers
@@ -395,7 +500,8 @@ Details window:
   "why" lines; `ingestWiring.test.ts` — the entries written by ingest and fold carry the new keys.
 - End-to-end, Playwright with a faked server (`tests/e2e/truth-score.mock.cjs <he|en>
   <desktop|phone> <pro|free|guest|staff>`): four bands on cards and popups; "Initial report";
-  the "why" section for Pro; lock for Free and guest; minimum-score filter; staff override in the
+  the "why" section for Pro, with the footage line and the "seen before" line and corner mark;
+  lock for Free and guest; minimum-score filter; staff override in the
   editor; text containing `<script>` in an outlet name shows as text.
 - `npm run typecheck` (no new errors) and `npx vite build` must pass.
 - After the silent stage: a distribution report and 40 real events (10 per band) for the owner to
@@ -410,7 +516,8 @@ Details window:
    suggestion (≈ $0.02) and approve or fix the busiest 50 channels.
 4. Merge to `main` (functions deploy by themselves, flags off). Deploy check: nothing changed.
 5. `compute` on — **silent**: staff see scores, readers do not. Two days.
-6. Distribution report + the 40 events; tune weights; "recompute last 48 hours".
+6. Distribution report + the 40 events (among them every event with an *old* picture, for the
+   owner to judge whether −6 is right); tune weights; "recompute last 48 hours".
 7. `citation_check` on; after one day report: pairs checked, found / not found / not checkable,
    cost. The owner reads 20 results.
 8. `public` on. Free / Pro / Max as decided. Watch for a week.
@@ -430,8 +537,13 @@ Details window:
   Al Jazeera is on — these are the owner's calls, visible to readers through the score. The list
   is his to edit, and high classes are never given by the AI alone.
 - **Hidden copying.** Channels that rewrite each other without credit count as independent. The
-  ceilings (15 for extra channels, 45 for one side) limit the damage; grouping networks under one
+  ceilings (12 for extra channels, 45 for one side) limit the damage; grouping networks under one
   outlet is the lasting fix and needs staff time.
+- **A picture is not proof.** Without looking at it, the system cannot tell a strike video from
+  a map, a screenshot or a portrait. That is why footage is worth at most 12 of 99, why the
+  "why" line says "footage attached", not "footage confirms", and why the +4 exists only when
+  someone or something really checked it. Old pictures are caught only if we have seen the very
+  same file before; a clip re-cut from an older war passes as new.
 - **Gaming.** Someone could write "according to Reuters" to borrow credit: it earns nothing until
   found at Reuters, and costs 8 points when it is not.
 - **"Not found" can be our miss.** A statement made on air only, or deleted, or a feed that lags.
@@ -459,3 +571,11 @@ Details window:
    minutes. Or hide the badge under 35.
 9. **Paid web search for outlets we cannot read.** **Off.** Later, perhaps, for critical events only.
 10. **Daily budget for citation checks.** **$0.50** (expected use: a few cents).
+11. **Weight of footage.** **Video +8, photos +5, second independent source +3 (+4 other side),
+    checked footage +4, at most 12** — modest, because nothing looks at the picture. Or heavier
+    (for example video +15) once footage can really be checked.
+12. **Old picture.** **No credit, and −6 only when the event has no new footage** (file photos
+    are routine). Or stricter: −10 whenever any old picture is attached.
+13. **"Does the footage match the place" check.** **Free sources only** (staff click,
+    geolocation results, the future media-translation click). Or a paid look at every video of
+    high-severity events — about $0.002–0.01 each, not recommended now.
