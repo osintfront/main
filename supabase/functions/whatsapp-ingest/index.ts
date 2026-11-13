@@ -14,6 +14,7 @@ import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDe
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
+import { saveEventTerms } from "../_shared/eventTerms.ts";
 import { translateBriefChain } from "../_shared/translate.ts";
 import { alreadyHas, hashImage } from "../_shared/imageHash.ts";
 import { AGENT_EXCLUDED_CATEGORIES, CATEGORY_RULES } from "../_shared/categoryRules.ts";
@@ -907,6 +908,8 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     ({ error } = await db.from("events").update(placePart).eq("id", eventId));
   }
   if (error) console.error("editor update failed", error.message);
+  // Deep analysis: the names this report mentions (links in the event window).
+  try { await saveEventTerms(db, eventId, edited.terms ?? []); } catch { /* never stops the pipeline */ }
   // Places of several categories → one event per category (before it is shown).
   let siblings: string[] = [];
   try { siblings = await splitEventByCategory(db, eventId); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }

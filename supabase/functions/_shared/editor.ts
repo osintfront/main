@@ -17,6 +17,7 @@
 
 import { CATEGORY_RULES } from "./categoryRules.ts";
 import { cleanSecondary } from "./secondaryCats.ts";
+import { cleanTerms, TERM_RULES, TERMS_PROP, type TermMark } from "./terms.ts";
 import { logUsage } from "./usage.ts";
 
 export interface EditorSource { name: string; url: string | null }
@@ -36,6 +37,8 @@ export interface EditResult {
   category_slug: string | null;
   /** Other kinds of the same incident (at most two, cleaned). */
   secondary_category_slugs: string[];
+  /** Deep analysis: names a reader may want explained (cleaned; see terms.ts). */
+  terms: TermMark[];
   severity: "low" | "medium" | "high" | "critical";
   is_breaking: boolean;
   location_name: string;
@@ -235,6 +238,7 @@ function tool(mode: EditInput["mode"], categories: { slug: string; name: string 
     props.category_slug = { type: "string", enum: categories.map((c) => c.slug) };
     required.push("relevant", "category_slug", "is_current");
   }
+  props.terms = TERMS_PROP;
   if (categories.length) {
     props.secondary_category_slugs = {
       type: "array", maxItems: 2, items: { type: "string", enum: categories.map((c) => c.slug) },
@@ -381,7 +385,7 @@ function normalise(raw: Record<string, any>, model: string, mode: EditInput["mod
     seenPlace.add(k);
     return true;
   });
-  return {
+  const out: Omit<EditResult, "terms"> = {
     relevant: mode === "whatsapp" ? true : raw.relevant === true,
     duplicate_of: typeof raw.duplicate_of === "string" && candIds.has(raw.duplicate_of) ? raw.duplicate_of : null,
     countries: [...new Set((Array.isArray(raw.countries) ? raw.countries : []).map((c: unknown) => {
@@ -410,6 +414,9 @@ function normalise(raw: Record<string, any>, model: string, mode: EditInput["mod
     is_current: mode === "crawler" ? raw.is_current !== false : null,
     model,
   };
+  // Term marks must appear in the cleaned headline / summary (Hebrew or English).
+  const terms = cleanTerms(raw.terms, { he: `${out.title}\n${out.summary}`, en: `${out.title_en}\n${out.summary_en}` });
+  return { ...out, terms };
 }
 
 /** Run the editor. Throws on API failure (callers keep the raw text then). */
@@ -418,7 +425,7 @@ export async function editReport(input: EditInput): Promise<EditResult> {
   const categories = input.categories ?? [];
   const system = SYSTEM_BASE + (input.mode === "crawler"
     ? SYSTEM_CRAWLER + `\nקטגוריות מותרות: ${categories.map((c) => `${c.slug} (${c.name})`).join(", ")}` + (input.categoryLessons ?? "")
-    : "") + (input.detailedPlaces ? SYSTEM_DETAILED_PLACES : "") + (categories.length ? CATEGORY_RULES : "") + (await learnedTerms());
+    : "") + (input.detailedPlaces ? SYSTEM_DETAILED_PLACES : "") + (categories.length ? CATEGORY_RULES : "") + TERM_RULES + (await learnedTerms());
   // Strip site-name boilerplate ("| Lebanon News") before judging how much text there is.
   const substance = input.text.replace(/\|\s*[^\n|]{0,40}$/gm, "").replace(/\s+/g, " ").trim();
   const thin = substance.length < 300;

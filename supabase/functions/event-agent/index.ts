@@ -34,6 +34,7 @@ import { eeiBudget, eeiSpentToday, parseEei, saveEei, tagTheatre } from "../_sha
 import { LIMITS as EEI_LIMITS, parseCacheKey } from "../_shared/eeiInput.ts";
 import { dedupeRecent, dropRepeats } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
+import { saveEventTerms } from "../_shared/eventTerms.ts";
 import { TRANSLATE_API_URL, translateBriefChain } from "../_shared/translate.ts";
 import { AGENT_EXCLUDED_CATEGORIES } from "../_shared/categoryRules.ts";
 import { classifyChannels } from "../_shared/channels.ts";
@@ -197,6 +198,10 @@ async function edit(id: string) {
   }
   const { error } = await db.from("events").update(update).eq("id", id);
   if (error) return json({ error: error.message }, 500);
+  // Deep analysis: the names it mentions — not when its text was corrected by hand (the marks would not fit it).
+  if (!ai?.manual_text) {
+    try { await saveEventTerms(db, id, r.terms ?? []); } catch { /* never fails the edit */ }
+  }
   const { data: after } = await db.from("events").select("locations").eq("id", id).maybeSingle();
   // Places the database could not pin (not found in the gazetteer or GeoNames).
   const kept = new Set(((after?.locations ?? []) as any[]).map((l) => l?.name_en || l?.name));

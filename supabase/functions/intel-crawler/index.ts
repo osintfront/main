@@ -19,6 +19,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, formatCategoryLessons, formatDescription, isTransient, locationsForDb, mainCountry, mainPoint, translationsFor, type EditorSource } from "../_shared/editor.ts";
 import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
+import { saveEventTerms } from "../_shared/eventTerms.ts";
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 setUsageSink(db, "intel-crawler");
@@ -453,6 +454,8 @@ async function runAgent(agent: string, settings: Record<string, any>) {
         ({ data: ins, error } = await db.from("events").insert({ ...row, status: "draft" }).select("id,status").single());
       }
       if (error) throw error;
+      // Deep analysis: the names this article mentions (links in the event window).
+      try { await saveEventTerms(db, ins!.id, r.terms ?? []); } catch { /* never stops the crawl */ }
       // Places of several categories → one event per category.
       try { await splitEventByCategory(db, ins!.id); } catch (e) { console.error("split failed", String((e as Error)?.message ?? e).slice(0, 200)); }
       const published = ins!.status === "published";
