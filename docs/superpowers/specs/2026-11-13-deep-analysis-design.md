@@ -1,4 +1,4 @@
-# Deep analysis (term windows) — design (owner's answers 2026-11-13; spec awaiting review)
+# Deep analysis (term windows) — design (owner's answers 2026-11-13, second round the same day; approved)
 
 Project-plan row: "Deep analysis" — "Each event details will have a hyperlink opening a window
 explaining the term/person/weapon. Example: Ted Cruz (hyperlink explaining who Ted Cruz is with an
@@ -45,7 +45,8 @@ several classifications → **deep analysis**). Branch `feat/deep-analysis` (fro
   underline = not written yet; the window first says "No entry yet — write it now? (uses 1 of
   your N today)". Why: nobody spends one of three daily entries by accident.
 - **Readers without the feature see the same links as a locked teaser:** a click opens the
-  existing sign-up (guest) / upgrade (Free) window. Same pattern as the other locked features.
+  existing sign-up (guest) / upgrade (Free) window. Same pattern as the other locked features
+  (owner's answer 2). Links only in the details window: owner's answer 1.
 - **Plans:** new key `deep_analysis`; the number = new entries per day. Guest and Free: off.
   **Pro 3, Max 10**, Intel 10 (as with `eei_text`, Intel gets what Max gets). Staff: always, no
   limit, still counted. Opening an existing entry is never counted.
@@ -56,13 +57,19 @@ several classifications → **deep analysis**). Branch `feat/deep-analysis` (fro
 - **Deep entries do not use "Ask the map" credits.** The Opus call is logged without the reader's
   id (purpose `deep_entry`); who asked is kept on the entry and in the daily counter. Why: one
   entry costs about as much as a Pro user's whole daily credit.
-- **Budget:** `app_settings.deep_daily_budget_usd` = **5**, for everyone including staff
-  (refreshes too). At most **2** entries are written at the same time, and each one in progress
-  reserves **$0.50** of the budget, so the day cannot overshoot by more than about a dollar.
+- **Budget:** `app_settings.deep_daily_budget_usd` = **5** — it stops new entries of Pro, Max
+  and Intel readers only. **Staff are outside the budget** (owner's answer 3): a staff write or
+  refresh is never refused for budget and does not use up the readers' $5; it is still counted
+  (daily counter) and logged, under its own purpose `deep_entry_staff`. Each reader's entry in
+  progress reserves **$0.50** of the budget, so the readers' day cannot overshoot by more than
+  about a dollar.
+- **At most 2 entries are written at the same time — for everyone, staff included.**
+- **Kept as proposed (owner's answers 4–5):** $5 a day, Pro 3, Max 10, Intel 10.
 - **Pictures:** one free picture from Wikimedia Commons (through the Wikipedia article's lead
   image), shown with author, licence and a link to its page; plus pictures / videos of our own
   events that mention the term. No other web pictures. No free picture → no picture.
-- **Staff = whoever may edit any event** (`event.edit.any`: super admin, admin, analyst).
+- **Staff = whoever may edit any event** (`event.edit.any`: super admin, admin, analyst) — all
+  of them may analyze, edit, refresh and remove entries (owner's answer 6).
 - **Languages:** Hebrew + English through `src/i18n`; no Hebrew literals in components.
 
 ## Cost (assumptions stated; prices from `supabase/functions/_shared/usage.ts`)
@@ -72,8 +79,10 @@ several classifications → **deep analysis**). Branch `feat/deep-analysis` (fro
 - **One new entry (Opus $5 / $25 per million tokens, $0.01 per search):** 4 searches bring roughly
   30–60 thousand tokens in, the entry in two languages is about 3,500 tokens out →
   **about $0.30–0.45**. Measured on the first real run; the $0.50 reserve is adjusted if needed.
-- **$5 a day ≈ 11–16 new entries a day.** Two Max users can use the day up; say so in the
-  hand-over. Opening existing entries costs nothing.
+- **$5 a day ≈ 11–16 new entries a day for readers.** Two Max users can use the day up (the
+  owner accepted this); say so in the hand-over. Opening existing entries costs nothing.
+- **Staff spending has no daily cap** beyond the two-at-a-time rule; it shows in the AI usage
+  log as `deep_entry_staff`, and the go-live report gives its daily sum.
 
 ## Data model
 Migration `20261113000112_deep_analysis.sql` (the words `drop` / `delete` do not appear in it, not
@@ -90,7 +99,8 @@ even in comments — see Rollout):
 - `deep_aliases` — `alias text primary key` (normalised), `entry_id uuid not null`; index on `entry_id`.
 - `deep_jobs` — one row per name being written or refreshed: `key text primary key` (normalised
   name, or `entry:<id>` for a refresh), `busy_until`, `busy_token uuid`, `started_by`,
-  `fail_reason` (`failed` | `no_entry`), `retry_after`, `entry_id`.
+  `staff boolean` (started by staff — no budget reserve), `fail_reason` (`failed` | `no_entry`),
+  `retry_after`, `entry_id`.
 - `event_terms` — `event_id uuid`, `key text` (normalised `name`), `keys text[]` (the normalised
   `name`, `he` and `en` — what the alias lookup uses), `kind`, `he`, `en` (the term as written in
   the Hebrew / English text; either may be empty), `name` (usual full English name), `source`
@@ -111,11 +121,13 @@ even in comments — see Rollout):
     stored ones and events marked with one of its aliases; published / archived, newest 12). Null
     when the caller's plan lacks `deep_analysis` (`my_feature`).
   - `deep_my_quota() → jsonb { enabled, staff, used, limit, budget_left }` — for the window's
-    "1 of 3 today" line and the "budget used up" message.
+    "1 of 3 today" line and the "budget used up" message (`budget_left` is always true for staff).
   - Service-role helpers: `deep_allowed(p_uid) → { enabled, staff, limit }`,
-    `deep_claim(p_key, p_uid) → uuid` (4-minute lease; null when held), `deep_done(p_key, p_token,
-    p_entry, p_fail)`, `deep_spent_today() → numeric` (sum of `ai_usage.cost_usd`, purpose
-    `deep_entry`, Israel day), `deep_in_flight() → int`.
+    `deep_claim(p_key, p_uid, p_staff) → uuid` (4-minute lease; null when held),
+    `deep_done(p_key, p_token, p_entry, p_fail)`, `deep_spent_today() → numeric` (sum of
+    `ai_usage.cost_usd`, purpose `deep_entry` only — staff writes are not in it, Israel day),
+    `deep_in_flight() → jsonb { all, readers }` (writes in progress: all of them for the
+    two-at-a-time rule, the readers' ones for the reserve).
 - Migration `20261113000113_deep_analysis_fk.sql` (its own file because it contains
   `on delete …`): foreign keys `deep_aliases.entry_id → deep_entries (cascade)`,
   `event_terms.event_id → events (cascade)`, `deep_entries.created_by / updated_by → auth.users
@@ -153,11 +165,11 @@ even in comments — see Rollout):
     lang, poll? }` (staff only: "Analyze"; also stores the mark on that event with `source 'staff'`).
     Order of checks: (1) an entry already owns one of the names → `{ entry_id }`, free; (2) a
     write is in progress → `202 { pending }`; (3) `poll` → the job's failure, never a new write;
-    (4) a recent failure (`retry_after`, staff skip this) → `no_entry` / `failed`; (5) budget →
-    `budget`; two writes already running → `busy`; (6) daily use (`consume_feature`) →
+    (4) a recent failure (`retry_after`, staff skip this) → `no_entry` / `failed`; (5) budget (readers
+    only; staff skip this) → `budget`; two writes already running (everyone) → `busy`; (6) daily use (`consume_feature`) →
     `quota_exceeded`; (7) lease; start the write in the background; `202 { pending }`.
     The browser asks again every 5 seconds with `poll: true` (at most 4 minutes).
-  - `deep_refresh { entry_id, poll? }` (staff) — rewrite with Opus under the same budget, counted;
+  - `deep_refresh { entry_id, poll? }` (staff) — rewrite with Opus, outside the budget, counted;
     the old content goes to `prev`; `version + 1`; names and aliases are kept, new ones added.
   - `deep_update { entry_id, patch }` (staff) — hand edit: names, kind, aliases, summary,
     sections, sources, remove the picture. Cleaned by the same rules; `version + 1`.
@@ -176,8 +188,9 @@ even in comments — see Rollout):
   licence, licence link and page link. Any doubt → no picture.
 - **Failures:** writer failure → `retry_after` 1 hour (`failed`); the writer says the term is a
   private person, unknown or too vague → nothing saved, `retry_after` 30 days (`no_entry`). Both
-  give the daily use back. Money already spent still counts in the budget.
-- **Usage log:** `logUsage('deep_entry', …)` outside `runAsReader`.
+  give the daily use back. Money a reader's failed write already spent still counts in the budget.
+- **Usage log:** outside `runAsReader`; purpose `deep_entry` for a reader's write,
+  `deep_entry_staff` for staff (new entry, "Analyze", refresh) and for cron-secret checks.
 
 ## Safety
 - **Everything the model reads is data:** web pages, our event texts, the clicked sentence and
@@ -261,13 +274,15 @@ even in comments — see Rollout):
     cleaning (lengths, unknown section keys, invented and `javascript:` links, `kind 'none'`, a
     person without sources); the picture rule (NC licence, no author, non-Wikimedia address,
     disambiguation); the alias plan (merge into an existing entry, alias owned by another entry);
-    the decision order (served / waiting / poll never starts / budget with reserve / busy / quota).
+    the decision order (served / waiting / poll never starts / budget with reserve for readers /
+    staff never refused for budget / busy for everyone / quota).
   - `tests/deep/deepTerms.test.ts` — `linkSegments` (prefix letter, inside a word, overlap, regex
     characters, first appearance only, empty lists), `selectionTerm`.
 - Database (`supabase/tests/deep_analysis.sql`, rolled-back dry run): `anon` / `authenticated`
   cannot read the four tables; `event_terms_for` gives the entry id when an alias exists and finds
   an existing entry by text; `deep_entry` is null for a Free user and filled for Pro; the lease is
-  given once; `deep_spent_today` counts only `deep_entry`.
+  given once; `deep_spent_today` counts `deep_entry` and not `deep_entry_staff`; `deep_my_quota`
+  says `budget_left` false for Pro and true for staff when the readers' budget is used up.
 - End-to-end, Playwright with a faked server (`tests/e2e/deep-analysis.mock.cjs <he|en>
   <desktop|phone> <pro|free|guest|staff>`): solid link opens the entry (picture credit, sections,
   sources, our events); dotted link → "Write it now" → writing → entry; quota and budget messages;
@@ -281,8 +296,8 @@ even in comments — see Rollout):
 1. Work on branch `feat/deep-analysis`; local tests and the faked-server Playwright run.
 2. Apply migration `112` (tables, functions, budget setting, plan rows). Nothing reads it yet.
 3. Migration `113` (foreign keys). It contains `on delete`, and the confirmation prompt for such
-   SQL cancels itself in the build workspace, so the owner runs it himself in the Supabase SQL
-   editor (or it is skipped — the feature works without it).
+   SQL cancels itself in the build workspace, so **the owner runs it himself in the Supabase SQL
+   editor** (owner's answer 7): he is handed the file, and the three constraints are then checked.
 4. Deploy `event-agent` (new actions; "edit" starts storing marks).
 5. First real Opus entry — the owner names the term; cost reported; he reads it on the preview.
    Then two more. Prompt fixes before going on.
@@ -290,17 +305,3 @@ even in comments — see Rollout):
 7. Deploy `whatsapp-ingest`, then `intel-crawler` (new reports get marks from here on).
 8. After 50 new events: a list of the marks for the owner (too many? wrong? missing?) and the
    editor's cost before and after.
-
-## Open questions for the owner (answers change the numbers above, not the structure)
-1. **Links only in the event details window** — not in feed cards or the map popup. Agreed?
-2. **Free users and guests see the links with a lock** (click → upgrade / sign-up window) instead
-   of plain text. Agreed, or plain text for them?
-3. **The $5 daily budget also stops staff** (new entries and refreshes) when it is used up; the
-   super admin can raise the setting. Agreed, or should staff be outside the budget?
-4. **$5 buys about 11–16 new entries a day**, while Pro may ask for 3 and Max for 10 each — two
-   Max users can use the day up. Keep $5 / 3 / 10, or change one of them?
-5. **Intel plan = 10 a day, like Max** (the plan text names only Pro and Max). Agreed?
-6. **Analysts count as staff here** (anyone who may edit any event): they can analyze, edit,
-   refresh and remove entries. Agreed, or admins only for refresh / remove?
-7. **Migration 113** (clean-up links between tables) has to be run by you in the Supabase SQL
-   editor, or skipped. Which?
