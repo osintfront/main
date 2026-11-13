@@ -5,6 +5,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  callerIp,
+  GROW_IPS,
+  readGrowNotice,
+  validFullName,
+  validPhone,
   parseWebhookBody,
   priceAgorot,
   SERVER_PRICES,
@@ -127,6 +132,90 @@ test('card-like fields are removed at any depth, other fields are kept', () => {
     fullName: 'Example Payer',
     data: { transactionId: 'example-txn', items: [{ name: 'Test' }] },
   });
+});
+
+// ── Grow notifications (formats from developers.grow.business → Webhooks / Server-to-Server Callback) ──
+
+const orderId = '7d5f0a3e-1b2c-4d5e-8f90-123456789abc';
+
+test('a paid payment link (JSON) is read as a payment, products do not override the sum', () => {
+  const n = readGrowNotice({
+    err: '',
+    status: '1',
+    data: {
+      status: 'שולם', statusCode: '2', sum: '59', transactionId: '421100', transactionToken: 'tok', asmachta: '117128222',
+      payerPhone: ' 0501111111', payerEmail: 'a@b.co', paymentLinkProcessId: '12128', processId: ' 512895',
+      productData: [{ name: 'Pro', price: '1', sum: '1' }], customFields: { cField1: orderId },
+    },
+  });
+  assert.equal(n.type, 'payment');
+  if (n.type !== 'payment') return;
+  assert.equal(n.paid, true);
+  assert.equal(n.amountAgorot, 5900);
+  assert.equal(n.processId, '12128');
+  assert.equal(n.orderId, orderId);
+  assert.equal(n.eventKey, 'pay:421100');
+});
+
+test('the same notification posted as form fields reads the same', () => {
+  const form = new URLSearchParams({
+    status: '1', err: '', 'data[statusCode]': '2', 'data[sum]': '129', 'data[transactionId]': '99',
+    'data[paymentLinkProcessId]': '555', 'data[productData][0][sum]': '1', 'data[customFields][cField1]': orderId,
+  }).toString();
+  const n = readGrowNotice(parseWebhookBody('application/x-www-form-urlencoded', form));
+  assert.equal(n.type, 'payment');
+  if (n.type !== 'payment') return;
+  assert.equal(n.amountAgorot, 12900);
+  assert.equal(n.orderId, orderId);
+  assert.equal(n.processId, '555');
+});
+
+test('a declined payment is not paid', () => {
+  const n = readGrowNotice({ status: '1', data: { statusCode: '3', status: 'נדחה', sum: '59', transactionId: '1', paymentLinkProcessId: '2' } });
+  assert.equal(n.type === 'payment' && n.paid, false);
+});
+
+test('a monthly renewal (second charge on) is read with its standing-order id', () => {
+  const n = readGrowNotice({
+    webhookKey: 'ABC', transactionCode: 'ABCD1234', paymentSum: 59, paymentType: 'הוראת קבע',
+    payerPhone: '0500000000', payerEmail: 'test@test.com', paymentSource: 'ריצת הוראת קבע', directDebitId: '123456',
+  });
+  assert.deepEqual(n, {
+    type: 'renewal', eventKey: 'ren:ABCD1234', directDebitId: '123456', transactionId: 'ABCD1234',
+    amountAgorot: 5900, phone: '0500000000', email: 'test@test.com',
+  });
+});
+
+test('a failed monthly charge is read as failed', () => {
+  const n = readGrowNotice({
+    regular_payment_id: '55545', payer_name: 'Full Name', phone: '0500000000', email: 'test@test.com',
+    transaction_type: 'הוראת קבע', sum: '59', error_message: 'פג תוקף', charges_attempts: '6', webhook_key: 'x',
+  });
+  assert.equal(n.type, 'failed');
+  if (n.type !== 'failed') return;
+  assert.equal(n.directDebitId, '55545');
+  assert.equal(n.attempts, 6);
+  assert.equal(n.amountAgorot, 5900);
+  assert.equal(n.error, 'פג תוקף');
+});
+
+test('an invoice notification is not a payment', () => {
+  assert.equal(readGrowNotice({ transactionCode: 'ABCD1234', invoiceNumber: '20', invoiceUrl: 'https://x' }).type, 'unknown');
+});
+
+test('checkout input: names and Israeli mobile numbers', () => {
+  assert.equal(validFullName('ישראל ישראלי'), 'ישראל ישראלי');
+  assert.equal(validFullName('Dana'), null);
+  assert.equal(validFullName('A Bc'), null);
+  assert.equal(validPhone('050-123-4567'), '0501234567');
+  assert.equal(validPhone('+972 50 123 4567'), '0501234567');
+  assert.equal(validPhone('031234567'), null);
+});
+
+test('Grow servers are recognised by address', () => {
+  assert.ok(GROW_IPS.has('3.123.194.128'));
+  assert.equal(GROW_IPS.has('1.2.3.4'), false);
+  assert.equal(callerIp(new Headers({ 'x-forwarded-for': '3.70.40.72, 10.0.0.1' })), '3.70.40.72');
 });
 
 test('a negative refund amount is refused', () => {

@@ -5,6 +5,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/billing/grow-webhook/:token",
+      "destination": "/api/billing?action=webhook&token=:token"
+    },
+    {
+      "source": "/api/billing/grow-webhook",
+      "destination": "/api/billing?action=webhook"
+    },
+    {
       "source": "/e/:id",
       "destination": "/api/share?id=:id"
     },

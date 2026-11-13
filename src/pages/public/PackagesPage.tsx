@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Check, Mail, Minus, Tag } from 'lucide-react';
 import { Logo } from '@/components/common/Logo';
 import { LanguageToggle, ThemeToggle } from '@/components/common/Toggles';
@@ -12,22 +12,16 @@ import { effectivePlan, loadPlanConfig, PLAN_LABEL, planFeature, usePlanVersion,
 import { INTRO_PRICES, shekels } from '@/content/packages';
 import { SITE_EMAIL } from '@/content/sitePages';
 import { cn } from '@/utils/cn';
+import { BillingCta, CheckoutDialog, OrderBanner, SubscriptionPanel, useBilling } from '@/components/plans/Checkout';
+import type { PaidPlan, Period, Quote } from '@/lib/billing';
+import type { PlanId } from '@/types/user';
 
 type Sold = 'free' | 'pro' | 'max';
 
-// Grow payment links — used ONLY on the internal test copy (/packages-test), never on /packages.
-const GROW_LINKS = {
-  pro: {
-    monthly: 'https://pay.grow.link/MTA4NDUw~060928448cc1165604aa7e3345cf8aa0-NDI4ODc1Mg',
-    yearly: 'https://pay.grow.link/MTA4NDUw~35e9e892feb16673c38d3faeaa9d10ad-NDI4ODk3OA',
-  },
-  max: {
-    monthly: 'https://pay.grow.link/MTA4NDUw~c506544653cb6ddde2b0398f337adad3-NDI4ODk2Mg',
-    yearly: 'https://pay.grow.link/MTA4NDUw~dff69eef45e4fc085992bf924611f30f-NDI4ODk4MA',
-  },
-} as const;
-
-/** /packages-test — the same pricing page with Grow payment links. Super admin only; others go to /packages. */
+/**
+ * /packages-test — the same pricing page with real Grow checkout (payment page per order, opened through Make).
+ * Super admin only while payments are being tested; others go to /packages.
+ */
 export function PackagesTestPage() {
   const { status, profile } = useAuth();
   if (status === 'loading') return null;
@@ -46,6 +40,15 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
   usePlanVersion();
   useEffect(() => void loadPlanConfig(), []);
   const [yearly, setYearly] = useState(false);
+  const { opts, reload } = useBilling();
+  const [params] = useSearchParams();
+  const orderId = grow ? params.get('order') : null;
+  const [buying, setBuying] = useState<{ plan: PaidPlan; period: Period; quote: Quote } | null>(null);
+  const period: Period = yearly ? 'yearly' : 'monthly';
+  // Back from Grow on a yearly plan: show the yearly prices.
+  useEffect(() => {
+    if (orderId && opts?.subscription?.period === 'yearly') setYearly(true);
+  }, [orderId, opts?.subscription?.period]);
 
   useEffect(() => {
     const prev = document.title;
@@ -55,7 +58,16 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
     };
   }, [t]);
 
-  const mine: EffectivePlan | null = status === 'signed_in' && profile?.role === 'viewer' ? effectivePlan(profile) : null;
+  // On the test page the stored plan counts (staff test real purchases there); elsewhere staff see no "your plan".
+  const mine: EffectivePlan | null =
+    grow && opts?.signed_in
+      ? effectivePlan({ plan: (opts.plan ?? 'free') as PlanId, planExpiresAt: opts.plan_expires_at ?? null })
+      : status === 'signed_in' && profile?.role === 'viewer'
+        ? effectivePlan(profile)
+        : null;
+  const growCta = (plan: PaidPlan, primary: boolean) => (
+    <BillingCta plan={plan} period={period} opts={opts} primary={primary} onBuy={(quote) => setBuying({ plan, period, quote })} />
+  );
 
   /** "{n} a day" / "unlimited" lines from the database limits (null limit = unlimited). */
   const daily = (plan: EffectivePlan, key: FeatureKey, some: TranslationKey, all: TranslationKey): string | null => {
@@ -222,7 +234,30 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
           </div>
         </section>
 
-        <ManualNotice />
+        {grow ? (
+          <>
+            {orderId ? (
+              <OrderBanner
+                orderId={orderId}
+                onDone={() => {
+                  void reload();
+                }}
+              />
+            ) : null}
+            <SubscriptionPanel opts={opts} reload={reload} />
+          </>
+        ) : (
+          <ManualNotice />
+        )}
+        {buying ? (
+          <CheckoutDialog
+            plan={buying.plan}
+            period={buying.period}
+            quote={buying.quote}
+            returnTo="/packages-test"
+            onClose={() => setBuying(null)}
+          />
+        ) : null}
 
         <section className="mt-8 grid gap-5 md:grid-cols-3">
           <PlanCard name={t('pk.freeName')} tag={t('pk.freeTag')} price={shekels(0, locale)} unit={t('pk.forever')} current={mine === 'free'} items={freeItems} cta={freeCta} />
@@ -238,7 +273,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
             lead={t('pk.plusFree')}
             items={proItems}
             cta={grow
-              ? <a href={GROW_LINKS.pro[yearly ? 'yearly' : 'monthly']} className={ctaPrimary}>{t('pk.buy')}</a>
+              ? growCta('pro', true)
               : mine === 'pro' ? null : <Link to="/contact" className={ctaPrimary}>{t('pk.buy')}</Link>}
           />
           <PlanCard
@@ -252,7 +287,7 @@ export function PackagesPage({ grow = false }: { grow?: boolean }) {
             lead={t('pk.plusPro')}
             items={maxItems}
             cta={grow
-              ? <a href={GROW_LINKS.max[yearly ? 'yearly' : 'monthly']} className={ctaSecondary}>{t('pk.buy')}</a>
+              ? growCta('max', false)
               : mine === 'max' ? null : <Link to="/contact" className={ctaSecondary}>{t('pk.buy')}</Link>}
           />
         </section>
