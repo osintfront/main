@@ -170,3 +170,14 @@ export function focusedPass(
  * wording differs (a road "built" at 09:35, "widened" in another outlet at 13:45). Low: never.
  */
 export const worthConfirming = (confidence: string | undefined) => confidence === "high" || confidence === "medium";
+
+/** Output ceiling for one dedupe answer. */
+export const MAX_ANSWER_TOKENS = 8000;
+/**
+ * An answer cut off at its token cap loses every pair in its tool call: ask again with twice the
+ * room (up to MAX_ANSWER_TOKENS). null when the answer is complete or already at the ceiling.
+ */
+export function roomForRetry(stopReason: string | undefined, maxTokens: number): number | null {
+  if (stopReason !== "max_tokens" || maxTokens >= MAX_ANSWER_TOKENS) return null;
+  return Math.min(MAX_ANSWER_TOKENS, maxTokens * 2);
+}

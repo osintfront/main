@@ -6,7 +6,7 @@
 // the few older events whose headlines (Hebrew + English) look most like it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { couldBeSame, focusedBatches, focusedPass, headlineSimilarity, textTwin, worthConfirming } from '../../supabase/functions/_shared/dedupeMatch.ts';
+import { couldBeSame, focusedBatches, focusedPass, headlineSimilarity, textTwin, roomForRetry, worthConfirming } from '../../supabase/functions/_shared/dedupeMatch.ts';
 
 const slug = new Map([
   ['c-st', 'statements'], ['c-mil', 'military-activity'], ['c-art', 'artillery-shelling'], ['c-air', 'airstrike'],
@@ -134,4 +134,15 @@ test('focused batches: every NEW event with a look-alike is asked, no batch over
     // Every id the compare section names is a line of this batch.
     for (const g of b.groups) for (const id of [g.fresh, ...g.candidates]) assert.ok(b.rows.some((r) => r.id === id));
   }
+});
+
+// 13 Nov: a backfill's confirmation answer stopped at its token cap (1,960 of 1,960), the tool
+// call was cut off, and all 15 confirmed pairs were lost. A cut-off answer is asked again with
+// twice the room, up to a ceiling.
+test('a cut-off answer gets twice the room, up to 8000; a complete one is final', () => {
+  assert.equal(roomForRetry('max_tokens', 1960), 3920);
+  assert.equal(roomForRetry('max_tokens', 5000), 8000);
+  assert.equal(roomForRetry('max_tokens', 8000), null);
+  assert.equal(roomForRetry('tool_use', 800), null);
+  assert.equal(roomForRetry('end_turn', 800), null);
 });

@@ -7,7 +7,7 @@
 // over) and soft-deleted.
 import { callClaude, CHEAP_MODELS, isTransient, STRONG_MODELS } from "./editor.ts";
 import { hashImage, repeatsIn } from "./imageHash.ts";
-import { couldBeSame, focusedBatches, textTwin, worthConfirming } from "./dedupeMatch.ts";
+import { couldBeSame, focusedBatches, roomForRetry, textTwin, worthConfirming } from "./dedupeMatch.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -67,13 +67,22 @@ async function ask(lines: string, models: string[], maxTokens = 800): Promise<Pa
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const out = await callClaude(model, {
-          max_tokens: maxTokens,
-          system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-          tools: [TOOL],
-          tool_choice: { type: "tool", name: "duplicates" },
-          messages: [{ role: "user", content: lines }],
-        }, "dedupe");
+        // A busy run's answer can outgrow its cap; a cut-off tool call loses every pair in it, so
+        // ask again with more room (roomForRetry) until it fits or reaches the ceiling.
+        let budget = maxTokens;
+        let out: any;
+        for (;;) {
+          out = await callClaude(model, {
+            max_tokens: budget,
+            system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+            tools: [TOOL],
+            tool_choice: { type: "tool", name: "duplicates" },
+            messages: [{ role: "user", content: lines }],
+          }, "dedupe");
+          const more = roomForRetry(out.stop_reason, budget);
+          if (more === null) break;
+          budget = more;
+        }
         const block = out.content?.find((x: any) => x.type === "tool_use");
         return Array.isArray(block?.input?.pairs) ? block.input.pairs : [];
       } catch (e: any) {
