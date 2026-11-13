@@ -12,6 +12,10 @@ type Any = any;
 export interface MatchRow {
   id: string; created_at: string; occurred_at: string; title: string;
   country: string | null; category_id: string | null; translations?: Any; ai_suggestions?: Any;
+  /** Where it happened (the event's own place name). */
+  location_name?: string | null;
+  /** Fingerprints (64-bit dHash, hex) of the event's photos — common file photos left out. */
+  pictures?: string[];
 }
 
 /** Kinds of event that can be the same incident (statements never pair with strikes). */
@@ -107,6 +111,39 @@ export function textTwin(a: MatchRow, b: MatchRow, slug: Map<string, string>): b
   return sameKind && s >= TWIN_HEADLINE;
 }
 
+/** Same photo re-saved by another channel: a few bits apart (imageHash.ts SAME_PICTURE_BITS). */
+const SAME_PICTURE_BITS = 8;
+function bitsApart(a: string, b: string): number {
+  if (a.length !== b.length) return 64;
+  let d = 0;
+  for (let i = 0; i < a.length; i += 2) {
+    let x = parseInt(a.slice(i, i + 2), 16) ^ parseInt(b.slice(i, i + 2), 16);
+    while (x) { d += x & 1; x >>= 1; }
+  }
+  return d;
+}
+/** Do the two events carry the same photo? */
+export function samePicture(a: Pick<MatchRow, "pictures">, b: Pick<MatchRow, "pictures">): boolean {
+  const pa = a.pictures ?? [], pb = b.pictures ?? [];
+  return pa.some((x) => pb.some((y) => bitsApart(x, y) <= SAME_PICTURE_BITS));
+}
+
+const placeKey = (name: string | null | undefined) => String(name ?? "").toLowerCase().normalize("NFKC")
+  .replace(/[\u064B-\u065F\u0591-\u05C7]/g, "").replace(/[إأآ]/g, "ا").replace(/ة/g, "ه")
+  .split(/[\s\-_,]+/).map((w) => w.replace(/^ال(?=..)/, "")).join("").replace(/[^\p{L}\p{N}]/gu, "");
+/** The same place name (Arabic article, hamza forms and spaces aside), or the same English place. */
+export function samePlace(a: Pick<MatchRow, "location_name" | "ai_suggestions">, b: Pick<MatchRow, "location_name" | "ai_suggestions">): boolean {
+  const ka = placeKey(a.location_name), kb = placeKey(b.location_name);
+  if (ka.length >= 3 && ka === kb) return true;
+  const ea = placeKey(a.ai_suggestions?.place_en), eb = placeKey(b.ai_suggestions?.place_en);
+  return ea.length >= 3 && ea === eb;
+}
+
+/** Two events with the same photo, within the usual time window: may cross kinds and countries. */
+export function pictureTwin(a: MatchRow, b: MatchRow, slug: Map<string, string>): boolean {
+  return root(a) !== root(b) && inWindow(a, b, slug) && samePicture(a, b);
+}
+
 export interface FocusedPass {
   /** Every event to show, oldest first; line n is rows[n-1]. */
   rows: MatchRow[];
@@ -129,15 +166,26 @@ export function focusedBatches(
   const perEvent = opts.perEvent ?? 8, minSim = opts.minSim ?? 0.12, maxRows = Math.max(opts.maxRows ?? 100, perEvent + 1);
   const order = (r: MatchRow) => `${r.created_at}|${r.id}`;
   const groups: { fresh: string; candidates: string[] }[] = [];
+  const photo = new Set<string>();
   for (const f of rows.filter((r) => fresh.has(r.id)).sort((a, b) => order(a).localeCompare(order(b)))) {
-    const cands = rows
+    // Look-alikes by headline, plus events with the same photo (strongest) or the same place.
+    const scored = rows
       // Older events, or NEW ones created earlier (so two NEW events are compared once).
       .filter((r) => r.id !== f.id && (!fresh.has(r.id) || order(r) < order(f)))
-      .map((r) => ({ r, s: headlineSimilarity(f, r) }))
-      .filter((x) => x.s >= minSim && (couldBeSame(f, x.r, slug) || textTwin(f, x.r, slug)))
-      .sort((a, b) => b.s - a.s)
-      .slice(0, perEvent);
-    if (cands.length) groups.push({ fresh: f.id, candidates: cands.map((x) => x.r.id) });
+      .map((r) => {
+        const s = headlineSimilarity(f, r), pic = samePicture(f, r), place = samePlace(f, r);
+        return { r, s, pic, place, score: s + (pic ? 1 : 0) + (place ? 0.15 : 0) };
+      })
+      .filter((x) => (x.s >= minSim || x.pic || x.place) &&
+        (couldBeSame(f, x.r, slug) || textTwin(f, x.r, slug) || pictureTwin(f, x.r, slug)))
+      .sort((a, b) => b.score - a.score);
+    // A busy place (a city) has many events: weak headline + same place only, at most two.
+    let placeOnly = 0;
+    const cands = scored.filter((x) => (x.s >= minSim || x.pic) || placeOnly++ < 2).slice(0, perEvent);
+    if (cands.length) {
+      groups.push({ fresh: f.id, candidates: cands.map((x) => x.r.id) });
+      for (const x of cands) if (x.pic) photo.add(`${f.id}|${x.r.id}`);
+    }
   }
   // Pack groups into batches; a group's lines all go in the same batch.
   const packs: { groups: typeof groups; ids: Set<string> }[] = [];
@@ -151,7 +199,7 @@ export function focusedBatches(
   return packs.map(({ groups: gs, ids }) => {
     const list = rows.filter((r) => ids.has(r.id)).sort((a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id.localeCompare(b.id));
     const no = new Map(list.map((r, i) => [r.id, i + 1]));
-    const compare = gs.map((g) => `NEW [${no.get(g.fresh)}]: ${g.candidates.map((c) => `[${no.get(c)}]`).join(" ")}`).join("\n");
+    const compare = gs.map((g) => `NEW [${no.get(g.fresh)}]: ${g.candidates.map((c) => `[${no.get(c)}]${photo.has(`${g.fresh}|${c}`) ? " (same photo)" : ""}`).join(" ")}`).join("\n");
     return { rows: list, groups: gs, compare };
   });
 }
