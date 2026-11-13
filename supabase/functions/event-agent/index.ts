@@ -145,7 +145,7 @@ async function deepAction(action: string, body: Record<string, any>, uid: string
   if (action === "deep_write") {
     const eventId = String(body.event_id ?? "");
     if (!UUID.test(eventId)) return json({ error: "bad id" }, 400);
-    const { data: ev } = await db.from("events").select("id,title").eq("id", eventId).is("deleted_at", null).maybeSingle();
+    const { data: ev } = await db.from("events").select("id,title").eq("id", eventId).is("deleted_at", null).in("status", ["published", "archived"]).maybeSingle();
     if (!ev) return json({ error: "not found" }, 404);
     let mark: any;
     if (typeof body.text === "string") {

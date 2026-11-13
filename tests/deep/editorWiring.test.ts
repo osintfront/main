@@ -32,3 +32,11 @@ test('event-agent expires a dead write and re-checks after the claim', () => {
 test('the cron secret may also refresh an entry (internal checks)', () => {
   assert.ok(read('event-agent/index.ts').includes('(action === "deep_refresh" || (action === "deep_write" && typeof body?.text === "string")) && await cronOk(req)'));
 });
+
+test('deep_write only for published or archived events', () => {
+  assert.match(read('event-agent/index.ts'), /\.in\("status", \["published", "archived"\]\)/);
+});
+
+test('split siblings do not inherit the hand-set flag', () => {
+  assert.ok(read('_shared/splitEvent.ts').includes('manual_secondary: undefined'));
+});

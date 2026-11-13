@@ -55,7 +55,15 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
   const [analyze, setAnalyze] = useState<{ text: string; x: number; y: number } | null>(null);
   const textArea = useRef<HTMLDivElement>(null);
   const headArea = useRef<HTMLHeadingElement>(null);
-  const loadTerms = (force = false) => fetchEventTerms(event.id, force).then(setTerms);
+  const termsFor = useRef(event.id);
+  termsFor.current = event.id;
+  // A slow answer for the previous event must not land on this one.
+  const loadTerms = (force = false) => {
+    const id = event.id;
+    return fetchEventTerms(id, force).then((t) => {
+      if (termsFor.current === id) setTerms(t);
+    });
+  };
   useEffect(() => {
     setTerms([]);
     void loadTerms();
@@ -98,6 +106,8 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
     const off = (e: Event) => {
       if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
       if (e.target instanceof Element && e.target.closest('[data-analyze-menu]')) return;
+      // Escape closes only the menu, not the event window under it.
+      if (e instanceof KeyboardEvent) e.stopPropagation();
       setAnalyze(null);
     };
     document.addEventListener('keydown', off, true);

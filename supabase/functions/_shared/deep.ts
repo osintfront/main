@@ -8,7 +8,7 @@
 import { callClaude, isTransient } from "./editor.ts";
 import { costUsd } from "./usage.ts";
 import {
-  aliasPlan, cleanEntry, DEEP_LIMITS, DEEP_TOOL, deepSystemPrompt, deepUserMessage, pickImage, searchUrls, turnTimeout,
+  cleanEntry, namePlan, DEEP_LIMITS, DEEP_TOOL, deepSystemPrompt, deepUserMessage, pickImage, searchUrls, turnTimeout,
   type CleanEntry, type DeepEvent, type DeepImage,
 } from "./deepInput.ts";
 import { normTerm } from "./terms.ts";
@@ -170,7 +170,7 @@ export async function writeEntry(db: Db, job: WriteJob): Promise<void> {
     if (!entry) throw new Error("no usable entry");
     const image = await wikiImage(entry.wiki_title ?? "");
     const owners = await ownersOf(db, [entry.name_en, entry.name_he, entry.name_orig, ...job.names, ...entry.aliases]);
-    const plan = aliasPlan([entry.name_en, entry.name_he, entry.name_orig, ...job.names, ...entry.aliases], owners, job.refreshId ?? null);
+    const plan = namePlan([entry.name_en, entry.name_he, entry.name_orig, ...job.names], entry.aliases, owners, job.refreshId ?? null);
     const related = events.map((e) => e.id);
     if (job.refreshId) {
       const prev = { ...content(old), image: old.image, version: old.version };

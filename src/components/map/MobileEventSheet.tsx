@@ -6,7 +6,7 @@ import { formatEventTime, formatRelative } from '@/utils/time';
 import { hostnameOf } from '@/utils/url';
 import { cn } from '@/utils/cn';
 import { eventTexts } from '@/components/feed/EventText';
-import { BreakingBadge, CategoryBadge, SeverityBadge } from '@/components/common/Badges';
+import { BreakingBadge, CategoryBadge, SecondaryBadges, SeverityBadge } from '@/components/common/Badges';
 import { whereLabel } from '@/utils/places';
 
 interface MobileEventSheetProps {
@@ -39,6 +39,7 @@ export function MobileEventSheet({ event, onClose, onOpenDetails, onMove }: Mobi
 
   return (
     <section
+      data-mobile-sheet
       ref={sheetRef}
       aria-label={title}
       className="ofm-sheet pointer-events-auto mx-3 rounded-2xl bg-white p-3.5 shadow-2xl ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10"
@@ -60,6 +61,7 @@ export function MobileEventSheet({ event, onClose, onOpenDetails, onMove }: Mobi
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           {event.isBreaking ? <BreakingBadge /> : null}
           <CategoryBadge category={event.category} />
+          <SecondaryBadges categories={event.secondaryCategories} />
           <SeverityBadge severity={event.severity} />
         </div>
         <button

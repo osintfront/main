@@ -126,7 +126,8 @@ export async function splitEventByCategory(db: Db, eventId: string): Promise<str
       location_precision: first ? (first.precision ?? "exact") : null,
       geocoding_confidence: first ? 0.7 : null,
       translations: { ...tr, he: { ...(tr.he ?? {}), title: he }, en: { ...(tr.en ?? {}), title: en } },
-      ai_suggestions: { ...(ev.ai_suggestions ?? {}), split_from: ev.id },
+      // A sibling starts with no secondary types, so the hand-set flag stays with the original.
+      ai_suggestions: { ...(ev.ai_suggestions ?? {}), manual_secondary: undefined, split_from: ev.id },
     });
     let { data: ins, error } = await db.from("events").insert(row).select("id").single();
     // Published but the database could not place it: keep it as a draft for an analyst.
