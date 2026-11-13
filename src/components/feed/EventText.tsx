@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, ChevronUp, FileText, Languages, Link2, Loader2, Lock, Mail, Send, Share2 } from 'lucide-react';
 import { useI18n } from '@/i18n';
@@ -60,7 +60,7 @@ export function eventTexts(event: PublicEvent, lang: string) {
  *  "Expand" — the full report + religious meaning + other implications (written once by the agent);
  *  "Source text" — the original report, with a button back to the translated summary.
  */
-export function EventText({ event, compact = false, terms, usedTerms, onTerm }: {
+export function EventText({ event, compact = false, terms, usedTerms, onTerm, onExpandedChange, expandButtons, expandPanel }: {
   event: PublicEvent;
   compact?: boolean;
   /** Deep analysis (details window only): term links in the summary and the expansion. */
@@ -68,6 +68,12 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
   /** Keys already linked above (the headline): each term links once in the window. */
   usedTerms?: Set<string>;
   onTerm?: (t: EventTerm) => void;
+  /** Media translation (details window only): told when the expansion opens / closes. */
+  onExpandedChange?: (open: boolean) => void;
+  /** Drawn in the button row while the expansion is open. */
+  expandButtons?: ReactNode;
+  /** Drawn under the expansion while it is open. */
+  expandPanel?: ReactNode;
 }) {
   const { t, lang } = useI18n();
   const { profile } = useAuth();
@@ -195,6 +201,8 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
   // "None" answers are not shown.
   const real = (v: string) => (/^\s*(אין|none|n\/a|no)\.?\s*$/i.test(v ?? '') ? '' : v);
   const x = raw ? { details: raw.details, religious: real(raw.religious), implications: real(raw.implications) } : null;
+  const expandShown = open && !!x && view === 'summary';
+  useEffect(() => onExpandedChange?.(expandShown), [expandShown, onExpandedChange]);
   const btn =
     'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-500 disabled:opacity-60 dark:text-sky-400 dark:hover:bg-sky-500/10';
 
@@ -242,6 +250,7 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
           ) : null}
         </div>
       ) : null}
+      {expandShown && expandPanel ? expandPanel : null}
 
       <div className="mt-1 flex flex-wrap items-center gap-1">
         {view === 'summary' ? (
@@ -253,6 +262,7 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm }: 
         {view === 'summary' && profile?.role === 'viewer' && usage?.limit != null ? (
           <span className="text-[11px] text-slate-500 dark:text-slate-400">{t('gate.left', { n: Math.max(usage.limit - usage.used, 0), limit: usage.limit })}</span>
         ) : null}
+        {expandShown && expandButtons ? expandButtons : null}
         <button type="button" onClick={() => void showSource()} disabled={busy !== null} className={btn}>
           {busy === 'source' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : view === 'source' ? <Languages className="size-3.5" aria-hidden /> : <FileText className="size-3.5" aria-hidden />}
           {view === 'source' ? t('text.backToSummary') : t('text.source')}
