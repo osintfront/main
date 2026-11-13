@@ -6,8 +6,8 @@ import { cn } from '@/utils/cn';
 
 interface FilterSetHeaderProps {
   set: FilterSet;
-  /** Its place in the list (1-based), for the default name. */
-  position: number;
+  /** The name a blank name falls back to (a free "Set N"). */
+  defaultName: string;
   locked: boolean;
   onChange: (next: FilterSet) => void;
   onDelete: () => void;
@@ -18,12 +18,12 @@ const smallBtn =
   'inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold sm:min-h-8 sm:text-xs disabled:opacity-50';
 
 /** The top of the filter panel while a set is chosen: its name, on/off, delete and drawn areas. */
-export function FilterSetHeader({ set, position, locked, onChange, onDelete, onDrawArea }: FilterSetHeaderProps) {
+export function FilterSetHeader({ set, defaultName, locked, onChange, onDelete, onDrawArea }: FilterSetHeaderProps) {
   const { t } = useI18n();
   const [name, setName] = useState(set.name);
   useEffect(() => setName(set.name), [set.id, set.name]);
   const saveName = () => {
-    const v = name.trim().slice(0, MAX_NAME) || t('sets.defaultName', { n: position });
+    const v = name.trim().slice(0, MAX_NAME) || defaultName;
     setName(v);
     if (v !== set.name) onChange({ ...set, name: v });
   };
@@ -42,7 +42,12 @@ export function FilterSetHeader({ set, position, locked, onChange, onDelete, onD
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={saveName}
-            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            onKeyDown={(e) => {
+              // Enter and Esc keep what was typed; Esc here does not also close the panel (the name would be lost).
+              if (e.key !== 'Enter' && e.key !== 'Escape') return;
+              if (e.key === 'Escape') e.stopPropagation();
+              (e.target as HTMLInputElement).blur();
+            }}
             maxLength={MAX_NAME}
             dir="auto"
             disabled={locked}

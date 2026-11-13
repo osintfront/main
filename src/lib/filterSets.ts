@@ -166,3 +166,15 @@ export function sanitizeSets(raw: unknown): FilterSet[] {
   }
   return out;
 }
+
+/** The default name with the first free number ("Set 1", "Set 2", …): never one another set already has. */
+export function defaultSetName(sets: FilterSet[], make: (n: number) => string, selfId?: string): string {
+  const taken = new Set(sets.filter((s) => s.id !== selfId).map((s) => s.name.trim()));
+  for (let n = 1; ; n++) if (!taken.has(make(n))) return make(n);
+}
+
+/** "Clear all": the sets in force are switched off; sets past the plan's limit (locked) stay as they were. */
+export function switchOffSets(sets: FilterSet[], limit: number): FilterSet[] {
+  if (!sets.some((s, i) => i < limit && s.enabled)) return sets;
+  return sets.map((s, i) => (i < limit && s.enabled ? { ...s, enabled: false } : s));
+}

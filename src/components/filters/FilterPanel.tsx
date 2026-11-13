@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Crosshair, Loader2, Octagon, Plus, X } from 'lucide-react';
 import { compileEei, matchesEei, type Eei } from '@/lib/eei';
-import { fromEventFilters, isLocked, matchesSetFilter, toEventFilters, type FilterSet } from '@/lib/filterSets';
+import { defaultSetName, fromEventFilters, isLocked, matchesSetFilter, toEventFilters, type FilterSet } from '@/lib/filterSets';
 import { FilterSetsBar } from './FilterSetsBar';
 import { FilterSetHeader } from './FilterSetHeader';
 import { EeiPanel } from './EeiPanel';
@@ -371,7 +371,7 @@ export function FilterPanel({
           ) : scopeSet ? (
             <FilterSetHeader
               set={scopeSet}
-              position={sets!.indexOf(scopeSet) + 1}
+              defaultName={defaultSetName(sets!, (n) => t('sets.defaultName', { n }), scopeSet.id)}
               locked={scopeLocked}
               onChange={replaceSet}
               onDelete={() => {
