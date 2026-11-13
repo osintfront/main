@@ -6,9 +6,12 @@
 // Request:  { url } | { ready: true }
 // Answer:   200 { state: 'ok'|'none', lang, seconds, speech, on_screen, cut, model, usage }
 //           200 { state: 'too_big'|'too_long'|'unavailable'|'unreadable', seconds? }
-//           401 unauthorized · 400 bad url · 503 off (no key) · 502 busy (Gemini limit / error / time-out)
+//           401 unauthorized · 400 bad url · 503 off (no key) · 502 { error: 'busy', detail } (Gemini limit / refusal / time-out; detail = step + status)
 // The speech text is never logged.
-import { SPEECH_LIMITS, SPEECH_PROMPT, allowedMediaUrl, cleanSpeech, geminiOutcome, mp4DurationSec, remainingMs } from './_lib/speechInput.js';
+import {
+  SPEECH_LIMITS, SPEECH_PROMPT, allowedMediaUrl, busyDetail, cleanSpeech, geminiOutcome, mp4DurationSec, remainingMs, routeDeadlineMs,
+  type BusyStep,
+} from './_lib/speechInput.js';
 
 const env = (k: string) => (process.env[k] ?? '').trim();
 const json = (body: unknown, status = 200) =>
@@ -23,9 +26,13 @@ function safeEqual(a: string, b: string) {
 
 const GEMINI = 'https://generativelanguage.googleapis.com';
 const GEMINI_MS = 90_000;
-/** The whole route answers within 90 s, inside the edge job's 100 s wait (and Vercel's 120 s). */
-const ROUTE_MS = 90_000;
-class Busy extends Error {}
+/** Gemini could not answer now: `detail` = the step and the upstream status (never speech text). */
+class Busy extends Error {
+  constructor(public detail: string) {
+    super(detail);
+  }
+}
+const busy = (step: BusyStep, status: number | null = null, body: unknown = null) => new Busy(busyDetail(step, status, body));
 
 /** The file, read with a hard cap. 'too_big' past 50 MB; 'unavailable' when it cannot be fetched. */
 async function download(url: string, deadline: number): Promise<Uint8Array | 'too_big' | 'unavailable'> {
@@ -72,22 +79,22 @@ const SAFETY = ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_C
   (category) => ({ category, threshold: 'BLOCK_NONE' }),
 );
 
-async function gemini(path: string, init: RequestInit, deadline: number): Promise<Response> {
+async function gemini(step: BusyStep, path: string, init: RequestInit, deadline: number): Promise<Response> {
   const ms = remainingMs(deadline, Date.now(), GEMINI_MS);
-  if (ms < 1000) throw new Busy();
+  if (ms < 1000) throw busy('deadline');
   let res: Response;
   try {
     res = await fetch(`${GEMINI}${path}`, { ...init, signal: AbortSignal.timeout(ms) });
   } catch {
-    throw new Busy();
+    throw busy(step);
   }
-  if (res.status === 429 || res.status >= 500) throw new Busy();
+  if (res.status === 429 || res.status >= 500) throw busy(step, res.status, await res.clone().json().catch(() => null));
   return res;
 }
 
 /** Upload through the Files API (resumable), wait until ACTIVE. Returns the file's name and uri. */
 async function uploadFile(key: string, bytes: Uint8Array, deadline: number): Promise<{ name: string; uri: string } | 'bad'> {
-  const start = await gemini('/upload/v1beta/files', {
+  const start = await gemini('upload_start', '/upload/v1beta/files', {
     method: 'POST',
     headers: {
       'x-goog-api-key': key,
@@ -100,7 +107,7 @@ async function uploadFile(key: string, bytes: Uint8Array, deadline: number): Pro
     body: JSON.stringify({ file: { display_name: 'event-video' } }),
   }, deadline);
   const uploadUrl = start.headers.get('x-goog-upload-url');
-  if (!start.ok || !uploadUrl) throw new Busy();
+  if (!start.ok || !uploadUrl) throw busy('upload_start', start.status, await start.json().catch(() => null));
   let up: Response;
   try {
     up = await fetch(uploadUrl, {
@@ -110,23 +117,23 @@ async function uploadFile(key: string, bytes: Uint8Array, deadline: number): Pro
       signal: AbortSignal.timeout(remainingMs(deadline, Date.now(), GEMINI_MS) || 1),
     });
   } catch {
-    throw new Busy();
+    throw busy('upload');
   }
-  if (up.status === 429 || up.status >= 500) throw new Busy();
-  const f = (await up.json().catch(() => null))?.file;
-  if (!up.ok || !f?.name) throw new Busy();
+  const upBody = await up.json().catch(() => null);
+  const f = upBody?.file;
+  if (!up.ok || !f?.name) throw busy('upload', up.status, upBody);
   let file = f;
   const drop = () => fetch(`${GEMINI}/v1beta/${f.name}`, { method: 'DELETE', headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(5000) }).catch(() => {});
   try {
     for (let i = 0; i < 20 && file?.state !== 'ACTIVE'; i++) {
       if (file?.state === 'FAILED') return await drop(), 'bad';
-      if (Date.now() > deadline - 20_000) throw new Busy();
+      if (Date.now() > deadline - 20_000) throw busy('file_wait');
       await new Promise((r) => setTimeout(r, 2000));
-      const g = await gemini(`/v1beta/${file.name}`, { headers: { 'x-goog-api-key': key } }, deadline);
+      const g = await gemini('file_wait', `/v1beta/${file.name}`, { headers: { 'x-goog-api-key': key } }, deadline);
       file = (await g.json().catch(() => null)) ?? file;
     }
     if (file?.state === 'FAILED') return await drop(), 'bad';
-    if (file?.state !== 'ACTIVE' || !file?.uri) throw new Busy();
+    if (file?.state !== 'ACTIVE' || !file?.uri) throw busy('file_wait');
   } catch (e) {
     await drop(); // never leave an uploaded file behind
     throw e;
@@ -143,7 +150,8 @@ export async function POST(req: Request) {
   const url = allowedMediaUrl(b?.url, env('SUPABASE_URL') || env('VITE_SUPABASE_URL'));
   if (!url) return json({ error: 'bad url' }, 400);
 
-  const deadline = Date.now() + ROUTE_MS;
+  const t0 = Date.now();
+  const deadline = t0 + routeDeadlineMs(b?.budget_ms);
   const file = await download(url, deadline);
   if (file === 'too_big' || file === 'unavailable') return json({ state: file });
   const seconds = mp4DurationSec(file);
@@ -161,7 +169,7 @@ export async function POST(req: Request) {
       uploaded = u;
       part = { file_data: { mime_type: 'video/mp4', file_uri: u.uri } };
     }
-    const res = await gemini(`/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    const res = await gemini('generate', `/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -173,16 +181,18 @@ export async function POST(req: Request) {
     }, deadline);
     const out = await res.json().catch(() => null);
     const outcome = geminiOutcome(res.status, out);
-    if (outcome === 'busy') throw new Busy(); // a refused request (bad model / key) is never saved as "unreadable"
+    if (outcome === 'busy') throw busy('generate', res.status, out); // a refused request (bad model / key) is never saved as "unreadable"
     if (outcome === 'unreadable') return json({ state: 'unreadable', seconds });
     const text = (out?.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p?.text ?? '').join('');
     const clean = text ? cleanSpeech(text) : null;
     if (!clean) return json({ state: 'unreadable', seconds });
     const usage = { input: Number(out?.usageMetadata?.promptTokenCount ?? 0), output: Number(out?.usageMetadata?.candidatesTokenCount ?? 0) };
+    console.log('transcribe', clean.state, file.length, seconds, Date.now() - t0);
     return json({ ...clean, seconds, model, usage });
   } catch (e) {
-    if (e instanceof Busy) return json({ error: 'busy' }, 502);
-    return json({ error: 'busy' }, 502);
+    const detail = e instanceof Busy ? e.detail : busyDetail('generate', null, null);
+    console.warn('transcribe busy', detail, file.length);
+    return json({ error: 'busy', detail }, 502);
   } finally {
     if (uploaded) {
       await fetch(`${GEMINI}/v1beta/${uploaded.name}`, { method: 'DELETE', headers: { 'x-goog-api-key': key } }).catch(() => {});

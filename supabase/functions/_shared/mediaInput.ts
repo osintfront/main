@@ -309,3 +309,19 @@ export function speechBudgetMs(deadline: number, now: number): number {
 export function routeOutcome(sp: RouteSpeech | 'failed'): RouteSpeech {
   return sp === 'failed' ? { state: 'off', lang: 'und', seconds: null, speech: '', onScreen: [], cut: false } : sp;
 }
+
+/** Why a speech-route call gave no speech (null when it answered with a known state). Never speech text. */
+export function routeNote(r: { status: number; body: unknown; error: 'timeout' | 'network' | null; waitedMs: number }): string | null {
+  if (r.error === 'timeout') return `route timeout after ${r.waitedMs} ms`;
+  if (r.error === 'network') return 'route network error';
+  if (r.status === 200) return cleanRoute(200, r.body) === 'failed' ? 'route 200 unknown answer' : null;
+  const b = (r.body && typeof r.body === 'object' ? r.body : {}) as Record<string, unknown>;
+  const s = (v: unknown) => (typeof v === 'string' ? v : '');
+  return `route ${r.status} ${s(b.error)} ${s(b.detail)}`.replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
+/** The run's reasons, distinct, joined; ≤ 300 chars; null when none. */
+export function speechNotes(parts: (string | null)[]): string | null {
+  const out = [...new Set(parts.filter((p): p is string => !!p && !!p.trim()).map((p) => p.trim()))].join(' | ');
+  return out ? out.slice(0, 300) : null;
+}

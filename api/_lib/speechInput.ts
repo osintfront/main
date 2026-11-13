@@ -157,3 +157,22 @@ export function geminiOutcome(status: number, out: unknown): 'ok' | 'busy' | 'un
 export function remainingMs(deadline: number, now: number, cap: number): number {
   return Math.max(0, Math.min(cap, deadline - now));
 }
+
+/** The route's own deadline from the job's wait: a number → 10–90 s, else 90 s. */
+export function routeDeadlineMs(budget: unknown): number {
+  return typeof budget === 'number' && Number.isFinite(budget) ? Math.min(90_000, Math.max(10_000, budget)) : 90_000;
+}
+
+export type BusyStep = 'upload_start' | 'upload' | 'file_wait' | 'generate' | 'deadline';
+
+/** A short reason for a 502: the step, the upstream status and Gemini's error status / message (≤ 160 chars). */
+export function busyDetail(step: BusyStep, status: number | null, body: unknown): string {
+  const parts: string[] = [step, status == null ? 'no answer' : String(status)];
+  const err = body && typeof body === 'object' ? (body as { error?: unknown }).error : null;
+  if (err && typeof err === 'object') {
+    const e = err as { status?: unknown; message?: unknown };
+    if (typeof e.status === 'string' && e.status) parts.push(e.status);
+    if (typeof e.message === 'string' && e.message) parts.push(e.message.slice(0, 120));
+  }
+  return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+}

@@ -12,7 +12,7 @@ import { TRANSLATE_API_URL } from "./translate.ts";
 import { videoForThumb } from "./videoOnDemand.ts";
 import {
   cleanReading, cleanRoute, MEDIA_LIMITS, MEDIA_TOOL, mediaItems, mediaSystemPrompt, mediaUserContent, needsClaude, pickTodo, refundAfterJob,
-  routeOutcome, speechBudgetMs, speechPlan,
+  routeNote, routeOutcome, speechBudgetMs, speechNotes, speechPlan,
   type MediaItem, type MediaRow, type RouteSpeech, type SentItem,
 } from "./mediaInput.ts";
 
@@ -50,27 +50,35 @@ export async function loadItems(db: Db, eventId: string): Promise<{ items: Media
 }
 
 /** Gemini (through our Vercel route) writes down one stored video's speech and on-screen text. */
-export async function speechFor(videoUrl: string, purpose: string, ms: number = MEDIA_LIMITS.routeMs): Promise<RouteSpeech | "failed"> {
+export async function speechFor(
+  videoUrl: string,
+  purpose: string,
+  ms: number = MEDIA_LIMITS.routeMs,
+): Promise<{ out: RouteSpeech | "failed"; note: string | null }> {
   let status = 0;
   let body: unknown = null;
+  const t0 = Date.now();
   try {
     const res = await fetch(ROUTE, {
       method: "POST",
       headers: { "content-type": "application/json", "x-translate-secret": SECRET },
-      body: JSON.stringify({ url: videoUrl }),
+      // The route stops inside our wait (budget_ms) and says why, instead of being cut off.
+      body: JSON.stringify({ url: videoUrl, budget_ms: ms - 5000 }),
       signal: AbortSignal.timeout(ms),
     });
     status = res.status;
     body = await res.json().catch(() => null);
-  } catch {
-    return "failed";
+  } catch (e) {
+    const error = (e as Error)?.name === "TimeoutError" ? "timeout" : "network";
+    return { out: "failed", note: routeNote({ status: 0, body: null, error, waitedMs: Date.now() - t0 }) };
   }
   const out = cleanRoute(status, body);
+  const note = routeNote({ status, body, error: null, waitedMs: Date.now() - t0 });
   const b = body as any;
   if (out !== "failed" && b?.usage && typeof b?.model === "string") {
     logUsage(purpose, `free:gemini:${b.model}`, { input_tokens: Number(b.usage.input) || 0, output_tokens: Number(b.usage.output) || 0 });
   }
-  return out;
+  return { out, note };
 }
 
 export interface MediaJob { eventId: string; token: string; uid: string | null; staff: boolean; redo: boolean }
@@ -109,6 +117,7 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
   const deadline = Date.now() + MEDIA_LIMITS.jobMs;
   let cost = 0;
   let ok = false;
+  let speechNote: string | null = null;
   try {
     const on = await speechOn(db);
     const { items, readings } = await loadItems(db, job.eventId);
@@ -122,6 +131,14 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
 
     const sent: SentItem[] = [];
     let videosSoFar = 0;
+    // Why a video's speech was not read (logged; saved for staff). Never speech text.
+    const notes: (string | null)[] = [];
+    if (!on && todo.some((t) => t.kind === "video")) notes.push(speechConfigured() ? "speech switch is off" : "speech route not configured");
+    const note = (itemId: string, n: string | null) => {
+      if (!n) return;
+      notes.push(n);
+      console.warn("media speech", job.eventId, itemId, n);
+    };
     for (const [i, item] of todo.entries()) {
       const s: SentItem = { n: i + 1, id: item.id, kind: item.kind, imageUrl: item.imageUrl, speech: null };
       if (item.kind === "video") {
@@ -142,20 +159,23 @@ export async function translateMedia(db: Db, job: MediaJob): Promise<void> {
             } else if (v?.state === "too_big") plan = "too_big";
             break;
           }
+          if (plan !== "route") note(item.id, `video fetch: ${plan}`);
         }
         if (plan === "route" && url) {
           // Inside the job's time, leaving Claude its share; a failed or skipped route leaves the speech
           // 'off' (retried later) and the pictures are still read.
           const ms = speechBudgetMs(deadline, Date.now());
-          const sp = ms ? await speechFor(url, purpose, ms) : "failed";
-          if (sp !== "failed") videosSoFar++;
-          s.speech = routeOutcome(sp);
+          const r = ms ? await speechFor(url, purpose, ms) : { out: "failed" as const, note: "skipped: no time left for the route" };
+          note(item.id, r.note);
+          if (r.out !== "failed") videosSoFar++;
+          s.speech = routeOutcome(r.out);
         } else {
           s.speech = noSpeech(plan === "route" ? "unavailable" : plan);
         }
       }
       sent.push(s);
     }
+    speechNote = speechNotes(notes);
 
     let raw: unknown = { items: [] };
     let model = MEDIA_MODELS[0];
