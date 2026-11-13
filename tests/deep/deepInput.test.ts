@@ -156,3 +156,23 @@ test('after taking the lease: still within the cap and the budget?', async () =>
   assert.equal(overAfterClaim({ ...base, staff: true, all: 3, readers: 0 }), 'busy');
   assert.equal(overAfterClaim({ ...base, budgetUsd: null, spentUsd: 99 }), null);
 });
+
+// ─── First real entries (13 Nov) ─────────────────────────────────────────────────
+test('the new Wikimedia thumbnail host is accepted', () => {
+  const page = { title: 'Marco Rubio', pageprops: {} };
+  const info = {
+    thumburl: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/A.jpg/960px-A.jpg?utm_source=x',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/f/f7/A.jpg',
+    descriptionurl: 'https://commons.wikimedia.org/wiki/File:A.jpg',
+    extmetadata: { LicenseShortName: { value: 'Public domain' }, Artist: { value: 'U.S. Department of State' } },
+  };
+  const img = pickImage(page, info)!;
+  assert.ok(img);
+  assert.equal(img.url, 'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/A.jpg/960px-A.jpg');
+  assert.equal(pickImage(page, { ...info, thumburl: 'https://evil.example/a.jpg' })!.url, 'https://upload.wikimedia.org/wikipedia/commons/f/f7/A.jpg');
+  assert.equal(pickImage(page, { ...info, thumburl: 'https://evil.example/a.jpg', url: 'https://evil.example/b.jpg' }), null);
+});
+
+test('names without explanations in brackets', () => {
+  assert.match(deepSystemPrompt(), /name only/i);
+});

@@ -86,3 +86,8 @@ test('mapEntry', () => {
   assert.equal(mapEntry(null), null);
   assert.equal(mapEntry({ ...row, id: undefined }), null);
 });
+
+test('mapEntry accepts the new Wikimedia thumbnail host', () => {
+  const e = mapEntry({ id: 'E', kind: 'person', image: { url: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/a.jpg', page: 'https://commons.wikimedia.org/wiki/File:A.jpg', credit: 'X', license: 'Public domain' } })!;
+  assert.ok(e.image);
+});

@@ -95,7 +95,7 @@ export interface DeepEntry {
 function mapImage(v: unknown): DeepImage | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
-  if (typeof o.url !== 'string' || !o.url.startsWith('https://upload.wikimedia.org/')) return null;
+  if (typeof o.url !== 'string' || !/^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(o.url)) return null;
   const page = typeof o.page === 'string' && o.page.startsWith('https://') ? o.page : '';
   const lu = typeof o.license_url === 'string' && o.license_url.startsWith('https://') ? o.license_url : null;
   return { url: o.url, page, credit: str(o.credit, 120), license: str(o.license, 60), licenseUrl: lu };

@@ -45,6 +45,7 @@ Sections (use only those you have facts for), each in Hebrew and in English:
 - operators: who uses, owns or commands it.
 - use: where and how it was used or seen, including in our events.
 - significance: why it matters in the current conflict.
+name_he / name_en: the name only, as people write it — no explanation in brackets (the kind and the summary explain it).
 summary_he / summary_en: two or three sentences. Every text in Hebrew and in English.
 sources: the pages you used (title and url). wiki_title: the exact English Wikipedia article title only when sure, otherwise empty.
 Answer only with the deep_entry tool.`;
@@ -188,6 +189,8 @@ export function cleanPatch(raw: unknown): Partial<Omit<CleanEntry, "wiki_title">
 
 export interface DeepImage { url: string; page: string; credit: string; license: string; license_url: string | null }
 
+export const WIKIMEDIA_HOSTS = ["upload.wikimedia.org", "thumb.wikimedia.org"];
+
 const plain = (v: unknown) => (typeof v === "string" ? v.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120) : "");
 
 /** The Wikipedia lead image, only when free (CC0 / CC BY / CC BY-SA / public domain / GFDL) and credited. */
@@ -195,9 +198,13 @@ export function pickImage(page: unknown, info: unknown): DeepImage | null {
   if (!page || typeof page !== "object" || !info || typeof info !== "object") return null;
   const p = page as { pageprops?: Record<string, unknown>; title?: string; fullurl?: string };
   if (p.pageprops && p.pageprops.disambiguation !== undefined) return null;
-  const i = info as { thumburl?: unknown; descriptionurl?: unknown; extmetadata?: Record<string, { value?: unknown } | undefined> };
-  const thumb = httpUrl(i.thumburl);
-  if (!thumb || thumb.protocol !== "https:" || thumb.hostname !== "upload.wikimedia.org") return null;
+  const i = info as { thumburl?: unknown; url?: unknown; descriptionurl?: unknown; extmetadata?: Record<string, { value?: unknown } | undefined> };
+  // Wikimedia serves thumbnails from thumb.wikimedia.org (newer) or upload.wikimedia.org; else the original file.
+  const onWikimedia = (u: URL | null) => !!u && u.protocol === "https:" && WIKIMEDIA_HOSTS.includes(u.hostname);
+  let thumb = httpUrl(i.thumburl);
+  if (!onWikimedia(thumb)) thumb = httpUrl(i.url);
+  if (!thumb || !onWikimedia(thumb)) return null;
+  thumb.search = "";
   const desc = httpUrl(i.descriptionurl);
   if (!desc || desc.hostname !== "commons.wikimedia.org") return null;
   const meta = i.extmetadata ?? {};
