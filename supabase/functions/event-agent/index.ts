@@ -18,6 +18,13 @@
 //   {action:"eei_save", raw_text, list}  Pro / Max — save the (edited) list; yesterday's is kept for restore;
 //                                new theatres are tagged in the background (10 saves / day).
 //   {action:"eei_clear"}         Pro / Max — switch the list off (yesterday's stays restorable).
+//   {action:"deep_write", event_id, key, poll?}  Pro / Max / Intel / staff — deep analysis: open the entry for a
+//                                term marked on the event, or start writing it (Opus + web search, in the
+//                                background; poll again). New entries count against the plan's daily uses.
+//   {action:"deep_write", event_id, text, lang, poll?}  staff (or cron secret) — "Analyze" a selected text.
+//   {action:"deep_refresh", entry_id, poll?}  staff (or cron secret) — rewrite an entry (old content kept one step back).
+//   {action:"deep_update", entry_id, patch}   staff — hand edit of an entry (names, texts, sections, sources, picture).
+//   {action:"deep_remove", entry_id}          staff — remove an entry and its names.
 //   {action:"classify_channels"} cron secret — region of public Telegram channels without one (batch of 120).
 //   {action:"dedupe", minutes?}  cron secret — fold duplicate reports of one incident into one event
 //                                (events created since the last run vs. the last 12 hours).
@@ -34,6 +41,10 @@ import { eeiBudget, eeiSpentToday, parseEei, saveEei, tagTheatre } from "../_sha
 import { LIMITS as EEI_LIMITS, parseCacheKey } from "../_shared/eeiInput.ts";
 import { dedupeRecent, dropRepeats } from "../_shared/dedupe.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
+import { saveEventTerms } from "../_shared/eventTerms.ts";
+import { jobState, ownersOf, writeEntry } from "../_shared/deep.ts";
+import { aliasPlan, cleanPatch, DEEP_LIMITS, nextStep, overAfterClaim, staleJob } from "../_shared/deepInput.ts";
+import { normTerm } from "../_shared/terms.ts";
 import { TRANSLATE_API_URL, translateBriefChain } from "../_shared/translate.ts";
 import { AGENT_EXCLUDED_CATEGORIES } from "../_shared/categoryRules.ts";
 import { classifyChannels } from "../_shared/channels.ts";
@@ -63,6 +74,144 @@ const json = (b: unknown, s = 200) => new Response(JSON.stringify(safeBody(b, s)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 let secret: string | null = null;
+// ── Deep analysis ─────────────────────────────────────────────────────────────────
+const entryContent = (e: any) => ({
+  kind: e.kind, name_he: e.name_he, name_en: e.name_en, name_orig: e.name_orig, summary_he: e.summary_he, summary_en: e.summary_en,
+  sections: e.sections, sources: e.sources, image: e.image, version: e.version,
+});
+
+/** Serve, wait, refuse or start a write for one name (or an entry's refresh). */
+async function deepStep(o: {
+  key: string; uid: string | null; staff: boolean; internal: boolean; poll: boolean; entryId: string | null;
+  names: string[]; kind: string | null; sentence: string; refreshId?: string;
+}) {
+  // A write whose worker was stopped (lease ran out, no answer): give its use back and mark it failed.
+  const { data: row } = await db.from("deep_jobs").select("busy_until,fail_reason,entry_id,started_by").eq("key", o.key).maybeSingle();
+  if (staleJob(row, Date.now())) {
+    const { data: gone } = await db.from("deep_jobs")
+      .update({ busy_until: null, fail_reason: "failed", retry_after: new Date(Date.now() + 3600_000).toISOString() })
+      .eq("key", o.key).eq("busy_until", row!.busy_until).select("key");
+    if (gone?.length && row!.started_by) await db.rpc("refund_feature", { p_uid: row!.started_by, p_key: "deep_analysis" });
+  }
+  const st = await jobState(db, o.key);
+  if (o.refreshId && o.poll && !st.leaseHeld && !st.failReason) {
+    const { data: e } = await db.from("deep_entries").select("version").eq("id", o.refreshId).maybeSingle();
+    return json({ ok: true, version: e?.version ?? null });
+  }
+  const [{ data: spent }, { data: flight }, { data: setting }] = await Promise.all([
+    db.rpc("deep_spent_today"), db.rpc("deep_in_flight"),
+    db.from("app_settings").select("value").eq("key", "deep_daily_budget_usd").maybeSingle(),
+  ]);
+  const b = Number(setting?.value);
+  const step = nextStep({
+    entryId: o.entryId, leaseHeld: st.leaseHeld, poll: o.poll, failReason: st.failReason, retryLater: st.retryLater, staff: o.staff,
+    spentUsd: Number(spent ?? 0) || 0, budgetUsd: setting?.value == null || !Number.isFinite(b) ? null : b,
+    inFlight: Number(flight?.all ?? 0) || 0, readersInFlight: Number(flight?.readers ?? 0) || 0,
+  });
+  if (step === "serve") return json({ ok: true, entry_id: o.entryId });
+  if (step === "pending") return json({ pending: true }, 202);
+  if (step === "failed" || step === "no_entry") return json({ error: step }, 409);
+  if (step === "budget" || step === "busy") return json({ error: step }, 429);
+  // start: count the use first (given back when the write fails or someone else holds the lease)
+  if (o.uid) {
+    const { data: use, error: useErr } = await db.rpc("consume_feature", { p_uid: o.uid, p_key: "deep_analysis" });
+    if (useErr) return json({ error: "error" }, 503);
+    if (!use?.ok) return json({ error: use?.reason ?? "quota_exceeded", used: use?.used, limit: use?.limit }, 429);
+  }
+  const { data: token } = await db.rpc("deep_claim", { p_key: o.key, p_uid: o.uid, p_staff: o.staff });
+  if (!token) {
+    if (o.uid) await db.rpc("refund_feature", { p_uid: o.uid, p_key: "deep_analysis" });
+    return json({ pending: true }, 202);
+  }
+  // The checks above are not atomic with the claim: count again, now including this write.
+  const [{ data: spent2 }, { data: flight2 }] = await Promise.all([db.rpc("deep_spent_today"), db.rpc("deep_in_flight")]);
+  const over = overAfterClaim({
+    staff: o.staff, spentUsd: Number(spent2 ?? 0) || 0, budgetUsd: setting?.value == null || !Number.isFinite(b) ? null : b,
+    all: Number(flight2?.all ?? 0) || 0, readers: Number(flight2?.readers ?? 0) || 0,
+  });
+  if (over) {
+    await db.rpc("deep_done", { p_key: o.key, p_token: token, p_entry: null, p_fail: null });
+    if (o.uid) await db.rpc("refund_feature", { p_uid: o.uid, p_key: "deep_analysis" });
+    return json({ error: over }, 429);
+  }
+  const job = writeEntry(db, { key: o.key, token, uid: o.uid, staff: o.staff, names: o.names, kind: o.kind, sentence: o.sentence, refreshId: o.refreshId });
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(job);
+  return json({ pending: true, started: true }, 202);
+}
+
+async function deepAction(action: string, body: Record<string, any>, uid: string | null, staff: boolean, internal: boolean) {
+  const poll = body.poll === true;
+  if (action === "deep_write") {
+    const eventId = String(body.event_id ?? "");
+    if (!UUID.test(eventId)) return json({ error: "bad id" }, 400);
+    const { data: ev } = await db.from("events").select("id,title").eq("id", eventId).is("deleted_at", null).maybeSingle();
+    if (!ev) return json({ error: "not found" }, 404);
+    let mark: any;
+    if (typeof body.text === "string") {
+      // "Analyze": staff select any text in the event; the mark is stored on the event.
+      if (!staff) return json({ error: "forbidden" }, 403);
+      const text = body.text.trim();
+      const key = normTerm(text);
+      if (text.length < DEEP_LIMITS.selMin || text.length > DEEP_LIMITS.selMax || /[\r\n]/.test(text) || key.length < 2) return json({ error: "bad text" }, 422);
+      const lang = body.lang === "he" ? "he" : "en";
+      mark = { event_id: eventId, key, keys: [key], kind: "term", he: lang === "he" ? text : "", en: lang === "en" ? text : "", name: text, source: "staff" };
+      const { data: had } = await db.from("event_terms").select("key").eq("event_id", eventId).eq("key", key).maybeSingle();
+      if (!had) {
+        const { error } = await db.from("event_terms").insert(mark);
+        if (error) return json({ error: error.message }, 500);
+      }
+    } else {
+      const { data } = await db.from("event_terms").select("*").eq("event_id", eventId).eq("key", String(body.key ?? "")).maybeSingle();
+      if (!data) return json({ error: "not found" }, 404);
+      mark = data;
+    }
+    const names = [...new Set([mark.name, mark.he, mark.en].filter((n: string) => n && n.trim()))] as string[];
+    const keys = [...new Set([...(mark.keys ?? []), ...names.map(normTerm)])] as string[];
+    const owners = await ownersOf(db, keys);
+    const entryId = keys.map((k) => owners[k]).find(Boolean) ?? null;
+    return await deepStep({ key: mark.key, uid, staff, internal, poll, entryId, names, kind: mark.kind ?? null, sentence: String(ev.title ?? "") });
+  }
+  const id = String(body.entry_id ?? "");
+  if (!UUID.test(id)) return json({ error: "bad id" }, 400);
+  const { data: old } = await db.from("deep_entries").select("*").eq("id", id).maybeSingle();
+  if (!old) return json({ error: "not found" }, 404);
+  if (action === "deep_refresh") {
+    return await deepStep({ key: `entry:${id}`, uid, staff, internal, poll, entryId: null, names: [], kind: old.kind, sentence: "", refreshId: id });
+  }
+  if (action === "deep_remove") {
+    const { error: aErr } = await db.from("deep_aliases").delete().eq("entry_id", id);
+    if (aErr) return json({ error: aErr.message }, 500);
+    const { error } = await db.from("deep_entries").delete().eq("id", id);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+  // deep_update: a hand edit
+  const { aliases, remove_image, ...fields } = cleanPatch(body.patch);
+  const next = { ...old, ...fields };
+  let wanted: string[] | null = null;
+  if (aliases) {
+    wanted = [next.name_en, next.name_he, next.name_orig, ...aliases].filter(Boolean);
+    const owners = await ownersOf(db, wanted);
+    const taken = wanted.find((w) => owners[normTerm(w)] && owners[normTerm(w)] !== id);
+    if (taken) return json({ error: "alias_taken", alias: taken }, 409);
+  }
+  const { error } = await db.from("deep_entries").update({
+    ...fields, ...(remove_image ? { image: null } : {}), prev: entryContent(old), version: Number(old.version ?? 1) + 1,
+    edited_at: new Date().toISOString(), updated_at: new Date().toISOString(), updated_by: uid,
+  }).eq("id", id);
+  if (error) return json({ error: error.message }, 500);
+  if (wanted) {
+    const keep = new Set(wanted.map(normTerm).filter((k) => k.length >= 2));
+    const { data: cur } = await db.from("deep_aliases").select("alias").eq("entry_id", id);
+    const gone = ((cur ?? []) as { alias: string }[]).map((a) => a.alias).filter((a) => !keep.has(a));
+    if (gone.length) await db.from("deep_aliases").delete().eq("entry_id", id).in("alias", gone);
+    const plan = aliasPlan(wanted, await ownersOf(db, wanted), id);
+    for (const alias of plan.add) await db.from("deep_aliases").insert({ alias, entry_id: id });
+  }
+  return json({ ok: true, version: Number(old.version ?? 1) + 1 });
+}
+
 async function cronOk(req: Request) {
   if (secret === null) {
     const { data } = await db.from("intel_config").select("value").eq("key", "cron_secret").maybeSingle();
@@ -197,6 +346,10 @@ async function edit(id: string) {
   }
   const { error } = await db.from("events").update(update).eq("id", id);
   if (error) return json({ error: error.message }, 500);
+  // Deep analysis: the names it mentions — not when its text was corrected by hand (the marks would not fit it).
+  if (!ai?.manual_text) {
+    try { await saveEventTerms(db, id, r.terms ?? []); } catch { /* never fails the edit */ }
+  }
   const { data: after } = await db.from("events").select("locations").eq("id", id).maybeSingle();
   // Places the database could not pin (not found in the gazetteer or GeoNames).
   const kept = new Set(((after?.locations ?? []) as any[]).map((l) => l?.name_en || l?.name));
@@ -560,6 +713,32 @@ async function handle(req: Request): Promise<Response> {
       }
       await db.from("eei_lists").update(off).eq("user_id", uid);
       return json({ ok: true });
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "deep_write" || action === "deep_refresh" || action === "deep_update" || action === "deep_remove") {
+    // Signed-in active users whose plan has deep_analysis (staff always); "Analyze" also with the cron secret.
+    const internal = (action === "deep_refresh" || (action === "deep_write" && typeof body?.text === "string")) && await cronOk(req);
+    let uid: string | null = null;
+    let staff = internal;
+    if (!internal) {
+      const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        auth: { persistSession: false },
+        global: { headers: { Authorization: req.headers.get("authorization") ?? "" } },
+      });
+      const { data: who } = await asUser.auth.getUser();
+      uid = who?.user?.id ?? null;
+      if (!uid) return json({ error: "sign in required" }, 401);
+      const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
+      if (prof?.status !== "active") return json({ error: "sign in required" }, 401);
+      const { data: allowed } = await db.rpc("deep_allowed", { p_uid: uid });
+      if (!allowed?.enabled) return json({ error: "not_in_plan" }, 429);
+      staff = allowed.staff === true;
+    }
+    if (action !== "deep_write" && !staff) return json({ error: "forbidden" }, 403);
+    try {
+      return await deepAction(action, body ?? {}, uid, staff, internal);
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }

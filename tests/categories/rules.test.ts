@@ -26,3 +26,9 @@ test('every writer stores them and respects hand-set ones', () => {
     assert.ok(s.includes('manual_secondary'), f);
   }
 });
+
+test('a party\'s claim adds statements; airstrike only when aircraft or drones struck', () => {
+  const s = read('_shared/categoryRules.ts');
+  assert.ok(s.includes('claim'));
+  assert.ok(/airstrike only when/.test(s));
+});

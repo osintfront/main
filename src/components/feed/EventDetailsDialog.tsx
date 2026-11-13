@@ -1,5 +1,5 @@
 import { placeNameIn } from '@/utils/places';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { Crosshair, ExternalLink, Lock, MapPin, X } from 'lucide-react';
 import { hasFeature, usePlanVersion } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
@@ -14,6 +14,11 @@ import { EventText, eventTexts } from './EventText';
 import { whereLabel } from '@/utils/places';
 import { EventStaffEdit } from './EventStaffEdit';
 import { EventGeolocation } from './EventGeolocation';
+import { TermText } from './TermText';
+import { DeepEntryDialog, type DeepTarget } from './DeepEntryDialog';
+import { linkSegments, selectionTerm, type EventTerm } from '@/lib/deepTerms';
+import { fetchEventTerms } from '@/services/deepService';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface EventDetailsDialogProps {
   event: PublicEvent;
@@ -42,6 +47,66 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
   usePlanVersion();
   const canLink = hasFeature(undefined, 'source_link');
   const hiddenSources = !event.sources?.length && (event.sourceCount ?? 0) > 0;
+  const { can } = usePermissions();
+  const staff = can('event.edit.any');
+  // Deep analysis: the event's term links, the open entry window, and staff's "Analyze" button.
+  const [terms, setTerms] = useState<EventTerm[]>([]);
+  const [deep, setDeep] = useState<DeepTarget | null>(null);
+  const [analyze, setAnalyze] = useState<{ text: string; x: number; y: number } | null>(null);
+  const textArea = useRef<HTMLDivElement>(null);
+  const headArea = useRef<HTMLHeadingElement>(null);
+  const loadTerms = (force = false) => fetchEventTerms(event.id, force).then(setTerms);
+  useEffect(() => {
+    setTerms([]);
+    void loadTerms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.id]);
+  const onTerm = (term: EventTerm) => {
+    if (!profile) return openGate('signup', 'deep_analysis');
+    if (!hasFeature(undefined, 'deep_analysis')) return openGate('upgrade', 'deep_analysis');
+    setDeep({ eventId: event.id, term });
+  };
+  // The headline links first; the summary and the expansion skip what it linked.
+  const headlineUsed = new Set<string>();
+  linkSegments(title, terms, headlineUsed);
+  const selected = () => {
+    const sel = window.getSelection();
+    const node = sel?.anchorNode;
+    if (!sel || sel.isCollapsed || !node || !(textArea.current?.contains(node) || headArea.current?.contains(node))) return null;
+    return selectionTerm(sel.toString());
+  };
+  const onContextMenu = (e: ReactMouseEvent) => {
+    if (!staff) return;
+    const text = selected();
+    if (!text) return;
+    e.preventDefault();
+    setAnalyze({ text, x: e.clientX, y: e.clientY });
+  };
+  // Touch: the same button above the selection.
+  useEffect(() => {
+    if (!staff || !window.matchMedia?.('(pointer: coarse)').matches) return;
+    const onSel = () => {
+      const text = selected();
+      const r = text ? window.getSelection()?.getRangeAt(0).getBoundingClientRect() : null;
+      setAnalyze(text && r ? { text, x: r.left + r.width / 2, y: Math.max(r.top - 44, 8) } : null);
+    };
+    document.addEventListener('selectionchange', onSel);
+    return () => document.removeEventListener('selectionchange', onSel);
+  });
+  useEffect(() => {
+    if (!analyze) return;
+    const off = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      if (e.target instanceof Element && e.target.closest('[data-analyze-menu]')) return;
+      setAnalyze(null);
+    };
+    document.addEventListener('keydown', off, true);
+    document.addEventListener('mousedown', off, true);
+    return () => {
+      document.removeEventListener('keydown', off, true);
+      document.removeEventListener('mousedown', off, true);
+    };
+  }, [analyze]);
   const lockBtn =
     'inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700';
 
@@ -50,7 +115,8 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
     const previous = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      // The entry window above handles its own Escape.
+      if (e.key === 'Escape' && !document.querySelector('[data-deep-dialog]')) onClose();
     };
     document.addEventListener('keydown', onKey);
     const overflow = document.body.style.overflow;
@@ -79,8 +145,8 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
               <SecondaryBadges categories={event.secondaryCategories} />
               <SeverityBadge severity={event.severity} />
             </div>
-            <h2 id="event-details-title" className="mt-2 text-lg font-bold leading-snug text-slate-900 sm:text-xl dark:text-white" dir="auto">
-              {title}
+            <h2 id="event-details-title" ref={headArea} onContextMenu={onContextMenu} className="mt-2 text-lg font-bold leading-snug text-slate-900 sm:text-xl dark:text-white" dir="auto">
+              <TermText text={title} terms={terms} onTerm={onTerm} />
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               <bdi>{formatDateTime(event.occurredAt, locale)}</bdi>
@@ -126,7 +192,9 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
               ))}
             </ul>
           ) : null}
-          <EventText event={event} />
+          <div ref={textArea} onContextMenu={onContextMenu}>
+            <EventText event={event} terms={terms} usedTerms={headlineUsed} onTerm={onTerm} />
+          </div>
           {related && related.length ? (
             <section aria-labelledby="event-related-title" className="mt-4 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
               <h3 id="event-related-title" className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -244,6 +312,34 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
           </button>
         </footer>
       </section>
+      {analyze ? (
+        <div
+          role="menu"
+          data-analyze-menu
+          className="fixed z-[3050] rounded-lg bg-white p-1 shadow-xl ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10"
+          style={{ left: Math.min(analyze.x, window.innerWidth - 220), top: Math.min(analyze.y, window.innerHeight - 50) }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setDeep({ eventId: event.id, text: analyze.text });
+              setAnalyze(null);
+            }}
+            className="block max-w-[200px] truncate rounded-md px-3 py-2 text-start text-sm font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10"
+          >
+            {t('deep.analyze', { text: analyze.text })}
+          </button>
+        </div>
+      ) : null}
+      {deep ? (
+        <DeepEntryDialog
+          target={deep}
+          onClose={() => setDeep(null)}
+          onOpenEvent={onOpenRelated ? (id) => { setDeep(null); onOpenRelated(id); } : undefined}
+          onChanged={() => void loadTerms(true)}
+        />
+      ) : null}
     </div>
   );
 }
