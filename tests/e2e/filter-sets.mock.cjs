@@ -318,6 +318,22 @@ async function routeAll(page) {
       out.p8_gone = (await dlg.locator(`[data-set-scope="${ids[0]}"]`).count()) === 0;
       out.p8_general = (await dlg.locator('[data-set-scope="general"][aria-pressed="true"]').count()) === 1;
 
+      // P8b: after deleting set 1, a new set takes a free default name (no second "set 2").
+      await dlg.locator('[data-set-action="add"]').click();
+      await page.waitForTimeout(300);
+      const names8 = await page.evaluate(() => JSON.parse(localStorage.getItem('ofm.filterSets.v1') || '[]').map((s) => s.name));
+      out.p8_uniqueNames = names8.length >= 2 && new Set(names8).size === names8.length;
+      // P10: Esc while naming keeps the typed name and leaves the panel open; a second Esc closes it.
+      await dlg.locator('[data-set-header] input').fill('Typed name');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      out.p10_open = await dlg.isVisible();
+      out.p10_saved = (await page.evaluate(() => JSON.parse(localStorage.getItem('ofm.filterSets.v1') || '[]').map((s) => s.name))).includes('Typed name');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+      out.p10_closed = !(await dlg.isVisible());
+      await openPanel();
+
       // P9: up to 6, then Add is disabled.
       for (let i = 0; i < 6; i++) if (!(await dlg.locator('[data-set-action="add"]').isDisabled())) await dlg.locator('[data-set-action="add"]').click();
       out.p9_six = (await dlg.locator('[data-set-scope]:not([data-set-scope="general"]):not([data-set-scope="eei"])').count()) === 6;

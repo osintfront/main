@@ -3,7 +3,7 @@ import { Lock, Plus } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { openGate } from '@/components/plans/GateDialog';
 import { myPlan, planConfigReady } from '@/lib/plans';
-import { MAX_SETS, isLocked, matchesSetFilter, newSet, type FilterSet } from '@/lib/filterSets';
+import { MAX_SETS, defaultSetName, isLocked, matchesSetFilter, newSet, type FilterSet } from '@/lib/filterSets';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
 
@@ -35,7 +35,7 @@ export function FilterSetsBar({ sets, setLimit, events, scope, onScopeChange, on
   const full = sets.length >= MAX_SETS;
   const add = () => {
     if (sets.length < setLimit) {
-      const s = newSet(sets, t('sets.defaultName', { n: sets.length + 1 }));
+      const s = newSet(sets, defaultSetName(sets, (n) => t('sets.defaultName', { n })));
       onSetsChange([...sets, s]);
       onScopeChange(s.id);
       return;

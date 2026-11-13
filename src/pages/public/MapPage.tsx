@@ -11,7 +11,7 @@ import { featureLimit, hasFeature, planConfigReady, usePlanVersion } from '@/lib
 import { useFilterSets } from '@/hooks/useFilterSets';
 import { useEeiList } from '@/hooks/useEeiList';
 import { eeiMatches, theatreColor, theatresOn, waitingCount } from '@/lib/eeiLens';
-import { MAX_SETS, addPolygon, matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, type FilterSet } from '@/lib/filterSets';
+import { MAX_SETS, addPolygon, matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, switchOffSets, type FilterSet } from '@/lib/filterSets';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -221,10 +221,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const drawTargetRef = useRef<string | null>(null);
   const { view: eeiView, setView: setEeiView, list: eeiList } = eei;
   const switchSetsOff = useCallback(() => {
-    setSets((list) => (list.some((s) => s.enabled) ? list.map((s) => ({ ...s, enabled: false })) : list));
+    setSets((list) => switchOffSets(list, setLimit));
     // EEI theatres are switched off too — the list itself is never deleted here.
     if (eeiList?.theatres.length) setEeiView({ ...eeiView, off: eeiList.theatres.map((x) => x.id) });
-  }, [setSets, eeiList, eeiView, setEeiView]);
+  }, [setSets, setLimit, eeiList, eeiView, setEeiView]);
   const archiveRange = useMemo(
     () => (isArchive ? null : activeSets.length ? setsArchiveRange(activeSets) : needsArchive(filters)),
     [filters, isArchive, activeSets],
