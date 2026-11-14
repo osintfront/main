@@ -15,6 +15,7 @@ import {
   MessageSquareQuote,
   Plane,
   Rocket,
+  ScrollText,
   ShieldAlert,
   Skull,
   Siren,
@@ -55,6 +56,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Target,
   Binoculars,
   MessageSquareQuote,
+  ScrollText,
   Skull,
   MedicalCross,
 };
@@ -96,6 +98,8 @@ export const DEFAULT_CATEGORIES: readonly CategoryDefinition[] = [
   { slug: 'force-sighting', name: 'Forces sighting', icon: 'Binoculars', color: '#15803d' },
   { slug: 'political-event', name: 'Political Event', icon: 'Landmark', color: '#2563eb' },
   { slug: 'statements', name: 'Statements', icon: 'MessageSquareQuote', color: '#1d4ed8' },
+  // Analyses of military activity and summaries of earlier incidents: feed only, no pin.
+  { slug: 'analysis', name: 'Analyses & summaries', icon: 'ScrollText', color: '#475569' },
   { slug: 'protest-civil-unrest', name: 'Protest or Civil Unrest', icon: 'Megaphone', color: '#db2777' },
   { slug: 'natural-disaster', name: 'Natural Disaster', icon: 'CloudLightning', color: '#0d9488' },
   { slug: 'fire', name: 'Fire', icon: 'Flame', color: '#f59e0b' },

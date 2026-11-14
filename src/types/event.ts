@@ -69,6 +69,10 @@ export interface EventText {
   details?: string;
   religious?: string;
   implications?: string;
+  /** Analyses & summaries: the whole text translated (cut to its first paragraph without Pro). */
+  full?: string;
+  /** Set by the database when `full` was cut for this reader's plan. */
+  full_cut?: boolean;
 }
 export type EventTranslations = Partial<Record<string, EventText>>;
 

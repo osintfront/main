@@ -4,6 +4,7 @@
 // translated twice). Needs the secrets TRANSLATE_API_URL and TRANSLATE_SECRET; without them,
 // or if the site cannot be reached, it falls back to the old direct Claude call (logged).
 import { fixTerms, learnedTerms, translateBrief } from "./editor.ts";
+import { fullTextPieces } from "./fullText.ts";
 
 // Tolerant of a pasted Markdown link ("[https://…](https://…)"): the first plain URL is used.
 export const TRANSLATE_API_URL = (Deno.env.get("TRANSLATE_API_URL") ?? "").match(/https?:\/\/[^\s\]\)\[(]+/)?.[0] ?? "";
@@ -66,4 +67,20 @@ export async function translateBriefChain(title: string, text: string): Promise<
   }
   console.warn("⚠️ translate chain not configured or unreachable — PAID direct Claude translation used");
   return await translateBrief(title, text);
+}
+
+/**
+ * The whole text in Hebrew and English (analyses & summaries are shown in full to Pro / Max):
+ * paragraph by paragraph through the same chain (free providers first, cache). At most 20
+ * pieces of ≤5000 characters per request, so short paragraphs are joined. null = not translated.
+ */
+export async function translateFullChain(text: string): Promise<{ he: string; en: string; model: string } | null> {
+  if (!API_URL || !SECRET) return null;
+  const pieces = fullTextPieces(text);
+  if (!pieces.length) return null;
+  const [he, en] = await Promise.all([chain(pieces, "he"), chain(pieces, "en")]);
+  if (!he?.translated || !en?.translated) return null;
+  await learnedTerms();
+  const join = (xs: string[]) => fixTerms(xs.map((x) => x.trim()).filter(Boolean).join("\n\n")).slice(0, 20000);
+  return { he: join(he.texts), en: join(en.texts), model: `chain:${he.provider}/${en.provider}` };
 }
