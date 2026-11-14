@@ -22,7 +22,8 @@ number stops trusting the product.
 ## Non-goals (v1)
 - Saved dashboard history, shareable dashboard links, scheduled/automatic dashboards.
 - Counting quantities inside reports ("30 shells") — possible later as a secondary figure.
-- Free-form chart building (choosing chart types, custom breakdowns).
+- Free-form chart building (choosing chart types, custom breakdowns); changing the area or topic
+  inside the dashboard (that is a new question). Changing the period is in scope (see Interactivity).
 - Arabic UI now (but see Languages).
 
 ## Anti-goals (a failure even if it "works")
@@ -155,6 +156,20 @@ Top to bottom (RTL in Hebrew):
    were merged. M unclear reports were not counted. Source: Osintfront event database."
 8. **Actions:** Download PDF · Download JPEG (two equal buttons).
 
+**Interactivity (owner asked for both, 2026-11-14):**
+- **Period chips** under the header: 24 h · 48 h · Week · Month, the current one selected. Pressing
+  another rebuilds the same metric for that period (same pipeline, same progress card inside the
+  dashboard). Non-staff chips show "· 3" and the same "needs 3 questions / N left" check; a period built
+  in the last 15 minutes comes from the cache and is free. Staff: no cost. The rebuilt dashboard
+  replaces the shown one; it is still one turn in the conversation (my call: switching period does not
+  add turns).
+- **Mini map:** pinch / wheel zoom and drag to pan (bounded to the region), a reset button; hover
+  (desktop) or tap (phone) on a hotspot shows a tooltip "place · N incidents · M reports" before the
+  press that opens its events. No model calls.
+- **Tooltips everywhere:** chart bars and the comparison line (bucket, count, previous count), hotspot
+  bars (count, share), headline tiles (what the figure means, one line).
+- Exports capture the current state: the selected period and the current map view (my call).
+
 **Zero incidents:** the dashboard still renders (0, the previous period, an empty chart with the
 baseline) with the line "No matching incidents in this period" and no insights.
 
@@ -208,7 +223,10 @@ red for hotspots.
   shown quota does not drop → chip → dashboard; Pro user → text answer + upgrade line; staff sets
   "Prepared for" → it appears in both exports; PDF downloads (starts `%PDF`, A4, sources page present);
   JPEG downloads (valid JPEG, ≥ 1,080 px wide); hotspot / bar / citation press shows events on the map;
-  zero-incidents dashboard; failure shows retry and no charge; dark mode screen still exports light.
+  zero-incidents dashboard; failure shows retry and no charge; dark mode screen still exports light;
+  period chip → rebuild with progress → new figures, "· 3" shown for non-staff only, cached period free;
+  mini map zoom / pan / reset and hotspot tooltip (wheel on desktop, pinch + tap on phone); bar and
+  tile tooltips; export after zoom and period change reflects them.
   Screenshots saved for the owner's review.
 - Accuracy check on the preview with the real function: the three example questions from the owner;
   staff hand-count the incidents behind each and compare. Target: within 10 % of the hand count
