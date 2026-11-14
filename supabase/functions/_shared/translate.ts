@@ -3,7 +3,7 @@
 // providers first, Claude only as the last, paid fallback, and a cache so a text is never
 // translated twice). Needs the secrets TRANSLATE_API_URL and TRANSLATE_SECRET; without them,
 // or if the site cannot be reached, it falls back to the old direct Claude call (logged).
-import { fixTerms, learnedTerms, translateBrief } from "./editor.ts";
+import { fixTerms, foreignLetters, learnedTerms, translateBrief, translateFull } from "./editor.ts";
 import { fullTextPieces } from "./fullText.ts";
 
 // Tolerant of a pasted Markdown link ("[https://…](https://…)"): the first plain URL is used.
@@ -75,6 +75,14 @@ export async function translateBriefChain(title: string, text: string): Promise<
  * pieces of ≤5000 characters per request, so short paragraphs are joined. null = not translated.
  */
 export async function translateFullChain(text: string): Promise<{ he: string; en: string; model: string } | null> {
+  // Claude first (the free providers mangle long Arabic); the chain only if Claude fails.
+  try {
+    const r = await translateFull(text);
+    if (!foreignLetters(r.he.replace(/[A-Za-z0-9-]+/g, " "))) return r;
+    console.warn("full translation left foreign letters; trying the chain");
+  } catch (e) {
+    console.warn("full translation (Claude) failed:", String((e as Error)?.message ?? e).slice(0, 160));
+  }
   if (!API_URL || !SECRET) return null;
   const pieces = fullTextPieces(text);
   if (!pieces.length) return null;
@@ -82,5 +90,7 @@ export async function translateFullChain(text: string): Promise<{ he: string; en
   if (!he?.translated || !en?.translated) return null;
   await learnedTerms();
   const join = (xs: string[]) => fixTerms(xs.map((x) => x.trim()).filter(Boolean).join("\n\n")).slice(0, 20000);
-  return { he: join(he.texts), en: join(en.texts), model: `chain:${he.provider}/${en.provider}` };
+  const out = { he: join(he.texts), en: join(en.texts), model: `chain:${he.provider}/${en.provider}` };
+  // Untranslated paragraphs left in Arabic: better no full text than a half-translated one.
+  return foreignLetters(out.he.replace(/[A-Za-z0-9-]+/g, " ")) ? null : out;
 }

@@ -46,3 +46,10 @@ test('the site shows the full text, and the upgrade button only when it was cut'
   assert.match(ui, /analysis\.cut \? \(/);
   assert.match(ui, /openGate\(profile \? 'upgrade' : 'signup', 'analysis_full'\)/);
 });
+
+test('the full text is translated by Claude first, a half-translated chain result is dropped', () => {
+  const tr = readFileSync('supabase/functions/_shared/translate.ts', 'utf8');
+  assert.ok(tr.indexOf('await translateFull(text)') < tr.indexOf('chain(pieces, "he")'));
+  assert.match(tr, /return foreignLetters\(out\.he\.replace/);
+  assert.match(readFileSync('supabase/functions/_shared/editor.ts', 'utf8'), /المسيرات = כטב"מים/);
+});
