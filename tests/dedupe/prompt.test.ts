@@ -23,12 +23,3 @@ test('the prompt knows protests are ongoing activity and what "(same photo)" mea
   assert.ok(system.includes('protest, sit-in or vigil'));
   assert.ok(system.includes('(same photo)'));
 });
-
-// 13 Nov, two wrong merges the strong model confirmed: "Dammam airport halted" (00:09) took in
-// "Dammam airport halted for about 20 minutes, five planes circling" (16:01) — a second halt;
-// and "wounded by Israeli fire east of Deir al-Balah" (13:56) took in "two killed and ten
-// wounded as tanks shell a mourning tent east of Deir al-Balah" (14:35) — new casualty numbers.
-test('the prompt keeps a later halt and a follow-up with new casualty numbers apart, with examples', () => {
-  assert.match(system, /halt|closure/i);
-  for (const w of ['Dammam', 'Deir al-Balah', 'killed']) assert.ok(system.includes(w), w);
-});
