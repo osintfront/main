@@ -9,6 +9,7 @@
 import { freeClassify } from "../_shared/freeLlm.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { inRegion } from "../_shared/region.ts";
+import { eventPlaceKeys, narrowPlaceKeys, placeKeys, samePlaceEvent } from "../_shared/samePlace.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor, type EditResult } from "../_shared/editor.ts";
 import { normalizeTypes, withEditorMain } from "../_shared/secondaryCats.ts";
@@ -521,20 +522,6 @@ function obviousDuplicate(text: string, sentAt: Date, pool: any[]): any | null {
   return bestScore >= SAME_TEXT ? best : null;
 }
 
-/** A place name reduced to compare spellings: "Rashaf" / "Rshaf" / "رشاف" → same key. */
-function placeKeys(...names: (string | null | undefined)[]): Set<string> {
-  const out = new Set<string>();
-  for (const raw of names) {
-    let n = String(raw ?? "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f\u064B-\u065F\u0591-\u05C7]/g, "").trim();
-    if (!n) continue;
-    n = n.replace(/^(al|el|ad|an|ar|as|at|az)[- ]/, "").replace(/^ال/, "").replace(/[^a-z\u0600-\u06FF\u05D0-\u05EA]/g, "");
-    if (/^[a-z]+$/.test(n)) n = n.replace(/[aeiouy]/g, "").replace(/(.)\1+/g, "$1"); // consonant skeleton
-    if (n.length >= 2) out.add(n);
-  }
-  return out;
-}
-const eventPlaceKeys = (e: any) => placeKeys(e.location_name, e.ai_suggestions?.place_en);
-
 /** Does a candidate event concern the place a message names (its place, or named in its text)? */
 function samePlace(e: any, keys: Set<string>, rawNames: (string | null | undefined)[]): boolean {
   if ([...eventPlaceKeys(e)].some((k) => keys.has(k))) return true;
@@ -569,13 +556,6 @@ function mentionsPlaceOf(e: any, text: string): boolean {
   return [...words].some((w) => hay.includes(w));
 }
 
-/** The same place within the hour: another channel reporting the same incident. */
-function samePlaceEvent(pool: any[], keys: Set<string>, sentAt: Date, excludeId?: string): any | null {
-  if (!keys.size) return null;
-  return pool.find((e) => e.id !== excludeId &&
-    Math.abs(new Date(e.occurred_at).getTime() - sentAt.getTime()) <= 60 * 60000 &&
-    [...eventPlaceKeys(e)].some((k) => keys.has(k))) ?? null;
-}
 
 async function processOne(m: InMsg) {
   const text = String(m.text ?? "").trim();
@@ -705,7 +685,7 @@ async function processOne(m: InMsg) {
   // Outside Israel / the Middle East (Ukraine, Europe, world markets…): not for this map.
   // Same place within the hour (other channels, other wording): one event, more sources.
   if (!summary && (c.decision === "event" || c.decision === "uncertain")) {
-    const near = samePlaceEvent(pool ?? [], placeKeys(c.location_name, c.location_name_en), sentAt);
+    const near = samePlaceEvent(pool ?? [], narrowPlaceKeys(c.location_name, c.location_name_en), sentAt);
     if (near) {
       if (!candidates.some((x) => x.id === near.id)) candidates.push(near);
       c.decision = "duplicate";
@@ -800,7 +780,7 @@ async function processOne(m: InMsg) {
       .select("id,occurred_at,created_at,location_name,ai_suggestions,sources")
       .is("deleted_at", null).gte("occurred_at", since).lt("created_at", ins!.created_at).neq("id", ins!.id)
       .order("created_at").limit(60);
-    const twin = summary ? null : samePlaceEvent(twins ?? [], placeKeys(c.location_name, c.location_name_en), sentAt, ins!.id);
+    const twin = summary ? null : samePlaceEvent(twins ?? [], narrowPlaceKeys(c.location_name, c.location_name_en), sentAt, ins!.id);
     if (twin) {
       const entry = { name: clip(srcLabel, 200), url: sourceUrl(m, text), at: sentIso };
       const current: any[] = Array.isArray(twin.sources) ? twin.sources : [];
