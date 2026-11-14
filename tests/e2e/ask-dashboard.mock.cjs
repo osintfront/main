@@ -111,7 +111,9 @@ const Z = { ...W, totals: { incidents: 0, reports: 0, classified: 60, unclear: 2
 
 // ── Faked server state ─────────────────────────────────────────────────────────────────────────
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.geojson': 'application/json', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
+const served = [];
 const server = http.createServer((req, res) => {
+  served.push(req.url.split('?')[0]);
   let p = path.join(DIST, decodeURIComponent(req.url.split('?')[0]));
   if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) p = path.join(DIST, 'index.html');
   res.writeHead(200, { 'content-type': MIME[path.extname(p)] || 'application/octet-stream' });
@@ -376,6 +378,179 @@ const T = en
       allErrors.push(...errors);
       await ctx.close();
     }
+
+    // ── max: the dashboard sheet (checks 10–15, 17) ──
+    {
+      const { ctx, page, st, errors } = await openFor(browser, 'max', out);
+      const phone = DEVICE === 'phone';
+      const shot = (name, full) => page.screenshot({ path: path.join(SHOTS, `dash-${LANG}-${DEVICE}-${name}.png`), fullPage: !!full });
+      const sheetShot = async (name) => { const el = page.locator('[data-dash-sheet]'); await el.screenshot({ path: path.join(SHOTS, `dash-${LANG}-${DEVICE}-${name}.png`) }).catch(() => shot(name)); };
+      const input = page.locator('[data-ask-panel] form:not([data-ask-summary]) input');
+      const sendQ = async (q) => { await input.fill(q); await page.locator('[data-ask-action="send"]').click(); };
+      const txt = (sel) => page.locator(sel).first().innerText();
+      const geoBefore = served.filter((u) => u.endsWith('me-admin0.geojson')).length;
+      await sendQ(T.count);
+      // 10. opens by itself; layout; contents.
+      await page.waitForSelector('[data-dash-sheet]', { timeout: 20000 });
+      await page.waitForSelector('[data-dash-sheet] [data-country]', { timeout: 8000 });
+      expect('c10_geoAfterOpen', served.filter((u) => u.endsWith('me-admin0.geojson')).length - geoBefore, served.filter((u) => u.endsWith('me-admin0.geojson')).length - geoBefore >= 1);
+      const box = await page.locator('[data-dash-sheet]').boundingBox();
+      const vp = page.viewportSize();
+      expect('c10_layout', box && (phone ? Math.abs(box.width - vp.width) < 2 && Math.abs(box.height - vp.height) < 2 : box.width < vp.width && Math.abs(box.x + box.width / 2 - vp.width / 2) < 2), !!box && (phone ? Math.abs(box.width - vp.width) < 2 && Math.abs(box.height - vp.height) < 2 : box.width < vp.width && Math.abs(box.x + box.width / 2 - vp.width / 2) < 2));
+      const count = (sel) => page.locator(`[data-dash-sheet] ${sel}`).count();
+      expect('c10_countries', await count('[data-country]'), (await count('[data-country]')) > 10);
+      expect('c10_target', await count('[data-target]'), (await count('[data-target]')) === 1);
+      expect('c10_hotspots', await count('[data-hotspot]'), (await count('[data-hotspot]')) === 5);
+      expect('c10_bars', await count('[data-bar]'), (await count('[data-bar]')) === 7);
+      expect('c10_prevDashed', await page.locator('[data-prev-line]').getAttribute('stroke-dasharray'), !!(await page.locator('[data-prev-line]').getAttribute('stroke-dasharray')));
+      expect('c10_hbars', await count('[data-hbar]'), (await count('[data-hbar]')) === 6);
+      expect('c10_insights', await count('[data-insight]'), (await count('[data-insight]')) === 4);
+      const tiles = (await page.locator('[data-dash-sheet] [data-tile]').allInnerTexts()).join(' | ');
+      expect('c10_tiles', tiles, ['14', '21', '+40%', '10', '4', '36'].every((x) => tiles.includes(x)));
+      const method = await txt('[data-dash-method]');
+      expect('c10_method', method.includes('340') && method.includes('6'), method.includes('340') && method.includes('6'));
+      const chips = await page.locator('[data-dash-period]').allInnerTexts();
+      expect('c10_chipCost', chips.filter((c, i) => i !== 2).every((c) => c.includes('3')), chips.filter((c, i) => i !== 2).every((c) => c.includes('3')));
+      expect('c10_weekPressed', await page.locator('[data-dash-period="7d"]').getAttribute('aria-pressed'), (await page.locator('[data-dash-period="7d"]').getAttribute('aria-pressed')) === 'true');
+      expect('c10_noPreparedField', await count('[data-dash-prepared]'), (await count('[data-dash-prepared]')) === 0);
+      await sheetShot('dashboard');
+
+      // 11. tooltips.
+      if (!phone) {
+        await page.locator('[data-bar="2"]').scrollIntoViewIfNeeded(); await page.waitForTimeout(250);
+        await page.locator('[data-bar="2"]').hover();
+        await page.waitForSelector('[data-dash-tip]', { timeout: 3000 });
+        const tb = await txt('[data-dash-tip]');
+        expect('c11_barTip', tb, tb.includes('4') && tb.includes('1'));
+        await sheetShot('tooltip');
+        await page.locator('[data-hotspot="0"] circle').scrollIntoViewIfNeeded(); await page.waitForTimeout(250);
+        await page.locator('[data-hotspot="0"] circle').hover();
+        await page.waitForSelector('[data-dash-tip]', { timeout: 3000 });
+        const th = await txt('[data-dash-tip]');
+        expect('c11_hotTip', th, th.includes('5') && th.includes('9'));
+        const hoverStill = async (sel) => { const l = page.locator(sel).first(); await l.scrollIntoViewIfNeeded(); await page.waitForTimeout(250); await l.hover(); await page.waitForSelector('[data-dash-tip]', { timeout: 3000 }); };
+        await hoverStill('[data-hbar="0"]');
+        expect('c11_hbarTip', await txt('[data-dash-tip]'), (await txt('[data-dash-tip]')).includes('36'));
+        await hoverStill('[data-tile="change"]');
+        expect('c11_tileTip', (await txt('[data-dash-tip]')).length > 10, (await txt('[data-dash-tip]')).length > 10);
+        await page.mouse.move(2, 2);
+      } else {
+        await page.locator('[data-hotspot="0"] circle').tap();
+        await page.waitForSelector('[data-dash-tip]', { timeout: 3000 });
+        expect('c11_tapTipStays', (await page.locator('[data-dash-sheet]').count()) === 1, (await page.locator('[data-dash-sheet]').count()) === 1);
+        await sheetShot('tooltip');
+        await page.locator('[data-dash-method]').tap();
+        await page.waitForTimeout(200);
+        expect('c11_tapElsewhereCloses', await page.locator('[data-dash-tip]').count(), (await page.locator('[data-dash-tip]').count()) === 0);
+      }
+
+      // 13. mini map zoom / pan / reset.
+      const svgV = () => page.locator('[data-dash-sheet] svg[data-view]').getAttribute('data-view');
+      const v0 = await svgV();
+      if (!phone) {
+        const mb = await page.locator('[data-dash-sheet] svg[data-view]').boundingBox();
+        await page.mouse.move(mb.x + mb.width / 2, mb.y + mb.height / 2);
+        await page.mouse.wheel(0, -200);
+        await page.waitForTimeout(200);
+        const v1 = await svgV();
+        expect('c13_wheelZoom', `${v0} → ${v1}`, parseFloat(v1) > parseFloat(v0));
+        await page.mouse.down();
+        await page.mouse.move(mb.x + mb.width / 2 + 60, mb.y + mb.height / 2 + 30, { steps: 5 });
+        await page.mouse.up();
+        const v2 = await svgV();
+        expect('c13_drag', v2 !== v1, v2 !== v1);
+      } else {
+        await page.locator('[data-dash-action="zoom-in"]').tap();
+        await page.waitForTimeout(200);
+        expect('c13_zoomButton', parseFloat(await svgV()) > parseFloat(v0), parseFloat(await svgV()) > parseFloat(v0));
+      }
+      await sheetShot('zoom');
+      await page.locator('[data-dash-action="reset"]').click();
+      expect('c13_reset', await svgV(), (await svgV()) === v0);
+
+      // 12. presses show the events on the map.
+      const shownWith = async () => {
+        await page.waitForSelector('[data-dash-sheet]', { state: 'detached', timeout: 8000 });
+        await page.waitForSelector('[data-dash-shown]', { state: 'attached', timeout: 8000 });
+        return page.locator('[data-dash-shown]').evaluate((e) => e.textContent);
+      };
+      const back = async () => { await page.locator('[data-dash-action="back"]').evaluate((b) => b.click()); await page.waitForSelector('[data-dash-sheet]', { timeout: 5000 }); };
+      const press = async (sel) => { const l = page.locator(sel).first(); if (phone) { await l.tap(); await page.waitForTimeout(150); await l.tap(); } else await l.click(); };
+      await press('[data-hotspot="0"] circle');
+      const s0 = await shownWith();
+      expect('c12_hotspot', s0, s0.includes('5') && s0.includes('9') && (await page.locator('[data-dash-sheet]').count()) === 0);
+      await back();
+      await press('[data-bar="2"]');
+      expect('c12_bar', await shownWith(), (await shownWith()).includes('4'));
+      await back();
+      await page.locator('[data-cite="7"]').first().click();
+      expect('c12_cite', await shownWith(), (await shownWith()).includes('1'));
+      await back();
+      await press('[data-tile="incidents"]');
+      const sAll = await shownWith();
+      expect('c12_all', sAll, sAll.includes('14') && sAll.includes('21'));
+      await back();
+
+      // 14. period chips.
+      const qBefore = st.used;
+      const turnsBefore = await page.locator('[data-ask-turn]').count();
+      await page.locator('[data-dash-period="24h"]').dblclick();
+      await page.waitForSelector('[data-dash-progress]', { timeout: 5000 });
+      expect('c14_progress', (await txt('[data-dash-progress]')).length > 3 && (await page.locator('[data-dash-period="7d"]').isDisabled()), (await txt('[data-dash-progress]')).length > 3);
+      await page.waitForFunction(() => document.querySelector('[data-dash-period="24h"]')?.getAttribute('aria-pressed') === 'true', null, { timeout: 15000 });
+      const t24 = (await page.locator('[data-dash-sheet] [data-tile]').allInnerTexts()).join(' | ');
+      expect('c14_24hTiles', t24, t24.includes('3') && t24.includes('-40%'));
+      expect('c14_onePeriodRequest', st.periodCalls.length, st.periodCalls.length === 1);
+      expect('c14_charged', st.used - qBefore, st.used - qBefore === 3);
+      expect('c14_noNewTurn', await page.locator('[data-ask-turn]').count(), (await page.locator('[data-ask-turn]').count()) === turnsBefore);
+      await sheetShot('24h');
+      await page.waitForTimeout(500);
+      st.used = 8; // 2 left: the cached Week rebuild is free, then a third chip must be refused
+      const usedAt = st.used;
+      st.periodsBuilt.add('7d');
+      await page.locator('[data-dash-period="7d"]').click();
+      await page.waitForFunction(() => document.querySelector('[data-dash-period="7d"]')?.getAttribute('aria-pressed') === 'true', null, { timeout: 15000 });
+      expect('c14_cachedFree', st.used === usedAt && (await page.locator('[data-dash-sheet] [data-hotspot]').count()) === 5, st.used === usedAt);
+      await page.waitForTimeout(800);
+      const pc = st.periodCalls.length;
+      await page.locator('[data-dash-period="48h"]').click();
+      await page.waitForTimeout(300);
+      expect('c14_needCredits', pc === st.periodCalls.length && (await page.locator('[data-dash-error]').count()) === 1, pc === st.periodCalls.length && (await page.locator('[data-dash-error]').count()) === 1);
+      st.used = 0;
+
+      // 17. language, digits, direction, width, dark.
+      const sheetText = await page.locator('[data-dash-sheet]').innerText();
+      if (en) expect('c17_noHebrew', !HE.test(sheetText), !HE.test(sheetText));
+      else {
+        const hb = await page.locator('[data-hbar="0"] [data-hbar-fill]').boundingBox();
+        const track = await page.locator('[data-hbar="0"] [data-hbar-fill]').evaluate((e) => { const r = e.parentElement.getBoundingClientRect(); return { right: r.right }; });
+        expect('c17_rtlBars', Math.abs(hb.x + hb.width - track.right) < 2, Math.abs(hb.x + hb.width - track.right) < 2);
+      }
+      expect('c17_westernDigits', !/[٠-٩۰-۹]/.test(sheetText), !/[٠-٩۰-۹]/.test(sheetText));
+      expect('c17_noHScroll', await page.locator('[data-dash-sheet]').evaluate((e) => e.scrollWidth <= e.clientWidth + 1), await page.locator('[data-dash-sheet]').evaluate((e) => e.scrollWidth <= e.clientWidth + 1));
+      await page.locator('[data-dash-action="close"]').click();
+
+      // 15. zero incidents.
+      await page.locator('[data-ask-action="new"]').click();
+      await sendQ(T.zero);
+      await page.waitForSelector('[data-dash-sheet] [data-dash-zero]', { timeout: 20000 });
+      expect('c15_zero', (await count('[data-insight]')) === 0 && (await count('[data-hbar]')) === 0 && (await count('[data-baseline]')) === 1, (await count('[data-insight]')) === 0 && (await count('[data-hbar]')) === 0 && (await count('[data-baseline]')) === 1);
+      expect('c15_zeroTile', await txt('[data-tile="incidents"]'), (await txt('[data-tile="incidents"]')).includes('0'));
+      await sheetShot('zero');
+      await page.locator('[data-dash-action="close"]').click();
+      // dark theme
+      await page.evaluate(() => { localStorage.setItem('ofm.theme', 'dark'); });
+      await page.emulateMedia({ colorScheme: 'dark' });
+      const themeBtn = page.getByRole('button', { name: en ? /dark mode/i : /כהה/ }).first();
+      if (await themeBtn.count()) await themeBtn.click().catch(() => {});
+      await page.locator('[data-ask-turn="0"] [data-dash-action="open"]').click();
+      await page.waitForSelector('[data-dash-sheet]');
+      const dark = await page.locator('[data-dash-sheet]').evaluate((e) => ({ t: e.getAttribute('data-dash-theme'), bg: getComputedStyle(e).backgroundColor }));
+      expect('c17_dark', dark, dark.t === 'dark' && /rgb\(15, 23, 42\)/.test(dark.bg));
+      await sheetShot('dark');
+      allErrors.push(...errors);
+      await ctx.close();
+    }
     // ── staff ──
     {
       const { ctx, page, errors } = await openFor(browser, 'staff', out);
@@ -384,7 +559,15 @@ const T = en
       await page.locator('[data-ask-panel] form:not([data-ask-summary]) input').fill(T.unclear);
       await page.locator('[data-ask-action="send"]').click();
       await page.waitForSelector('[data-ask-chip="dashboard"]', { timeout: 8000 });
-      expect('c8_staffChipNo3', !(await page.locator('[data-ask-chip="dashboard"]').innerText()).includes('3'), !(await page.locator('[data-ask-chip="dashboard"]').innerText()).includes('3'));
+      const staffChip = await page.locator('[data-ask-chip="dashboard"]').innerText();
+      await page.locator('[data-ask-chip="dashboard"]').click();
+      await page.waitForSelector('[data-dash-sheet]', { timeout: 20000 });
+      await page.locator('[data-dash-prepared]').fill('C'.repeat(80));
+      expect('c16_prepared60', (await page.locator('[data-dash-prepared]').inputValue()).length, (await page.locator('[data-dash-prepared]').inputValue()).length === 60);
+      const sc = await page.locator('[data-dash-period]').allInnerTexts();
+      expect('c16_staffChipsNo3', sc.every((c) => !c.includes('3')), sc.every((c) => !c.includes('3')));
+      await page.locator('[data-dash-action="close"]').click();
+      expect('c8_staffChipNo3', !staffChip.includes('3'), !staffChip.includes('3'));
       allErrors.push(...errors);
       await ctx.close();
     }

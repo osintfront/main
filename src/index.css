@@ -815,3 +815,13 @@ a, button, input, label, select, textarea, [role='button'] {
   color: #fff;
   font-size: 12px;
 }
+
+/* Statistics dashboard ("Ask the map"): its own palette, so an export copy can be light on a dark screen. */
+[data-dash-theme='light'] {
+  --dash-bg: #ffffff; --dash-panel: #f8fafc; --dash-ink: #0f172a; --dash-muted: #64748b; --dash-line: #e2e8f0;
+  --dash-accent: #0284c7; --dash-compare: #94a3b8; --dash-hot: #dc2626; --dash-land: #e2e8f0; --dash-target: #bae6fd;
+}
+[data-dash-theme='dark'] {
+  --dash-bg: #0f172a; --dash-panel: #1e293b; --dash-ink: #f1f5f9; --dash-muted: #94a3b8; --dash-line: #334155;
+  --dash-accent: #38bdf8; --dash-compare: #64748b; --dash-hot: #f87171; --dash-land: #1e293b; --dash-target: #075985;
+}

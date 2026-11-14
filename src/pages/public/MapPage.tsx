@@ -47,9 +47,10 @@ import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
 import { useAuth } from '@/hooks/useAuth';
 import { AskMap } from '@/components/map/AskMap';
-import type { AskAnswer } from '@/services/askService';
+import { StatsDashboard } from '@/components/ask/StatsDashboard';
+import { AskError, dashboardPeriod, type AskAnswer } from '@/services/askService';
 import { turnToShow } from '@/lib/askChat';
-import { selectionEvents, showsEvents, shownSummary, type DashSelection } from '@/lib/askStats';
+import { selectionEvents, showsEvents, shownSummary, type DashSelection, type Preset } from '@/lib/askStats';
 import { useAskQuota } from '@/hooks/useAskQuota';
 import { useDashboardPoll } from '@/hooks/useDashboardPoll';
 import { OfiFab } from '@/components/ofi/OfiFab';
@@ -304,6 +305,20 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     },
     [askTurns],
   );
+  /** A period chip: the same dashboard for another period, built while the old figures stay on screen. */
+  const dashPeriod = useCallback(async (turn: number, preset: Preset) => {
+    const d = askTurns[turn]?.dashboard;
+    if (!d) return;
+    const patch = (f: (x: NonNullable<AskAnswer['dashboard']>) => NonNullable<AskAnswer['dashboard']>) =>
+      setAskTurns((cur) => cur.map((x, i) => (i === turn && x.dashboard ? { ...x, dashboard: f(x.dashboard) } : x)));
+    try {
+      const r = await dashboardPeriod(d.id, preset);
+      patch((x) => ({ ...x, note: null, rebuild: { id: r.id, preset, stage: 'finding', progress: null } }));
+    } catch (err) {
+      const code = err instanceof AskError ? err.code : 'failed';
+      patch((x) => ({ ...x, note: code === 'quota_dashboard' ? 'quota' : code === 'too_many' ? 'too_many' : code === 'busy' ? 'busy' : 'failed' }));
+    }
+  }, [askTurns]);
   const allEvents = useMemo(() => {
     const extra = [...older.events, ...(ask?.events ?? []), ...(dashShown?.events ?? [])];
     if (!extra.length) return events;
@@ -624,7 +639,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   }, [clearSelection]);
 
   return (
-    <div data-dash-open={dashOpen ?? undefined} className="relative flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <a
         href="#main-map"
         className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-[2000] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow"
@@ -917,6 +932,16 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
         />
       ) : null}
       {detailsEvent ? <EventDetailsDialog event={detailsEvent} onClose={closeDetails} onLocate={locateFromDetails} onChanged={reload} onMovePin={canMove ? startMoveMain : undefined} related={detailsEvent.reportGroup ? allEvents.filter((e) => e.reportGroup === detailsEvent.reportGroup && e.id !== detailsEvent.id) : undefined} onOpenRelated={openDetailsFromSheet} /> : null}
+      {dashOpen !== null && askTurns[dashOpen]?.dashboard?.result ? (
+        <StatsDashboard
+          state={askTurns[dashOpen].dashboard!}
+          staff={!!profile && profile.role !== 'viewer'}
+          left={askQuota.left}
+          onSelect={(sel) => void showDashEvents(dashOpen, sel)}
+          onPeriod={(p) => void dashPeriod(dashOpen, p)}
+          onClose={() => setDashOpen(null)}
+        />
+      ) : null}
     </div>
   );
 }

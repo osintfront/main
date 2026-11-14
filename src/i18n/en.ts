@@ -1699,6 +1699,22 @@ export const en = {
   "dash.generated": "Generated {time}",
   "dash.page": "Page {n} of {total}",
   "pk.c.dashboard": "Statistics dashboards",
+  "dash.mark": "OSINTFRONT · Dashboard",
+  "dash.preparedAdd": "Add a client name",
+  "dash.preparedForName": "Prepared for {name}",
+  "dash.cost": "· {n}",
+  "dash.tile.share": "{share}% of incidents",
+  "dash.tip.hbar": "{count} incidents · {share}%",
+  "dash.placeUnknown": "Unknown place",
+  "dash.tip.hotspotPin": "{place} · {count} incidents · {reports} reports",
+  "dash.tip.barFull": "{label} · {count} incidents · previous {prev}",
+  "dash.tip.barShort": "{label} · {count} incidents",
+  "dash.zoomIn": "Zoom in",
+  "dash.zoomOut": "Zoom out",
+  "dash.periods": "Period",
+  "dash.tile.peakTitle.hour": "Peak hour",
+  "dash.tile.peakTitle.day": "Peak day",
+  "dash.tile.peakTitle.week": "Peak week",
 } as const;
 
 export type TranslationKey = keyof typeof en;
