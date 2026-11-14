@@ -12,7 +12,7 @@ import { callClaude, CHEAP_MODELS, isTransient, OPUS_MODELS } from "./editor.ts"
 import { type AskCtx, cacheKey, historyMessages, longSource, NO_CTX } from "./askInput.ts";
 import { holdUsage, runAsReader } from "./usage.ts";
 import {
-  cacheServes, type ClarifyReply, cleanMetric, finalMode, type Lang, type Period, planUsage, resolvePeriod, type StatsMetric,
+  cacheServes, type ClarifyReply, cleanMetric, effectiveClarify, finalMode, type Lang, type Period, planUsage, resolvePeriod, type StatsMetric,
 } from "./askStatsInput.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -30,6 +30,7 @@ const PLAN_TOOL = {
       subject: { type: "string", description: "stats / clarify_stats: what is counted, in plain words (one occurrence = one event of this kind)" },
       actor: { type: "string", description: "stats / clarify_stats: who did it (e.g. Israel, Hezbollah), or empty" },
       target: { type: "string", description: "stats / clarify_stats: against whom / where (e.g. Syria, Iran, south Lebanon), or empty" },
+      clarify_answer: { type: "boolean", description: "true only when the previous assistant message asked \"dashboard or text?\" and this message answers that (yes / text / dashboard…); false for a new question" },
       target_country: { type: "string", description: "stats / clarify_stats: ONE country as stored (English name from the list) that the map should shade, or empty" },
       since: { type: "string", description: "ISO 8601 start of the time window (with offset)" },
       until: { type: ["string", "null"], description: "ISO 8601 end, or null for now" },
@@ -104,9 +105,9 @@ export interface AskResult {
 
 export interface AskOpts { uid: string | null; lang: Lang | null; canDashboard: boolean; clarify: ClarifyReply }
 export type AskOutcome =
-  | { kind: "text"; result: AskResult; upgradeHint: boolean }
-  | { kind: "clarify" }
-  | { kind: "stats"; question: string; lang: Lang; metric: StatsMetric; period: Period };
+  | { kind: "text"; result: AskResult; upgradeHint: boolean; newQuestion?: boolean }
+  | { kind: "clarify"; newQuestion?: boolean }
+  | { kind: "stats"; question: string; lang: Lang; metric: StatsMetric; period: Period; newQuestion?: boolean };
 const NO_OPTS: AskOpts = { uid: null, lang: null, canDashboard: false, clarify: null };
 
 /** Same question (in the same conversation) within 15 minutes → the saved answer (public.ai_cache), no AI
@@ -126,17 +127,20 @@ export async function askMap(db: Db, question: string, ctx: AskCtx = NO_CTX, o: 
   const p = held.value;
   const metric = cleanMetric(p, new Set((cats ?? []).map((c: any) => c.slug)));
   const intent = p.mode === "stats" || p.mode === "clarify_stats" ? p.mode : "plain";
-  const fm = finalMode(p.mode, { client: o.lang !== null, canDashboard: o.canDashboard, clarify: o.clarify, hasMetric: metric !== null });
-  const pay = planUsage(fm.mode, o.clarify, o.uid);
+  // A short typed message after the clarify question: a reply only if the plan step says so.
+  const clarify = effectiveClarify(o.clarify, p.clarify_answer);
+  const newQuestion = o.clarify === "typed" && clarify === null;
+  const fm = finalMode(p.mode, { client: o.lang !== null, canDashboard: o.canDashboard, clarify, hasMetric: metric !== null });
+  const pay = planUsage(fm.mode, clarify, o.uid);
   held.flush(pay.uid, pay.purpose);
-  if (fm.mode === "clarify_stats") return { kind: "clarify" };
+  if (fm.mode === "clarify_stats") return { kind: "clarify", newQuestion };
   if (fm.mode === "stats") {
     const earlier = ctx.history.length ? ctx.history[ctx.history.length - 1].q : "";
-    return { kind: "stats", question: o.clarify === "typed" && earlier ? earlier : question, lang: o.lang!, metric: metric!, period: resolvePeriod(p.since, p.until, Date.now()) };
+    return { kind: "stats", question: clarify === "typed" && earlier ? earlier : question, lang: o.lang!, metric: metric!, period: resolvePeriod(p.since, p.until, Date.now()), newQuestion };
   }
   const result = await runAsReader(o.uid, () => answerFromPlan(db, question, ctx, p, cats ?? [], nowIl, fm.mode === "summary" ? "summary" : "answer"));
   await db.from("ai_cache").upsert({ kind: "ask", key, result: { ...result, intent }, created_at: new Date().toISOString() }, { onConflict: "kind,key" });
-  return { kind: "text", result, upgradeHint: fm.upgradeHint };
+  return { kind: "text", result, upgradeHint: fm.upgradeHint, newQuestion };
 }
 
 /** Columns of ai_search_candidates() that the answer step reads. */
@@ -186,7 +190,7 @@ async function planStep(question: string, ctx: AskCtx, cats: any[], nowIl: strin
   const catList = cats.map((c: any) => `${c.slug} (${c.name})`).join(", ");
   const statsRules = o.lang ? `
 stats: the user explicitly asks for a number, count, statistics, trend or dashboard of events ("how many", "כמה", "number of", "מספר ה", "statistics", "סטטיסטיקה", "trend", "מגמה", "dashboard", "דשבורד"). clarify_stats: the request names a countable kind of event and a period but could want either a number or a description — use it sparingly; when torn between answer and clarify_stats choose answer. For both fill the metric: title in ${o.lang === "en" ? "English" : "Hebrew"} (the UI language), subject, actor, target, target_country; no time in a stats request → since = now minus 7 days; categories = EVERY category that could hold such an event; countries / places / terms as usual, broad enough to find every such event.
-If the previous assistant message asked whether to build a statistics dashboard or answer in text and the new message picks one, apply the choice to the earlier question and never return clarify_stats.${o.clarify === "dashboard" ? "\nThe user asked for a statistics dashboard: mode is stats." : ""}${o.clarify ? "\nNever return clarify_stats." : ""}` : "";
+If the previous assistant message asked whether to build a statistics dashboard or answer in text and the new message picks one, set clarify_answer true, apply the choice to the earlier question and never return clarify_stats; a new question is clarify_answer false.${o.clarify === "dashboard" ? "\nThe user asked for a statistics dashboard: mode is stats." : ""}${o.clarify ? "\nNever return clarify_stats." : ""}` : "";
   const plan = await tool<Record<string, unknown>>(CHEAP_MODELS, {
     max_tokens: 900,
     system: [{

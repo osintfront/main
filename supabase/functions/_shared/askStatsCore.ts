@@ -52,6 +52,9 @@ export function reportCount(sourceCount: number): number {
 export interface Incident { n: number; at: string; place: string; lat: number | null; lng: number | null; title: string; ids: string[]; reports: number }
 
 const PRECISE = new Set(["exact", "city"]);
+const WIDE_PRECISION = new Set(["country", "region"]);
+/** "South Lebanon", "צפון עזה", "جنوب لبنان": a direction + an area is a region, not a town. */
+const DIRECTIONAL = /^(south|north|east|west|southern|northern|eastern|western|central|the south|the north|דרום|צפון|מזרח|מערב|מרכז|جنوب|شمال|شرق|غرب|وسط)(\s|-|$)/i;
 const precise = (e: StatsEvent) => e.latitude != null && e.longitude != null && PRECISE.has(String(e.location_precision ?? ""));
 
 function km(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -69,8 +72,10 @@ export function sameIncident(a: Classified, b: Classified): boolean {
   const aa = a.actor.toLowerCase(), ba = b.actor.toLowerCase();
   if (aa && ba && aa !== ba) return false;
   if (precise(a) && precise(b) && km(a.latitude!, a.longitude!, b.latitude!, b.longitude!) <= MERGE.km) return true;
-  const ka = narrowPlaceKeys(a.location_name, a.place);
-  const kb = narrowPlaceKeys(b.location_name, b.place);
+  // A whole region ("south Lebanon", a region-level pin) is not a place: never merged by name.
+  if (WIDE_PRECISION.has(String(a.location_precision ?? "")) || WIDE_PRECISION.has(String(b.location_precision ?? ""))) return false;
+  const ka = narrowPlaceKeys(...[a.location_name, a.place].filter((n) => !DIRECTIONAL.test(String(n ?? "").trim())));
+  const kb = narrowPlaceKeys(...[b.location_name, b.place].filter((n) => !DIRECTIONAL.test(String(n ?? "").trim())));
   return [...ka].some((k) => kb.has(k));
 }
 

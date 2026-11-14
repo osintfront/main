@@ -167,6 +167,15 @@ async function setRow(db: Db, id: string, patch: Record<string, unknown>) {
   if (error) console.warn("ai_dashboards update", error.message);
 }
 
+class Stopped extends Error {}
+/** The worker's own writes: only while its row is still running (a build marked dead must not finish
+ *  or charge later); a heartbeat with every progress write. Throws Stopped when the row was given up. */
+async function beat(db: Db, id: string, patch: Record<string, unknown>) {
+  const { data, error } = await db.from("ai_dashboards").update({ ...patch, heartbeat_at: nowIso() }).eq("id", id).eq("status", "running").select("id");
+  if (error) return console.warn("ai_dashboards update", error.message);
+  if (!data?.length) throw new Stopped("build was given up");
+}
+
 /** The build of one dashboard (runs in the background). */
 async function build(db: Db, id: string, o: { uid: string | null; staff: boolean; question: string; lang: Lang; metric: StatsMetric; period: Period }, cur: StatsEvent[]) {
   try {
@@ -174,26 +183,27 @@ async function build(db: Db, id: string, o: { uid: string | null; staff: boolean
     if (!cur.length) {
       const figures = computeStats([], null, o.period, { classified: 0, unclear: 0 });
       const result = buildResult({ lang: o.lang, title: o.metric.title, metric: o.metric, period: o.period, figures, incidents: [], insights: [], nowIso: nowIso() });
-      await setRow(db, id, { status: "done", result, finished_at: nowIso(), charged: false });
+      await beat(db, id, { status: "done", result, finished_at: nowIso(), charged: false });
       return;
     }
     const pp = previousPeriod(o.period);
     let prev: StatsEvent[] | null = await fetchCandidates(db, o.metric, pp.since, pp.until);
     if (prev.length > STATS.cap) prev = null;
     const total = cur.length + (prev?.length ?? 0);
-    await setRow(db, id, { stage: "classifying", progress: { done: 0, total } });
-    const curC = await classifyAll(cur, o.metric, (d) => setRow(db, id, { progress: { done: d, total } }), o.question);
-    const prevC = prev ? await classifyAll(prev, o.metric, (d) => setRow(db, id, { progress: { done: cur.length + d, total } }), o.question) : null;
-    await setRow(db, id, { stage: "merging", progress: { done: total, total } });
+    await beat(db, id, { stage: "classifying", progress: { done: 0, total } });
+    const curC = await classifyAll(cur, o.metric, (d) => beat(db, id, { progress: { done: d, total } }), o.question);
+    const prevC = prev ? await classifyAll(prev, o.metric, (d) => beat(db, id, { progress: { done: cur.length + d, total } }), o.question) : null;
+    await beat(db, id, { stage: "merging", progress: { done: total, total } });
     const incidents = mergeIncidents(curC, o.lang);
     const figures = computeStats(incidents, prevC ? mergeIncidents(prevC, o.lang) : null, o.period, counts(curC));
-    await setRow(db, id, { stage: "insights" });
+    await beat(db, id, { stage: "insights" });
     const insights = await writeInsights(figures, incidents, o.metric, o.period, o.lang);
     const result = buildResult({ lang: o.lang, title: o.metric.title, metric: o.metric, period: o.period, figures, incidents, insights, nowIso: nowIso() });
-    await setRow(db, id, { status: "done", result, finished_at: nowIso(), charged: o.uid !== null && !o.staff });
+    await beat(db, id, { status: "done", result, finished_at: nowIso(), charged: o.uid !== null && !o.staff });
   } catch (e) {
+    if (e instanceof Stopped) return console.warn("dashboard build given up", id);
     console.error("dashboard build failed", id, String((e as Error)?.message ?? e).slice(0, 300));
-    await setRow(db, id, { status: "failed", finished_at: nowIso() });
+    await db.from("ai_dashboards").update({ status: "failed", finished_at: nowIso() }).eq("id", id).eq("status", "running");
   }
 }
 
@@ -202,7 +212,7 @@ async function build(db: Db, id: string, o: { uid: string | null; staff: boolean
 export async function startDashboard(db: Db, o: { uid: string | null; staff: boolean; question: string; lang: Lang; metric: StatsMetric; period: Period }): Promise<Reply> {
   const cur = await fetchCandidates(db, o.metric, o.period.since, o.period.until);
   if (cur.length > STATS.cap) return { status: 200, body: { ok: true, mode: "too_many" } };
-  const key = statsCacheKey(o.question, o.period, o.lang);
+  const key = statsCacheKey(o.question, o.period, o.lang, o.metric);
   const base = { user_id: o.uid, staff: o.staff, question: o.question, lang: o.lang, metric: o.metric, since: o.period.since, until: o.period.until, cache_key: key };
 
   const { data: hit } = await db.from("ai_dashboards").select("result").eq("cache_key", key).eq("status", "done").eq("cached", false)
@@ -215,9 +225,9 @@ export async function startDashboard(db: Db, o: { uid: string | null; staff: boo
 
   let running = 0;
   if (o.uid) {
-    const { data: rows } = await db.from("ai_dashboards").select("id,status,created_at").eq("user_id", o.uid).eq("status", "running");
+    const { data: rows } = await db.from("ai_dashboards").select("id,status,created_at,heartbeat_at").eq("user_id", o.uid).eq("status", "running");
     for (const r of rows ?? []) {
-      if (staleBuild(r, Date.now())) await setRow(db, r.id, { status: "failed", finished_at: nowIso() });
+      if (staleBuild(r, Date.now())) await db.from("ai_dashboards").update({ status: "failed", finished_at: nowIso() }).eq("id", r.id).eq("status", "running");
       else running++;
     }
   }
@@ -226,7 +236,14 @@ export async function startDashboard(db: Db, o: { uid: string | null; staff: boo
     const { data: q } = await db.rpc("ai_quota", { p_uid: o.uid });
     quota = q ?? null;
   }
-  const gate = dashboardGate(quota, running);
+  // Builds started in the last 24 hours (cached copies aside): failed and given-up builds cost money and charge nothing.
+  let startedToday = 0;
+  if (o.uid) {
+    const { count } = await db.from("ai_dashboards").select("id", { count: "exact", head: true }).eq("user_id", o.uid).eq("cached", false)
+      .gte("created_at", new Date(Date.now() - 86400_000).toISOString());
+    startedToday = count ?? 0;
+  }
+  const gate = dashboardGate(quota, running, startedToday);
   if (!gate.ok) {
     const { ok: _ok, status, ...body } = gate;
     return { status, body };
@@ -245,12 +262,12 @@ export async function startDashboard(db: Db, o: { uid: string | null; staff: boo
 }
 
 export async function dashboardStatus(db: Db, uid: string | null, id: string): Promise<Reply> {
-  let q = db.from("ai_dashboards").select("id,status,stage,progress,cached,result,created_at").eq("id", id);
+  let q = db.from("ai_dashboards").select("id,status,stage,progress,cached,result,created_at,heartbeat_at").eq("id", id);
   if (uid) q = q.eq("user_id", uid);
   const { data: row } = await q.maybeSingle();
   if (!row) return { status: 404, body: { error: "not found" } };
   if (staleBuild(row, Date.now())) {
-    await setRow(db, row.id, { status: "failed", finished_at: nowIso() });
+    await db.from("ai_dashboards").update({ status: "failed", finished_at: nowIso() }).eq("id", row.id).eq("status", "running");
     row.status = "failed";
   }
   return { status: 200, body: { ok: true, status: row.status, stage: row.stage, progress: row.progress ?? null, cached: row.cached, result: row.status === "done" ? row.result : null } };

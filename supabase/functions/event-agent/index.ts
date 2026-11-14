@@ -906,15 +906,15 @@ async function handle(req: Request): Promise<Response> {
       });
       if (out.kind === "text") {
         await db.from("ai_search_log").insert({ user_id: who.uid, question, results: out.result.ids.length });
-        return json({ ok: true, ...out.result, ...(out.upgradeHint ? { upgrade_hint: true } : {}) });
+        return json({ ok: true, ...out.result, ...(out.upgradeHint ? { upgrade_hint: true } : {}), ...(out.newQuestion ? { new_question: true } : {}) });
       }
       if (out.kind === "clarify") {
         await db.from("ai_search_log").insert({ user_id: who.uid, question, results: 0 });
-        return json({ ok: true, mode: "clarify_stats" });
+        return json({ ok: true, mode: "clarify_stats", ...(out.newQuestion ? { new_question: true } : {}) });
       }
       const r = await startDashboard(db, { uid: who.uid, staff: who.staff, question: out.question, lang: out.lang, metric: out.metric, period: out.period });
       await db.from("ai_search_log").insert({ user_id: who.uid, question, results: 0 });
-      return json(r.body, r.status);
+      return json(out.newQuestion && r.status === 200 ? { ...r.body, new_question: true } : r.body, r.status);
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }

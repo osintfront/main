@@ -15,7 +15,7 @@ import { cn } from '@/utils/cn';
 
 /** The statistics dashboard window: full screen on a phone, a large modal on a desktop. */
 export function StatsDashboard({ state, staff, left, onSelect, onPeriod, onClose }: {
-  state: DashState; staff: boolean; left: number | null; onSelect: (sel: DashSelection) => void; onPeriod: (preset: Preset) => void; onClose: () => void;
+  state: DashState; staff: boolean; left: number | null; onSelect: (sel: DashSelection) => void; onPeriod: (preset: Preset) => Promise<void> | void; onClose: () => void;
 }) {
   const { t, dir } = useI18n();
   const exportRef = useRef<HTMLDivElement>(null);
@@ -37,7 +37,6 @@ export function StatsDashboard({ state, staff, left, onSelect, onPeriod, onClose
   }, [onClose, tip.shown]);
   // A new figure set (period rebuild): the map fits its hotspots again.
   useEffect(() => setView(null), [state.id]);
-  useEffect(() => setPending(false), [state.id, state.rebuild, state.note]);
   useEffect(() => {
     const n = state.note;
     setError(n === 'failed' ? t('dash.failed') : n === 'too_many' ? t('dash.tooMany') : n === 'busy' ? t('dash.busy') : n === 'quota' ? t('dash.needCredits', { n: DASH_CREDITS, left: left ?? 0 }) : null);
@@ -50,7 +49,8 @@ export function StatsDashboard({ state, staff, left, onSelect, onPeriod, onClose
     if (left !== null && !staff && left < DASH_CREDITS) return setError(t('dash.needCredits', { n: DASH_CREDITS, left }));
     setError(null);
     setPending(true);
-    onPeriod(p);
+    // Whatever the reply (a rebuild, or the same refusal twice), the chips come back.
+    void Promise.resolve(onPeriod(p)).finally(() => setPending(false));
   };
   const frame = () => new Promise<void>((ok) => requestAnimationFrame(() => ok()));
   /** One export at a time: the off-screen light copy (current period, prepared-for and map view) → the file. */

@@ -311,6 +311,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     if (!d) return;
     const patch = (f: (x: NonNullable<AskAnswer['dashboard']>) => NonNullable<AskAnswer['dashboard']>) =>
       setAskTurns((cur) => cur.map((x, i) => (i === turn && x.dashboard ? { ...x, dashboard: f(x.dashboard) } : x)));
+    patch((x) => ({ ...x, note: null }));
     try {
       const r = await dashboardPeriod(d.id, preset);
       patch((x) => ({ ...x, note: null, rebuild: { id: r.id, preset, stage: 'finding', progress: null } }));
@@ -938,7 +939,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
           staff={!!profile && profile.role !== 'viewer'}
           left={askQuota.left}
           onSelect={(sel) => void showDashEvents(dashOpen, sel)}
-          onPeriod={(p) => void dashPeriod(dashOpen, p)}
+          onPeriod={(p) => dashPeriod(dashOpen, p)}
           onClose={() => setDashOpen(null)}
         />
       ) : null}

@@ -26,7 +26,12 @@ export const DASH_CREDITS = 3;
 export const CLARIFY_MAX = 40;
 export const PREPARED_MAX = 60;
 export const POLL_MS = 1500;
-export const MAX_POLLS = 200;
+export const MAX_POLLS = 600;
+
+/** Stop polling a build: three failed requests in a row (one network blip is not a failure), or 15 minutes. */
+export function pollGivesUp(errorsInRow: number, polls: number): boolean {
+  return errorsInRow >= 3 || polls > MAX_POLLS;
+}
 
 export type DashStage = 'finding' | 'classifying' | 'merging' | 'insights';
 export interface DashProgress { done: number; total: number }

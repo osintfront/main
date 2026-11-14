@@ -121,7 +121,7 @@ const server = http.createServer((req, res) => {
 });
 
 function makeState(who) {
-  return { who, used: 0, asks: [], statusCalls: 0, periodCalls: [], builds: new Map(), seq: 0, failedOnce: false, periodsBuilt: new Set() };
+  return { who, used: 0, forceBusy: 0, asks: [], statusCalls: 0, periodCalls: [], builds: new Map(), seq: 0, failedOnce: false, periodsBuilt: new Set() };
 }
 const isCount = (q) => /how many|כמה/i.test(q);
 function startBuild(st, result, opts = {}) {
@@ -163,6 +163,7 @@ function onAsk(st, body) {
 }
 function onPeriod(st, body) {
   st.periodCalls.push(body);
+  if (st.forceBusy > 0) { st.forceBusy--; return [{ error: 'busy' }, 409]; }
   if (running(st)) return [{ error: 'busy' }, 409];
   const cached = st.periodsBuilt.has(body.period);
   st.periodsBuilt.add(body.period);
@@ -511,6 +512,16 @@ const T = en
       expect('c14_charged', st.used - qBefore, st.used - qBefore === 3);
       expect('c14_noNewTurn', await page.locator('[data-ask-turn]').count(), (await page.locator('[data-ask-turn]').count()) === turnsBefore);
       await sheetShot('24h');
+      // Review fix I5: the same refusal twice in a row must not leave the chips locked.
+      st.forceBusy = 2;
+      for (let k = 0; k < 2; k++) {
+        await page.locator('[data-dash-period="48h"]').click();
+        await page.waitForSelector('[data-dash-error]', { timeout: 5000 });
+        await page.waitForTimeout(400);
+      }
+      expect('c14_chipsBackAfterTwoRefusals', await page.locator('[data-dash-period="48h"]').isEnabled(), await page.locator('[data-dash-period="48h"]').isEnabled());
+      st.forceBusy = 0;
+      st.periodCalls.length = 1;
       await page.waitForTimeout(500);
       st.used = 8; // 2 left: the cached Week rebuild is free, then a third chip must be refused
       const usedAt = st.used;

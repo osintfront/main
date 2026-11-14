@@ -1,7 +1,7 @@
 -- Osintfront · Migration 129 — statistics dashboard in "Ask the map".
 -- plan_features key ai_dashboard: Max and Intel on; guest, free and Pro off. Staff always.
 -- ai_dashboards: one row per dashboard build (background job + its result), service role only.
---   At most one running build per user. Read by event-agent (action dashboard_status) only.
+--   At most one running build per user; heartbeat_at = the worker's last sign of life (5 min → dead). Read by event-agent (action dashboard_status) only.
 -- ai_stats_candidates(): every public event matching a dashboard's broad filter (up to 2,001,
 --   oldest first) — the ask search without its 120 cap, with the merged-report count.
 -- ai_quota(): a dashboard is a fixed charge of 3 credits — its own model rows (purpose
@@ -35,6 +35,7 @@ create table if not exists public.ai_dashboards (
   charged     boolean not null default false,
   result      jsonb,
   created_at  timestamptz not null default now(),
+  heartbeat_at timestamptz,
   finished_at timestamptz
 );
 create unique index if not exists ai_dashboards_one_running on public.ai_dashboards (user_id) where status = 'running';

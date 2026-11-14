@@ -135,7 +135,8 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite, left, onQuo
       setSummaryOpen(false);
       setArea('');
       setExtra('');
-      onTurns(clarify ? [...turns.slice(0, -1), { ...r, question: last.question }] : [...turns, r]);
+      // A reply replaces the clarify turn; a short message the server read as a new question is a new turn.
+      onTurns(clarify && !r.asNew ? [...turns.slice(0, -1), { ...r, question: last.question }] : [...turns, r]);
     } catch (err) {
       if (turnsRef.current !== turns) return;
       setError(errorText(err));

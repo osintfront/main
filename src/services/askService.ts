@@ -21,6 +21,8 @@ export interface AskAnswer {
   upgradeHint?: boolean;
   /** mode 'stats': the dashboard being built / built for this turn. */
   dashboard?: DashState;
+  /** A short message after the clarify question that the server read as a new question (not a reply). */
+  asNew?: boolean;
 }
 
 export type AskErrorCode = 'rate_limited' | 'quota' | 'budget' | 'upgrade' | 'sign_in' | 'failed' | 'quota_dashboard' | 'busy' | 'too_many' | 'not_in_plan';
@@ -78,14 +80,15 @@ export async function askMap(question: string, ctx: AskContext | undefined, o: {
   });
   if (error) throw await askFailure(error);
   if (!data?.ok) throw new AskError('failed', String(data?.error ?? 'failed'));
+  const asNew = data.new_question === true ? { asNew: true } : {};
   if (data.mode === 'stats') {
     const dashboard: DashState = { id: String(data.dashboard_id), status: 'running', stage: 'finding', progress: null, result: null, cached: data.cached === true, rebuild: null, note: null };
-    return { question, answer: '', ids: [], events: [], mode: 'stats', dashboard };
+    return { question, answer: '', ids: [], events: [], mode: 'stats', dashboard, ...asNew };
   }
-  if (data.mode === 'clarify_stats' || data.mode === 'too_many') return { question, answer: '', ids: [], events: [], mode: data.mode };
+  if (data.mode === 'clarify_stats' || data.mode === 'too_many') return { question, answer: '', ids: [], events: [], mode: data.mode, ...asNew };
   const ids: string[] = Array.isArray(data.ids) ? data.ids : [];
   const events = await fetchPublicEventsByIds(ids);
-  return { question, answer: String(data.answer ?? ''), ids, events, mode: data.mode === 'summary' ? 'summary' : 'answer', ...(data.upgrade_hint === true ? { upgradeHint: true } : {}) };
+  return { question, answer: String(data.answer ?? ''), ids, events, mode: data.mode === 'summary' ? 'summary' : 'answer', ...(data.upgrade_hint === true ? { upgradeHint: true } : {}), ...asNew };
 }
 
 /** One poll of a dashboard build. */

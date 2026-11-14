@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { applyStatus, MAX_POLLS, POLL_MS, type StatusPayload } from '@/lib/askStats';
+import { applyStatus, POLL_MS, pollGivesUp, type StatusPayload } from '@/lib/askStats';
 import { dashboardStatus, type AskAnswer } from '@/services/askService';
 
 /** The build id a turn waits for: a period rebuild first, else its own running build. */
 const waitingFor = (t: AskAnswer) => t.dashboard?.rebuild?.id ?? (t.dashboard?.status === 'running' ? t.dashboard.id : null);
 
-/** Polls every running dashboard build (and period rebuild) of the conversation every 1.5 s. 200 polls
- *  or a failed request → the build is shown as failed. A turn removed meanwhile (New chat) is skipped. */
+/** Polls every running dashboard build (and period rebuild) of the conversation every 1.5 s. Three failed
+ *  requests in a row or 15 minutes → shown as failed (the server decides when a build is dead). A turn removed meanwhile (New chat) is skipped. */
 export function useDashboardPoll(turns: AskAnswer[], setTurns: (f: (t: AskAnswer[]) => AskAnswer[]) => void): void {
   const ids = useMemo(() => turns.map(waitingFor).filter((x): x is string => !!x), [turns]);
   const key = ids.join(',');
   const counts = useRef(new Map<string, number>());
   const inFlight = useRef(new Set<string>());
+  const errorsInRow = useRef(new Map<string, number>());
   const setRef = useRef(setTurns);
   setRef.current = setTurns;
 
@@ -26,14 +27,18 @@ export function useDashboardPoll(turns: AskAnswer[], setTurns: (f: (t: AskAnswer
         const n = (counts.current.get(id) ?? 0) + 1;
         counts.current.set(id, n);
         const failed: StatusPayload = { status: 'failed', stage: 'finding', progress: null, result: null, cached: false };
-        if (n > MAX_POLLS) {
+        if (pollGivesUp(errorsInRow.current.get(id) ?? 0, n)) {
           apply(id, failed);
           continue;
         }
         inFlight.current.add(id);
         dashboardStatus(id)
-          .then((s) => apply(id, s))
-          .catch(() => apply(id, failed))
+          .then((s) => { errorsInRow.current.set(id, 0); apply(id, s); })
+          .catch(() => {
+            const e = (errorsInRow.current.get(id) ?? 0) + 1;
+            errorsInRow.current.set(id, e);
+            if (pollGivesUp(e, n)) apply(id, failed);
+          })
           .finally(() => inFlight.current.delete(id));
       }
     };
