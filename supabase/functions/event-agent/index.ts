@@ -34,6 +34,7 @@
 //                                (events created since the last run vs. the last 12 hours).
 //   {action:"attach_media", event_id, media, post_url?}  staff — save a composed link's pictures to the event.
 //   {action:"translate", limit}  cron secret — backfill English/short Hebrew for older events.
+import { hebrewPlaceName } from "../_shared/placeHe.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { EXPAND_VERSION, countryCode, editReport, expandReport, geocode, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor } from "../_shared/editor.ts";
 import { runAsReader, setUsageSink } from "../_shared/usage.ts";
@@ -418,10 +419,13 @@ async function edit(id: string) {
   if (now.writePlaces) {
     update.locations = locationsForDb(r, 30);
     const pt = mainPoint(r);
-    if (pt) Object.assign(update, { latitude: pt.lat, longitude: pt.lng, location_name: pt.name.slice(0, 200), location_precision: pt.precision });
+    if (pt) Object.assign(update, { latitude: pt.lat, longitude: pt.lng, location_name: pt.name.slice(0, 200), location_name_he: null, location_precision: pt.precision });
   }
   const { error } = await db.from("events").update(update).eq("id", id);
   if (error) return json({ error: error.message }, 500);
+  // The editor's Hebrew place name when none is stored (own write, after the place trigger).
+  const placeHe = now.writePlaces ? hebrewPlaceName(r) : null;
+  if (placeHe) await db.from("events").update({ location_name_he: placeHe }).eq("id", id).is("location_name_he", null);
   // Deep analysis: the names it mentions — not when its text was corrected by hand (the marks would not fit it).
   if (now.writeText) {
     try { await saveEventTerms(db, id, r.terms ?? []); } catch { /* never fails the edit */ }

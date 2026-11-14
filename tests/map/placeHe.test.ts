@@ -25,3 +25,12 @@ test('Persian letters never leak into the Hebrew fallback', () => {
 test('Hebrew site shows the stored Hebrew name first', () => {
   assert.equal(placeLabel({ locationName: 'تنگه هرمز', locationNameHe: 'מצר הורמוז', locationNameEn: 'Strait of Hormuz' }, 'he'), 'מצר הורמוז');
 });
+
+test('both editor paths store the Hebrew place name', async () => {
+  const { readFileSync } = await import('node:fs');
+  for (const fn of ['whatsapp-ingest', 'event-agent']) {
+    const src = readFileSync(`supabase/functions/${fn}/index.ts`, 'utf8');
+    assert.match(src, /hebrewPlaceName\(/, fn);
+    assert.match(src, /location_name_he: placeHe/, fn);
+  }
+});
