@@ -11,7 +11,7 @@ import { featureLimit, hasFeature, planConfigReady, usePlanVersion } from '@/lib
 import { useFilterSets } from '@/hooks/useFilterSets';
 import { useEeiList } from '@/hooks/useEeiList';
 import { eeiMatches, theatreColor, theatresOn, waitingCount } from '@/lib/eeiLens';
-import { MAX_SETS, addPolygon, matchingSets, planSetLimit, setAcceptsAlert, setsArchiveRange, setsOn, switchOffSets, type FilterSet } from '@/lib/filterSets';
+import { MAX_SETS, addPolygon, matchingSets, planSetLimit, pushFilters, setAcceptsAlert, setsArchiveRange, setsOn, switchOffSets, type FilterSet } from '@/lib/filterSets';
 import { useHfcAlerts } from '@/hooks/useHfcAlerts';
 import type { PublicEvent } from '@/types/event';
 import { cn } from '@/utils/cn';
@@ -192,10 +192,6 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const soundPrefs = useSoundSetting();
   const { lang } = useI18n();
   useEffect(() => void initPush(), []);
-  useEffect(() => {
-    const scoped = soundPrefs.scope !== 'all' && activeFilterCount(filters) > 0;
-    syncPush(scoped ? filters : null, [...soundPrefs.mutedCategories], lang);
-  }, [filters, soundPrefs.scope, soundPrefs.mutedCategories, lang]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [drawMode, setDrawMode] = useState<DrawMode | null>(null);
   const effectiveFilters = useMemo(() => (isArchive ? archiveFilters(filters) : filters), [filters, isArchive]);
@@ -210,6 +206,12 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const plansSettled = planConfigReady() && authStatus !== 'loading';
   const setLimit = plansSettled ? planSetLimit(hasFeature(undefined, 'filter_sets'), featureLimit('filter_sets')) : MAX_SETS;
   const activeSets = useMemo(() => (isArchive ? [] : setsOn(sets, setLimit)), [isArchive, sets, setLimit]);
+  // Push follows what the site shows: the sets in force (general filter paused), else the general filter.
+  // Not on the archive page (no sets there) — it would overwrite the live choice. Waits for the plan rows.
+  useEffect(() => {
+    if (isArchive || !plansSettled) return;
+    syncPush(pushFilters(soundPrefs.scope, filters, activeSets), [...soundPrefs.mutedCategories], lang);
+  }, [isArchive, plansSettled, filters, activeSets, soundPrefs.scope, soundPrefs.mutedCategories, lang]);
   // Free-text EEI (צי"ח): the user's theatres act like more sets (OR). Live map only, Pro / Max.
   const eeiAllowed = authStatus === 'signed_in' && hasFeature(undefined, 'eei_text');
   const eei = useEeiList(!isArchive && eeiAllowed, lastUpdated);

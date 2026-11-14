@@ -78,6 +78,7 @@ const archiveCalls = [];
 let withAlert = false;
 const ALERT = { id: 'hfc-1', threat: 1, started_at: new Date().toISOString(), last_alert_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3600e3).toISOString(), areas: ['חיפה'], areas_en: ['Haifa'], zones_he: [], zones_en: [], alert_count: 1, geojson: null, center_lat: 32.79, center_lng: 34.99, area_points: [] };
 const errors = [];
+const pushCalls = []; // bodies of rpc/push_subscribe (phone notifications' saved filter)
 
 async function routeAll(page) {
   await page.route('**/*', async (route) => {
@@ -114,6 +115,7 @@ async function routeAll(page) {
       return json(OLD.filter((e) => (!from || e.occurred_at >= from) && (!to || e.occurred_at < to)));
     }
     if (u.pathname === '/rest/v1/active_hfc_alerts') return json(withAlert ? [ALERT] : []);
+    if (u.pathname === '/rest/v1/rpc/push_subscribe') pushCalls.push(JSON.parse(req.postData() || '{}'));
     if (u.pathname.startsWith('/rest/v1/rpc/')) return json(null);
     if (u.pathname.startsWith('/rest/v1/')) return single ? none() : json([]);
     return json({});
@@ -130,7 +132,7 @@ async function routeAll(page) {
     : { drawGeneral: /^Draw an area on the map/, setsOn: (n) => `Filter sets · ${n}`, off: 'Switch sets off', filters: /^Filters( ·|$)/, set1: 'Set 1', lebanon: /^Lebanon/, iran: /^Iran/, air: /^Airstrike/, missile: /^Missile or Rocket Attack/, week: /^7 days$/, octagon: /^Octagon$/, cancel: /^Cancel$/, area1: 'Area 1', clearAll: /^Clear all$/ };
 
   // One fresh page per scenario: `seed` is written to storage before the app starts.
-  async function open(seed, at = '/') {
+  async function open(seed, at = '/', extra = null) {
     const ctx = await browser.newContext({ viewport: phone ? { width: 390, height: 844 } : { width: 1280, height: 800 }, hasTouch: phone, isMobile: phone });
     await ctx.addInitScript(([s, lang, key, seed, signedIn]) => {
       if (sessionStorage.getItem('qa-seeded')) return; // keep what the app saved across reloads
@@ -139,6 +141,7 @@ async function routeAll(page) {
       localStorage.setItem('ofm.lang', lang);
       if (seed !== null) localStorage.setItem(key, typeof seed === 'string' ? seed : JSON.stringify(seed));
     }, [session, LANG, KEY, seed, PLAN !== 'guest']);
+    if (extra) await ctx.addInitScript(extra);
     const page = await ctx.newPage();
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|WebSocket|net::ERR|ERR_FAILED/.test(m.text())) errors.push(m.text().slice(0, 300)); });
     page.on('pageerror', (e) => { if (!/Unexpected token '<'/.test(String(e))) errors.push(`pageerror: ${String(e).slice(0, 300)}`); });
@@ -377,6 +380,26 @@ async function routeAll(page) {
       out.r3_setUntouched = st.sets[0].filter.polygons.length === 0;
       out.r3_generalDrawn = Array.isArray(st.general.polygon) && st.general.polygon.length >= 3;
       await ctx.close();
+
+      // Push (bug fix): with sets in force and "only what is filtered", the device saves the sets —
+      // not null (null = every event). A fake push subscription stands in for the phone's.
+      const fakePush = (scope) => {
+        if (scope) localStorage.setItem('ofm.sound.scope', scope);
+        const sub = { endpoint: 'https://fcm.example/qa', toJSON: () => ({ endpoint: 'https://fcm.example/qa', keys: { p256dh: 'p', auth: 'a' } }) };
+        const reg = { pushManager: { getSubscription: async () => sub } };
+        navigator.serviceWorker.getRegistration = async () => reg;
+        navigator.serviceWorker.register = async () => reg;
+      };
+      for (const scope of ['filtered', 'all']) {
+        pushCalls.length = 0;
+        const pp = await open([A, B], '/', `(${fakePush})(${JSON.stringify(scope)})`);
+        await pp.page.waitForTimeout(2500);
+        const last = pushCalls[pushCalls.length - 1];
+        out[`push_${scope}_saved`] = !!last;
+        if (scope === 'filtered') out.push_filtered_sets = last?.p_filters?.sets?.length === 2 && last.p_filters.sets[0].areas[0] === 'lebanon';
+        else out.push_all_null = last?.p_filters === null;
+        await pp.ctx.close();
+      }
     }
 
     if (PLAN === 'free') {

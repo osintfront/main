@@ -1,8 +1,10 @@
 import type { PublicEvent } from '@/types/event';
 import {
-  EMPTY_FILTERS, eventAreas, eventPoints, matchesFilters, needsArchive, pointInPolygon, sanitizeFilters,
-  type EventFilters, type LatLng,
+  EMPTY_FILTERS, activeFilterCount, matchesFilters, matchesSetFilter, needsArchive, pointInPolygon, sanitizeFilters,
+  type EventFilters, type LatLng, type PlaceSetFilter, type PushFilters,
 } from './eventFilters.ts';
+
+export { matchesSetFilter };
 
 /**
  * Filter sets ("several filters"): up to 6 named, coloured filters, each a full filter of its own.
@@ -19,7 +21,7 @@ export const MAX_POLYGON_POINTS = 200;
 export const MAX_NAME = 40;
 export const SET_COLORS: readonly string[] = ['#7c3aed', '#d97706', '#059669', '#db2777', '#0891b2', '#65a30d'];
 
-export type SetFilter = Omit<EventFilters, 'polygon' | 'eeis'> & { polygons: LatLng[][] };
+export type SetFilter = PlaceSetFilter;
 
 export interface FilterSet {
   id: string;
@@ -47,14 +49,14 @@ function inAnyPolygon(points: LatLng[], polygons: LatLng[][]): boolean {
   return polygons.some((poly) => points.some((p) => pointInPolygon(p, poly)));
 }
 
-export function matchesSetFilter(e: PublicEvent, f: SetFilter, now = Date.now()): boolean {
-  if (!matchesFilters(e, { ...toEventFilters(f), areas: [] }, now)) return false;
-  if (!f.areas.length && !f.polygons.length) return true;
-  if (f.areas.length) {
-    const areas = eventAreas(e);
-    if (f.areas.some((a) => areas.has(a))) return true;
-  }
-  return f.polygons.length > 0 && inAnyPolygon(eventPoints(e), f.polygons);
+/**
+ * Phone notifications with "only what is filtered": the sets in force when there are any (the
+ * general filter is paused then), else the general filter; nothing to filter → null (every event).
+ */
+export function pushFilters(scope: 'filtered' | 'all', general: EventFilters, active: FilterSet[]): PushFilters {
+  if (scope === 'all') return null;
+  if (active.length) return { sets: active.map((s) => s.filter) };
+  return activeFilterCount(general) > 0 ? general : null;
 }
 
 /** How many sets the plan allows: no feature → 0; otherwise its limit, at most 6. */

@@ -5,7 +5,7 @@
 // POST /api/push (x-push-secret) → sends notifications for events published since the last run.
 //      Called every minute by pg_cron, only when there are new events.
 import webpush from 'web-push';
-import { EMPTY_FILTERS, matchesFilters, type EventFilters } from '../src/lib/eventFilters.js';
+import { matchesPushFilters, type PushFilters } from '../src/lib/eventFilters.js';
 import type { PublicEvent } from '../src/types/event.js';
 import { formatPush, severityOf, SEVERITY_RANK, type FormatIssues } from './_lib/pushFormat.js';
 
@@ -125,9 +125,9 @@ async function send(): Promise<Record<string, unknown>> {
   let sent = 0, removed = 0;
   await Promise.allSettled(subs.filter((s) => active.has(s.user_id)).map(async (s) => {
     const muted = new Set<string>(s.muted ?? []);
-    const f: EventFilters | null = s.filters ? { ...EMPTY_FILTERS, ...s.filters, preset: 'live' } : null;
+    const f = (s.filters ?? null) as PushFilters; // null = every event; { sets } = any filter set in force
     const min = SEVERITY_RANK[s.min_severity] ?? SEVERITY_RANK.high;
-    const hits = leanEvents.filter(({ r, e, rank }) => rank >= min && !muted.has(r.category_slug) && (!f || matchesFilters(e, f)));
+    const hits = leanEvents.filter(({ r, e, rank }) => rank >= min && !muted.has(r.category_slug) && matchesPushFilters(e, f));
     if (!hits.length) return;
     // One notification per event (tag = event: an update replaces it); a flood → the first 5 + one summary.
     const payload = hits.slice(0, 5).map((h) => h.msg);

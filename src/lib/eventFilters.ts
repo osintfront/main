@@ -306,6 +306,34 @@ export function matchesFilters(e: PublicEvent, f: EventFilters, now = Date.now()
   return true;
 }
 
+/** One filter set's filter: like the general one, but the place is the countries OR the drawn areas. */
+export type PlaceSetFilter = Omit<EventFilters, 'polygon' | 'eeis'> & { polygons: LatLng[][] };
+
+export function matchesSetFilter(e: PublicEvent, f: PlaceSetFilter, now = Date.now()): boolean {
+  const { polygons, ...rest } = f;
+  if (!matchesFilters(e, { ...rest, polygon: null, eeis: [], areas: [] }, now)) return false;
+  if (!f.areas.length && !polygons.length) return true;
+  if (f.areas.length) {
+    const areas = eventAreas(e);
+    if (f.areas.some((a) => areas.has(a))) return true;
+  }
+  return polygons.length > 0 && polygons.some((poly) => eventPoints(e).some((p) => pointInPolygon(p, poly)));
+}
+
+/**
+ * What a device saved for phone notifications: null = every event, the general filter, or
+ * { sets } = the filter sets in force (an event passes if it fits any). Pushes are live: no time limit.
+ */
+export type PushFilters = EventFilters | { sets: PlaceSetFilter[] } | null;
+
+export function matchesPushFilters(e: PublicEvent, saved: PushFilters, now = Date.now()): boolean {
+  if (!saved) return true;
+  if ('sets' in saved && Array.isArray(saved.sets)) {
+    return saved.sets.some((s) => matchesSetFilter(e, { ...EMPTY_FILTERS, ...s, polygons: s.polygons ?? [], preset: 'live' }, now));
+  }
+  return matchesFilters(e, { ...EMPTY_FILTERS, ...(saved as EventFilters), preset: 'live' }, now);
+}
+
 /** How many filter groups are active (for the badge on the Filters button). */
 export function activeFilterCount(f: EventFilters): number {
   return (

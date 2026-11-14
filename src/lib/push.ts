@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { EventFilters } from '@/lib/eventFilters';
+import type { PushFilters } from '@/lib/eventFilters';
 import { playChime } from '@/lib/notifySound';
 
 /**
@@ -61,13 +61,17 @@ export async function initPush() {
     const reg = await registration();
     listen();
     if (Notification.permission === 'denied') return set('denied');
-    set((await reg.pushManager.getSubscription()) ? 'on' : 'off');
+    const on = !!(await reg.pushManager.getSubscription());
+    set(on ? 'on' : 'off');
+    // The page already told us its filters before we knew push was on: save them now.
+    if (on && hasLast) syncPush(last.filters, last.muted, last.lang);
   } catch {
     set('unsupported');
   }
 }
 
-let last: { filters: EventFilters | null; muted: string[]; lang: string } = { filters: null, muted: [], lang: 'he' };
+let hasLast = false;
+let last: { filters: PushFilters; muted: string[]; lang: string } = { filters: null, muted: [], lang: 'he' };
 
 async function save(sub: PushSubscription) {
   const j = sub.toJSON();
@@ -113,9 +117,10 @@ export async function disablePush() {
 }
 
 let timer: number | undefined;
-/** Keep the saved filters in step with the site (debounced). filters = null → every event. */
-export function syncPush(filters: EventFilters | null, muted: string[], lang: string) {
+/** Keep the saved filters in step with the site (debounced). null → every event; { sets } → any set. */
+export function syncPush(filters: PushFilters, muted: string[], lang: string) {
   last = { filters, muted, lang };
+  hasLast = true;
   if (state !== 'on') return;
   window.clearTimeout(timer);
   timer = window.setTimeout(async () => {
