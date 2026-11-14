@@ -25,7 +25,7 @@ const FAMILY: Record<string, string> = {
   "terror-security-incident": "kinetic", "military-activity": "kinetic", "force-sighting": "kinetic",
   statements: "words", "political-event": "words",
 };
-const family = (slug: string | undefined) => (slug ? FAMILY[slug] ?? slug : "-");
+export const family = (slug: string | undefined) => (slug ? FAMILY[slug] ?? slug : "-");
 const countryKey = (c: string | null) => (c ?? "").toLowerCase().split(/[/,]/).map((x) => x.trim()).filter(Boolean);
 /** A single strike or blast is one moment; reports of a situation (advances, control, claims,
  *  statements) get repeated for many hours. */
