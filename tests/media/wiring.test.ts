@@ -14,6 +14,7 @@ test('the speech route', () => {
   for (const w of ['x-translate-secret', 'allowedMediaUrl(', 'mp4DurationSec(', 'cleanSpeech(', 'BLOCK_NONE', 'MEDIA_RESOLUTION_LOW', 'GEMINI_API_KEY']) {
     assert.ok(s.includes(w), w);
   }
+  assert.ok(/env\('GEMINI_SPEECH_KEY'\) \|\| env\('GEMINI_API_KEY'\)/.test(s), 'speech has its own paid key, the old one as fallback');
   assert.ok(!/openai|whisper/i.test(s), 'no OpenAI');
   const v = JSON.parse(read('vercel.json'));
   assert.equal(v.functions['api/transcribe.ts'].maxDuration, 120);

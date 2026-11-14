@@ -1,8 +1,8 @@
 /// <reference types="node" />
 // POST /api/transcribe — Gemini writes down a stored video's speech and the text seen on screen.
 // Only our Supabase functions may call it (header x-translate-secret = TRANSLATE_SECRET), and only
-// for a video inside our own public event-media bucket. Gemini runs on the existing GEMINI_API_KEY
-// (AI Studio free tier); Claude does every translation afterwards (supabase/functions/_shared/media.ts).
+// for a video inside our own public event-media bucket. Gemini runs on GEMINI_SPEECH_KEY (else the existing GEMINI_API_KEY)
+// (its own billed project); Claude does every translation afterwards (supabase/functions/_shared/media.ts).
 // Request:  { url } | { ready: true }
 // Answer:   200 { state: 'ok'|'none', lang, seconds, speech, on_screen, cut, model, usage }
 //           200 { state: 'too_big'|'too_long'|'unavailable'|'unreadable', seconds? }
@@ -144,7 +144,8 @@ async function uploadFile(key: string, bytes: Uint8Array, deadline: number): Pro
 export async function POST(req: Request) {
   if (!safeEqual(req.headers.get('x-translate-secret') ?? '', env('TRANSLATE_SECRET'))) return json({ error: 'unauthorized' }, 401);
   const b = await req.json().catch(() => null);
-  const key = env('GEMINI_API_KEY');
+  // Speech has its own key (billing on, its own quota); the site's shared free key is the fallback.
+  const key = env('GEMINI_SPEECH_KEY') || env('GEMINI_API_KEY');
   if (b?.ready) return json({ ready: !!key });
   if (!key) return json({ error: 'off' }, 503);
   const url = allowedMediaUrl(b?.url, env('SUPABASE_URL') || env('VITE_SUPABASE_URL'));
