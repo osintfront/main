@@ -3,7 +3,9 @@
 // the (i) beside every map style, Intelligence layer and sub-layer: the text, that the tooltip is fully
 // on screen and on top (390 px phone and desktop, Hebrew RTL and English), that a tap on (i) never
 // toggles a layer, changes the style, closes the style menu or opens the sign-up / upgrade window,
-// that only one tip is open at a time, and that Escape and a tap elsewhere close it.
+// that only one tip is open at a time, and that Escape and a tap elsewhere close it. Also: style rows
+// stay one line, the (i) is never inside a button / label / link, its tap area is >= 32 px on a phone,
+// the tip closes when its (i) scrolls out of view or focus leaves it (Tab), light and dark theme.
 //
 // Build:  VITE_SUPABASE_URL=https://fake.supabase.co VITE_SUPABASE_ANON_KEY=<any JWT with role anon> \
 //         VITE_SITE_URL=https://osintfront.com npx vite build --outDir /tmp/tips-qa/dist --emptyOutDir
@@ -165,6 +167,34 @@ async function routeAll(page) {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
   };
+  /** No (i) inside a button, label or link (it is a button itself: look from its parent up). */
+  const notNested = async (where) => {
+    const bad = await page.locator('[data-info-tip]').evaluateAll((els) => els
+      .filter((e) => e.parentElement && e.parentElement.closest('button,label,a'))
+      .map((e) => e.getAttribute('data-info-tip') || '(group)'));
+    check(`${where}: no (i) inside a button/label/link`, bad.length === 0, bad.join(','));
+  };
+  /** Phone: what is under the point 14 px from the icon centre is still this (i) (a >= 32 px tap area).
+   *  Below/above, a neighbouring (i) in the next row may cover it (unavoidable when rows are 26 px apart). */
+  const hitArea = async (loc, label) => {
+    // Middle of its panel: at the panel's bottom edge the OFI button may sit over it.
+    await loc.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(100);
+    const r = await loc.evaluate((btn) => {
+      const b = btn.getBoundingClientRect();
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      const at = (x, y) => {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return 'none';
+        if (el === btn || btn.contains(el)) return 'self';
+        const other = el.closest('[data-info-tip]');
+        return other ? 'other-tip' : el.tagName.toLowerCase() + (el.getAttribute('type') ? `[${el.getAttribute('type')}]` : '');
+      };
+      return { left: at(cx - 14, cy), right: at(cx + 14, cy), up: at(cx, cy - 14), down: at(cx, cy + 14) };
+    });
+    const ok = r.left === 'self' && r.right === 'self' && ['self', 'other-tip'].includes(r.up) && ['self', 'other-tip'].includes(r.down);
+    check(`${label} tap area >= 32 px`, ok, JSON.stringify(r));
+  };
 
   try {
     await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
@@ -184,6 +214,17 @@ async function routeAll(page) {
       out.styleTips = await menu.locator('[data-info-tip^="info.style."]').count();
       check('8 style tips', out.styleTips === 8, String(out.styleTips));
       await collect();
+      // Every style row one line (<= 40 px) unless it shows the "style failed" note; the menu fits the screen.
+      const rows = await menu.locator('[role="menuitemradio"]').evaluateAll((els) => els.map((e) => ({
+        h: Math.round(e.getBoundingClientRect().height), note: !!e.querySelector('span.block'), text: e.textContent.trim().slice(0, 30),
+      })));
+      out.styleRowHeights = rows.map((r) => r.h);
+      const tall = rows.filter((r) => !r.note && r.h > 40);
+      check('style rows one line', tall.length === 0, JSON.stringify(tall));
+      const mbox = await menu.boundingBox();
+      check('style menu fits the screen', mbox && mbox.x >= 0 && mbox.x + mbox.width <= (phone ? 390 : 1280), JSON.stringify(mbox));
+      await notNested('style menu');
+      if (phone) await hitArea(tipBtn('info.style.light'), 'style light');
       const checkedBefore = await menu.locator('[role="menuitemradio"][aria-checked="true"]').count();
       const checkedId = await menu.locator('[role="menuitemradio"][aria-checked="true"]').textContent();
       await tryTip(tipBtn('info.style.satellite'), 'info.style.satellite', 'style satellite');
@@ -225,6 +266,39 @@ async function routeAll(page) {
       }
       if (await menu.count()) await tap(styleBtn);
       await page.waitForTimeout(200);
+
+      // Check 1 again in both themes: the satellite tip opens fully on screen and on top.
+      for (let n = 0; n < 2; n++) {
+        const theme = (await page.evaluate(() => document.documentElement.classList.contains('dark'))) ? 'dark' : 'light';
+        if (!(await menu.count())) await tap(styleBtn);
+        await menu.waitFor({ timeout: 5000 });
+        await tryTip(tipBtn('info.style.satellite'), 'info.style.satellite', `${theme} theme: style satellite`);
+        const bg = await tooltips().first().evaluate((el) => getComputedStyle(el).backgroundColor).catch(() => null);
+        check(`${theme} theme: tooltip has a background`, !!bg && bg !== 'rgba(0, 0, 0, 0)', String(bg));
+        out[`theme${n}`] = theme;
+        await closeTip();
+        await tap(styleBtn); // close the menu
+        await page.waitForTimeout(150);
+        await tap(page.getByRole('button', { name: /^(Switch to (dark|light) mode|מעבר למצב (כהה|בהיר))$/ }).first());
+        await page.waitForTimeout(400);
+      }
+      check('both themes checked', out.theme0 && out.theme1 && out.theme0 !== out.theme1, `${out.theme0}/${out.theme1}`);
+
+      // Desktop keyboard: Enter pins the tip, Tab away closes it.
+      if (!phone) {
+        await tap(styleBtn);
+        await menu.waitFor({ timeout: 5000 });
+        await tipBtn('info.style.topo').focus();
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(150);
+        check('keyboard: Enter opens', (await tooltips().count()) === 1);
+        await page.mouse.move(5, 5); // no hover keeping it open
+        await page.keyboard.press('Tab');
+        await page.waitForTimeout(150);
+        check('keyboard: Tab away closes', (await tooltips().count()) === 0);
+        await tap(styleBtn);
+        await page.waitForTimeout(150);
+      }
     }
 
     // 4. Intelligence panel: reveal the sub-rows (pro), collect every tip.
@@ -235,8 +309,13 @@ async function routeAll(page) {
     const headBox = (key) => tipBtn(key).locator('xpath=ancestor::div[contains(@class,"flex")][1]').locator('input[type="checkbox"]').first();
     const openSection = async (id) => {
       const sec = page.locator(`[data-layer-section="${id}"]`);
-      if ((await sec.getAttribute('aria-expanded')) === 'false') await tap(sec);
-      await page.waitForTimeout(150);
+      // One retry, counted in the output: a first tap was once lost right after a fresh build (layout still settling).
+      for (let n = 0; n < 2 && (await sec.getAttribute('aria-expanded')) === 'false'; n++) {
+        if (n) out.sectionRetries = (out.sectionRetries || 0) + 1;
+        await sec.scrollIntoViewIfNeeded();
+        await tap(sec);
+        await page.waitForTimeout(300);
+      }
     };
 
     if (ONLY === 'existing') {
@@ -260,6 +339,33 @@ async function routeAll(page) {
       out.tipKeys = got.length;
       check('all keys on the page', JSON.stringify(got) === JSON.stringify(want),
         `missing ${want.filter((k) => !seen.has(k)).join(',')} extra ${got.filter((k) => !KEYS.includes(k)).join(',')}`);
+      await notNested('panel');
+      if (phone) {
+        for (const key of ['info.shipsSilent', 'info.planesMil', 'info.wx.rain', 'info.mil.naval']) await hitArea(tipBtn(key), key);
+        // A row's checkbox still toggles with the larger (i) beside it.
+        for (const sel of ['[data-show-silent]', '[data-weather-toggle="rain"]', '[data-mil-toggle="naval"]']) {
+          const box = page.locator(sel);
+          await box.scrollIntoViewIfNeeded();
+          const was = await box.isChecked();
+          await box.tap();
+          await page.waitForTimeout(300);
+          check(`${sel} toggles on tap`, (await box.isChecked()) === !was);
+          await box.tap();
+          await page.waitForTimeout(300);
+          check(`${sel} toggles back`, (await box.isChecked()) === was);
+        }
+      }
+      // The tip closes when its (i) scrolls out of the panel's view.
+      await tipBtn('info.sat').scrollIntoViewIfNeeded();
+      await tap(tipBtn('info.sat'));
+      await page.waitForTimeout(150);
+      check('scroll-out: tip open', (await tooltips().count()) === 1);
+      if (!phone) await page.mouse.move(5, 5); // so a row scrolled under the mouse does not open its own tip
+      await panel.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+      await page.waitForTimeout(300);
+      check('scroll-out: tip closed when (i) leaves view', (await tooltips().count()) === 0, String(await tooltips().first().textContent().catch(() => '')));
+      await panel.evaluate((el) => { el.scrollTop = 0; });
+      await page.waitForTimeout(150);
       // 5. Every tip in the panel (new keys and the three group tips): on screen, nothing toggled.
       const panelKeys = await panel.locator('[data-info-tip]').evaluateAll((els) => els.map((e) => e.getAttribute('data-info-tip')));
       out.panelTips = panelKeys.length;
@@ -277,6 +383,8 @@ async function routeAll(page) {
       check('panel open', (await panel.count()) === 1);
     } else {
       // 6. Guest: (i) beside locked layers shows the text, no sign-up window, the layer stays off.
+      await notNested('panel (guest)');
+      if (phone) await hitArea(tipBtn('info.ships'), 'guest info.ships');
       for (const key of ['info.sat', 'info.ships', 'info.planes', 'info.control']) {
         await tryTip(tipBtn(key), key, `guest ${key}`);
         check(`guest ${key} off`, !(await headBox(key).isChecked()));
@@ -308,8 +416,11 @@ async function routeAll(page) {
         await tryTip(old.nth(i), null, `filters tip ${i}`);
         const got = await tooltips().first().textContent().catch(() => null);
         check(`filters tip ${i} text`, texts.includes(got), String(got));
-        await closeTip();
+        await tap(old.nth(i)); // a second tap on the (i) closes it
+        await page.waitForTimeout(150);
+        check(`filters tip ${i} second tap closes`, (await tooltips().count()) === 0);
       }
+      await notNested('filter panel');
     }
   } catch (e) {
     fails.push(`crash: ${String(e).slice(0, 1500)}`);

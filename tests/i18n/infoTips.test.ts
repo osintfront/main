@@ -32,6 +32,14 @@ for (const key of INFO_TIP_KEYS) {
   });
 }
 
+test('a number and its unit never break apart (non-breaking space)', () => {
+  // "10 m", "375 מ׳", "250 NM", "250 מייל": a plain space here can wrap the unit onto the next line.
+  const SPLIT = /\d (m|NM|מ׳|מייל)(?=[\s.,)]|$)/;
+  for (const key of INFO_TIP_KEYS) {
+    for (const lang of ['en', 'he'] as const) assert.ok(!SPLIT.test(dict[lang][key]), `${lang} ${key}: ${dict[lang][key]}`);
+  }
+});
+
 test('every map style has a tip', () => {
   // baseLayer.ts imports Leaflet, so the style list is read as text.
   const src = readFileSync('src/components/map/baseLayer.ts', 'utf8');

@@ -1302,7 +1302,7 @@ export function MapView({
       ) : null}
       <IntelLayers map={leafletMap} open={intelOpen} onClose={() => setIntelOpen(false)} firesOn={firesOn} onFires={toggleFires} onFiresDate={setFiresDate} />
       {stylesOpen ? (
-        <div className="absolute start-14 top-3 z-[650] w-52 rounded-xl bg-white/95 p-1.5 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10" role="menu">
+        <div className="absolute start-14 top-3 z-[650] w-72 rounded-xl bg-white/95 p-1.5 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10" role="menu">
           {BASE_STYLES.map((id) => (
             <WithTip key={id} tip={`info.style.${id}`} className="gap-0.5 pe-0.5">
             <button

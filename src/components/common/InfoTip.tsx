@@ -11,6 +11,20 @@ const OPEN_EVENT = 'ofm:infotip-open';
 const EDGE = 8;
 const GAP = 4;
 
+/** Is the point inside the window and inside every scrolling / clipping box around `el`? */
+function pointShown(el: Element, x: number, y: number): boolean {
+  const vw = document.documentElement.clientWidth || window.innerWidth;
+  if (x < 0 || y < 0 || x > vw || y > window.innerHeight) return false;
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const cs = getComputedStyle(p);
+    if (/(auto|scroll|hidden|clip)/.test(cs.overflowX + cs.overflowY)) {
+      const r = p.getBoundingClientRect();
+      if (x < r.left || x > r.right || y < r.top || y > r.bottom) return false;
+    }
+  }
+  return true;
+}
+
 /**
  * A small (i) beside a term that is not self-explanatory: one or two lines on what it is.
  * Opens on hover or keyboard focus (desktop) and on tap (phones); Escape or a tap elsewhere closes it.
@@ -20,6 +34,8 @@ const GAP = 4;
  * The tooltip is drawn in document.body with a fixed position, so a scrolling panel or a narrow
  * menu cannot cut it; it is kept 8 px inside the screen and goes above the (i) when there is no
  * room below. It sits above dialogs (z 4000), as a tip may be inside one (the filter panel).
+ * When the (i) scrolls out of view (its panel or the page) the tip closes rather than hang at the edge.
+ * On touch screens the (i) can be tapped in a 32 px square (an invisible ::before), its look unchanged.
  */
 export function InfoTip({ text, tip, className, align = 'end' }: { text?: string; tip?: InfoTipKey; className?: string; align?: 'start' | 'end' }) {
   const { t, dir } = useI18n();
@@ -72,6 +88,11 @@ export function InfoTip({ text, tip, className, align = 'end' }: { text?: string
     const el = tipRef.current;
     if (!btn || !el) return;
     const b = btn.getBoundingClientRect();
+    // The (i) has scrolled out of sight: close instead of leaving the tooltip at the screen edge.
+    if (!pointShown(btn, b.left + b.width / 2, b.top + b.height / 2)) {
+      close();
+      return;
+    }
     const w = el.offsetWidth;
     const h = el.offsetHeight;
     const vw = document.documentElement.clientWidth || window.innerWidth;
@@ -84,7 +105,7 @@ export function InfoTip({ text, tip, className, align = 'end' }: { text?: string
     if (top + h > vh - EDGE && b.top - GAP - h >= EDGE) top = b.top - GAP - h;
     top = Math.max(EDGE, Math.min(top, vh - EDGE - h));
     setPos((cur) => (cur && cur.left === left && cur.top === top ? cur : { left, top }));
-  }, [align, dir]);
+  }, [align, dir, close]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -119,8 +140,15 @@ export function InfoTip({ text, tip, className, align = 'end' }: { text?: string
           else setPinned(true);
         }}
         onFocus={() => setHover(true)}
-        onBlur={() => setHover(false)}
-        className="inline-flex size-5 items-center justify-center rounded-full text-slate-400 hover:text-sky-600 focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-slate-500 dark:hover:text-sky-400"
+        onBlur={(e) => {
+          setHover(false);
+          // Focus went to another control (Tab away): close a pinned tip too. A tap elsewhere moves focus
+          // to nothing (relatedTarget null): the pointerdown check above decides then, so a tap on the
+          // tooltip itself keeps it open.
+          const next = e.relatedTarget as Node | null;
+          if (next && !ref.current?.contains(next) && !tipRef.current?.contains(next)) setPinned(false);
+        }}
+        className="relative inline-flex size-5 items-center justify-center rounded-full text-slate-400 hover:text-sky-600 focus-visible:outline-2 focus-visible:outline-sky-500 dark:text-slate-500 dark:hover:text-sky-400 pointer-coarse:before:absolute pointer-coarse:before:-inset-1.5"
       >
         <Info className="size-3.5" aria-hidden />
       </button>
