@@ -74,12 +74,23 @@ export async function translateBriefChain(title: string, text: string): Promise<
  * paragraph by paragraph through the same chain (free providers first, cache). At most 20
  * pieces of ≤5000 characters per request, so short paragraphs are joined. null = not translated.
  */
+/** Words in a Hebrew text written in a script other than Hebrew / Latin (Arabic left behind). */
+function foreignWords(he: string): string[] {
+  return [...new Set(he.match(/[^\s\p{Script=Hebrew}\p{Script=Latin}\P{L}]+[^\s]*/gu) ?? [])].slice(0, 30);
+}
+
 export async function translateFullChain(text: string): Promise<{ he: string; en: string; model: string } | null> {
   // Claude first (the free providers mangle long Arabic); the chain only if Claude fails.
   try {
-    const r = await translateFull(text);
-    if (!foreignLetters(r.he.replace(/[A-Za-z0-9-]+/g, " "))) return r;
-    console.warn("full translation left foreign letters; trying the chain");
+    let r = await translateFull(text);
+    let left = foreignWords(r.he);
+    if (left.length) {
+      console.warn("full translation left foreign words, asking again:", left.join(", ").slice(0, 200));
+      r = await translateFull(text, left);
+      left = foreignWords(r.he);
+    }
+    if (!left.length) return r;
+    console.warn("full translation still has foreign words; trying the chain:", left.join(", ").slice(0, 200));
   } catch (e) {
     console.warn("full translation (Claude) failed:", String((e as Error)?.message ?? e).slice(0, 160));
   }
