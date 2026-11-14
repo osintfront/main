@@ -1,4 +1,4 @@
--- Statistics dashboard (migration 129): plan rows, ai_dashboard_allowed, the fixed 3-credit charge in
+-- Statistics dashboard (migration 131): plan rows, ai_dashboard_allowed, the fixed 3-credit charge in
 -- ai_quota, one running build per user, ai_stats_candidates and the closed ai_dashboards table.
 -- Run on live as one statement: the final exception rolls everything back (that text = pass).
 do $$

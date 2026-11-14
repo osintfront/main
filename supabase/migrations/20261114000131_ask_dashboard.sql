@@ -1,4 +1,4 @@
--- Osintfront · Migration 129 — statistics dashboard in "Ask the map".
+-- Osintfront · Migration 131 — statistics dashboard in "Ask the map".
 -- plan_features key ai_dashboard: Max and Intel on; guest, free and Pro off. Staff always.
 -- ai_dashboards: one row per dashboard build (background job + its result), service role only.
 --   At most one running build per user; heartbeat_at = the worker's last sign of life (5 min → dead). Read by event-agent (action dashboard_status) only.
@@ -6,7 +6,7 @@
 --   oldest first) — the ask search without its 120 cap, with the merged-report count.
 -- ai_quota(): a dashboard is a fixed charge of 3 credits — its own model rows (purpose
 --   ask_dashboard_*) stay in spent_today_usd (global budget) but leave the user's "used".
--- Cleanup (30 days) is in migration 130.
+-- Cleanup (30 days) is in migration 132.
 -- Spec: docs/superpowers/specs/2026-11-14-ask-map-dashboard-design.md
 
 insert into public.plan_features (feature_key, plan_id, enabled, limit_value, note) values

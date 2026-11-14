@@ -65,7 +65,7 @@ import { readFileSync } from 'node:fs';
 const src = (p: string) => readFileSync(p, 'utf8');
 
 test('C1 wiring: heartbeat column, heartbeat on progress, finishing only a still-running row', () => {
-  assert.match(src('supabase/migrations/20261114000129_ask_dashboard.sql'), /heartbeat_at\s+timestamptz/);
+  assert.match(src('supabase/migrations/20261114000131_ask_dashboard.sql'), /heartbeat_at\s+timestamptz/);
   const s = src('supabase/functions/_shared/askStats.ts');
   assert.match(s, /heartbeat_at: nowIso\(\)/);
   assert.match(s, /\.eq\("status", "running"\)/);

@@ -6,8 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const m129 = readFileSync('supabase/migrations/20261114000129_ask_dashboard.sql', 'utf8');
-const m130 = readFileSync('supabase/migrations/20261114000130_ask_dashboard_cleanup.sql', 'utf8');
+const m129 = readFileSync('supabase/migrations/20261114000131_ask_dashboard.sql', 'utf8');
+const m130 = readFileSync('supabase/migrations/20261114000132_ask_dashboard_cleanup.sql', 'utf8');
 const sqlTest = readFileSync('supabase/tests/ask_dashboard.sql', 'utf8');
 
 test('129 and its SQL test contain no drop / delete', () => {

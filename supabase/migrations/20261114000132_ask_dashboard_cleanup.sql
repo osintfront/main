@@ -1,5 +1,5 @@
--- Osintfront · Migration 130 — statistics dashboard cleanup: builds are kept 30 days, then removed
--- by a daily job (04:23). Kept apart from migration 129 (repo rule: removals in their own file).
+-- Osintfront · Migration 132 — statistics dashboard cleanup: builds are kept 30 days, then removed
+-- by a daily job (04:23). Kept apart from migration 131 (repo rule: removals in their own file).
 -- Spec: docs/superpowers/specs/2026-11-14-ask-map-dashboard-design.md
 
 create or replace function public.ai_dashboards_cleanup()
