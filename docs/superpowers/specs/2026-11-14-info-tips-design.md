@@ -20,7 +20,7 @@ small (i) beside each map, each layer and each sub-layer with a short explanatio
 ## Anti-goals
 - A tip that toggles the layer when tapped, or closes the menu.
 - A tip clipped by the panel edge or hidden behind the map on a phone.
-- Long texts: more than 2 sentences / ~160 characters.
+- Long texts: more than 160 characters (2–3 very short sentences at most).
 
 ## Approaches
 1. **Fixed texts in the translation files, reuse `InfoTip` (chosen).** `src/components/common/InfoTip.tsx`
