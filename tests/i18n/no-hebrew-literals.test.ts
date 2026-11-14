@@ -15,6 +15,7 @@ const FILES = [
   'src/components/map/mapRotate.ts',
   'src/pages/public/LegalPlaceholder.tsx',
   'src/components/map/AskMap.tsx',
+  'src/components/ask/DashCards.tsx',
   'src/components/filters/FilterSetsBar.tsx',
   'src/components/filters/FilterSetHeader.tsx',
   'src/components/filters/EeiPanel.tsx',

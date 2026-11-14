@@ -5,6 +5,9 @@ import { useI18n } from '@/i18n';
 import { SITE_URL } from '@/config/welcome';
 import { AREAS } from '@/lib/eventFilters';
 import { MAX_TURNS, answerShareText, buildContext, openWindow, summaryQuestion, whatsappUrl } from '@/lib/askChat';
+import { clarifyReplyKind, DASH_CREDITS, showsEvents, withDashLines } from '@/lib/askStats';
+import { ClarifyChips, DashCard } from '@/components/ask/DashCards';
+import { openGate } from '@/components/plans/GateDialog';
 import { AskError, askMap, type AskAnswer } from '@/services/askService';
 import { cn } from '@/utils/cn';
 
@@ -17,6 +20,11 @@ interface AskMapProps {
   onSelect: (index: number) => void;
   /** A citation [n] in an answer was pressed. */
   onCite: (id: string) => void;
+  /** Whole AI credits left today (null = not limited / unknown). */
+  left: number | null;
+  onQuotaRefresh: () => void;
+  onOpenDashboard: (turn: number) => void;
+  onShowDashboard: (turn: number) => void;
 }
 
 // Shared links always carry the public domain, never the *.vercel.app address the page may be served from.
@@ -56,7 +64,7 @@ const actionBtn =
   'inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800';
 
 /** "Ask the map": a short conversation — each question gets an answer and its events on the map. */
-export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapProps) {
+export function AskMap({ turns, selected, onTurns, onSelect, onCite, left, onQuotaRefresh, onOpenDashboard, onShowDashboard }: AskMapProps) {
   const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -93,28 +101,68 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
     return () => window.clearTimeout(id);
   }, [copied]);
 
-  const send = async (question: string) => {
+  const dashLabels = { dashboard: t('dash.historyDashboard'), incidents: t('dash.historyIncidents') };
+  const errorText = (err: unknown) => {
+    const code = err instanceof AskError ? err.code : 'failed';
+    if (code === 'quota_dashboard') return t('dash.needCredits', { n: DASH_CREDITS, left: (err as AskError).left ?? 0 });
+    if (code === 'busy') return t('dash.busy');
+    if (code === 'too_many') return t('dash.tooMany');
+    return t(code === 'upgrade' || code === 'not_in_plan' ? 'ai.upgrade' : code === 'quota' ? 'ai.quota' : code === 'budget' ? 'ai.budget' : code === 'rate_limited' ? 'ask.rateLimited' : code === 'sign_in' ? 'ask.signIn' : 'ask.failed');
+  };
+  /** The server's turn, with the texts only the browser has (the clarify question, "too many"). */
+  const withText = (r: AskAnswer): AskAnswer =>
+    r.mode === 'clarify_stats' ? { ...r, answer: t('dash.clarify') } : r.mode === 'too_many' ? { ...r, answer: t('dash.tooMany') } : r;
+
+  /** chip = a press on the clarify question's quick replies. A reply to that question replaces it. */
+  const send = async (typed: string, chip?: 'dashboard' | 'text') => {
+    const last = turns[turns.length - 1];
+    const clarify = clarifyReplyKind(last?.mode, typed, chip);
     // busyRef: two quick presses must not send two questions (state updates too late for that).
-    if (question.length < 3 || busyRef.current || full) return;
+    if (busyRef.current || (!chip && typed.length < 3) || (full && !clarify)) return;
+    if (chip === 'dashboard' && left !== null && left < DASH_CREDITS) {
+      setError(t('dash.needCredits', { n: DASH_CREDITS, left }));
+      return;
+    }
+    const question = chip ? last.question : typed;
     busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
-      const r = await askMap(question, buildContext(turns));
+      const r = withText(await askMap(question, buildContext(withDashLines(turns, dashLabels)), { lang: lang === 'en' ? 'en' : 'he', ...(clarify ? { clarify } : {}) }));
       if (turnsRef.current !== turns) return; // the conversation was cleared or closed meanwhile
       setCollapsed(false);
-      setQ('');
+      if (!chip) setQ('');
       setSummaryOpen(false);
       setArea('');
       setExtra('');
-      onTurns([...turns, r]);
+      onTurns(clarify ? [...turns.slice(0, -1), { ...r, question: last.question }] : [...turns, r]);
     } catch (err) {
       if (turnsRef.current !== turns) return;
-      const code = err instanceof AskError ? err.code : 'failed';
-      setError(t(code === 'upgrade' ? 'ai.upgrade' : code === 'quota' ? 'ai.quota' : code === 'budget' ? 'ai.budget' : code === 'rate_limited' ? 'ask.rateLimited' : code === 'sign_in' ? 'ask.signIn' : 'ask.failed'));
+      setError(errorText(err));
     } finally {
       busyRef.current = false;
       setBusy(false);
+      onQuotaRefresh();
+    }
+  };
+
+  /** A failed dashboard: the same question again, as a dashboard request, in place of that turn. */
+  const retry = async (i: number) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = withText(await askMap(turns[i].question, buildContext(withDashLines(turns.slice(0, i), dashLabels)), { lang: lang === 'en' ? 'en' : 'he', clarify: 'dashboard' }));
+      if (turnsRef.current !== turns) return;
+      onTurns(turns.map((x, k) => (k === i ? { ...r, question: x.question } : x)));
+    } catch (err) {
+      if (turnsRef.current !== turns) return;
+      setError(errorText(err));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+      onQuotaRefresh();
     }
   };
 
@@ -244,6 +292,19 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
                     />
                   ))}
               </div>
+              {turn.mode === 'clarify_stats' && i === turns.length - 1 ? <ClarifyChips left={left} busy={busy} onPick={(c) => void send('', c)} /> : null}
+              {turn.dashboard ? (
+                <DashCard state={turn.dashboard} onOpen={() => onOpenDashboard(i)} onShow={() => onShowDashboard(i)} onRetry={() => void retry(i)} />
+              ) : null}
+              {turn.upgradeHint ? (
+                <p data-ask-upgrade className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-violet-700 dark:text-violet-300">
+                  {t('dash.upgrade')}
+                  <button type="button" onClick={(e) => (e.stopPropagation(), openGate('upgrade', 'ai_dashboard', 'plan'))} className="font-semibold underline">
+                    {t('dash.upgradeLink')}
+                  </button>
+                </p>
+              ) : null}
+              {showsEvents(turn.mode) ? (
               <div className="mt-1 flex items-center gap-1">
                 <button
                   type="button"
@@ -270,6 +331,7 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
                   {t('ask.share')}
                 </button>
               </div>
+              ) : null}
               {shareNote?.turn === i ? (
                 <p data-ask-share-note role="status" className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                   {t(shareNote.ok ? 'ask.shareBlockedCopied' : 'ask.shareBlocked')}
@@ -341,6 +403,11 @@ export function AskMap({ turns, selected, onTurns, onSelect, onCite }: AskMapPro
             )}
           </form>
 
+          {left !== null ? (
+            <p data-ask-quota className="-mt-1 px-3 pb-1.5 text-[11px] text-slate-500 dark:text-slate-400" dir="auto">
+              {t('dash.left', { n: left })}
+            </p>
+          ) : null}
           {summaryOpen ? (
             <form data-ask-summary onSubmit={submitSummary} className="space-y-2 border-t border-slate-200 p-2 dark:border-slate-800">
               <p className="px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{t('ask.summaryArea')}</p>

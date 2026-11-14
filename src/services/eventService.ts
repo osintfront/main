@@ -374,3 +374,10 @@ export async function fetchPublicEvent(id: string): Promise<PublicEvent | null> 
   }
   return null;
 }
+
+/** fetchPublicEventsByIds for any number of ids (it takes 200 at a time). */
+export async function fetchPublicEventsByIdsAll(ids: string[]): Promise<PublicEvent[]> {
+  const out: PublicEvent[] = [];
+  for (let i = 0; i < ids.length; i += 200) out.push(...(await fetchPublicEventsByIds(ids.slice(i, i + 200))));
+  return out;
+}

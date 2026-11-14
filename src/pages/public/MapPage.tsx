@@ -42,13 +42,16 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/common/Toast';
 import { addEventPlace, moveEventPin, moveEventPlace, removeEventPin, setPlaceCategory, setPlaceLocation } from '@/services/eventAdminService';
 import { QuickLocationDialog } from '@/components/admin/events/QuickLocationDialog';
-import { fetchPublicEvent } from '@/services/eventService';
+import { fetchPublicEvent, fetchPublicEventsByIdsAll } from '@/services/eventService';
 import { friendlyError } from '@/services/serviceError';
 import { compileEei, matchesEei } from '@/lib/eei';
 import { useAuth } from '@/hooks/useAuth';
 import { AskMap } from '@/components/map/AskMap';
 import type { AskAnswer } from '@/services/askService';
 import { turnToShow } from '@/lib/askChat';
+import { selectionEvents, showsEvents, shownSummary, type DashSelection } from '@/lib/askStats';
+import { useAskQuota } from '@/hooks/useAskQuota';
+import { useDashboardPoll } from '@/hooks/useDashboardPoll';
 import { OfiFab } from '@/components/ofi/OfiFab';
 
 type MobilePane = 'map' | 'feed';
@@ -243,7 +246,25 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   // It is a short conversation: a list of turns; the map and feed show the selected turn's events.
   const [askTurns, setAskTurns] = useState<AskAnswer[]>([]);
   const [askSelected, setAskSelected] = useState(0);
-  const ask = askTurns[askSelected] ?? null;
+  // Statistics dashboards: polled while building; one may be open; its events may be on the map.
+  useDashboardPoll(askTurns, setAskTurns);
+  const askQuota = useAskQuota(canAsk);
+  const [dashOpen, setDashOpen] = useState<number | null>(null);
+  const [dashShown, setDashShown] = useState<{ turn: number; incidents: number; reports: number; missing: number; events: PublicEvent[] } | null>(null);
+  const seenDone = useRef(new Set<string>());
+  const refreshQuota = askQuota.refresh;
+  useEffect(() => {
+    // A dashboard (or a period rebuild) that just finished: open it the first time, refresh the credits.
+    askTurns.forEach((turn, i) => {
+      const d = turn.dashboard;
+      if (d?.status !== 'done' || seenDone.current.has(d.id)) return;
+      seenDone.current.add(d.id);
+      setDashOpen(i);
+      refreshQuota();
+    });
+  }, [askTurns, refreshQuota]);
+  const selectedTurn = askTurns[askSelected] ?? null;
+  const ask = !dashShown && selectedTurn && showsEvents(selectedTurn.mode) ? selectedTurn : null;
   const [askFit, setAskFit] = useState<{ key: number; points: [number, number][] } | null>(null);
   const fitAsk = useCallback((r: AskAnswer | undefined) => {
     if (r?.events.length) setAskFit({ key: Date.now(), points: r.events.filter(isOnMap).map((e) => [e.latitude, e.longitude]) });
@@ -251,6 +272,10 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   const handleAskTurns = useCallback(
     (turns: AskAnswer[]) => {
       setAskTurns(turns);
+      if (!turns.length) {
+        setDashOpen(null);
+        setDashShown(null);
+      }
       // A follow-up that found nothing keeps the map on the last answer with events (not a blank map).
       const show = turnToShow(turns);
       setAskSelected(show);
@@ -265,14 +290,28 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
     },
     [askTurns, fitAsk],
   );
+  /** A press on a dashboard (or "Show on map"): the reports behind the chosen incidents, on the map and in the feed. */
+  const showDashEvents = useCallback(
+    async (turn: number, sel: DashSelection) => {
+      const r = askTurns[turn]?.dashboard?.result;
+      if (!r) return;
+      const chosen = selectionEvents(r, sel);
+      const events = await fetchPublicEventsByIdsAll(chosen.ids);
+      setDashShown({ turn, ...shownSummary(chosen, events.map((e) => e.id)), events });
+      setDashOpen(null);
+      if (events.length) setAskFit({ key: Date.now(), points: events.filter(isOnMap).map((e) => [e.latitude, e.longitude]) });
+      setMobilePane('map');
+    },
+    [askTurns],
+  );
   const allEvents = useMemo(() => {
-    const extra = [...older.events, ...(ask?.events ?? [])];
+    const extra = [...older.events, ...(ask?.events ?? []), ...(dashShown?.events ?? [])];
     if (!extra.length) return events;
     const ids = new Set(events.map((e) => e.id));
     const out = [...events];
     for (const e of extra) if (!ids.has(e.id)) (ids.add(e.id), out.push(e));
     return out;
-  }, [events, older.events, ask]);
+  }, [events, older.events, ask, dashShown]);
   // The archive has no time filter: it is not counted there.
   const filterCount = activeFilterCount(isArchive ? { ...effectiveFilters, preset: 'live' } : effectiveFilters);
   // צי"ח: saved keyword queries; an event passes if it matches any query that is on.
@@ -339,6 +378,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
 
   const visibleEvents = useMemo(
     () =>
+      // A dashboard's events are shown as they are: the user's search and filters would break its numbers.
+      dashShown ? [...dashShown.events].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()) :
       (ask ? ask.events : allEvents)
         .filter((e) => matchesQuery(e, deferredQuery, [e.category, ...(e.secondaryCategories ?? [])].map((c) => categoryLabel(c.slug, c.name)).join(' ')))
         .filter((e) =>
@@ -347,7 +388,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             : matchesFilters(e, effectiveFilters) && (!eeiMatchers.length || eeiMatchers.some((m) => matchesEei(e, m))),
         )
         .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()),
-    [ask, allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers, activeSets, eeiOn, eei.tags, eei.view],
+    [dashShown, ask, allEvents, deferredQuery, categoryLabel, effectiveFilters, eeiMatchers, activeSets, eeiOn, eei.tags, eei.view],
   );
   // Which set each shown event fits (the first one): a coloured ring on the map, a tag in the feed.
   // Which set / theatre each shown event fits: a coloured ring on the map, a tag in the feed.
@@ -404,8 +445,8 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   }
   // A different list (filters, search, "ask the map", archive day) starts the feed again at its first batch.
   const feedResetKey = useMemo(
-    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? [askSelected, ask.events.length] : null, activeSets, eeiOn.map((x) => x.id), eei.view]),
-    [isArchive, day, effectiveFilters, deferredQuery, ask, askSelected, activeSets, eeiOn, eei.view],
+    () => JSON.stringify([isArchive ? day : null, effectiveFilters, deferredQuery, ask ? [askSelected, ask.events.length] : null, dashShown ? [dashShown.turn, dashShown.events.length] : null, activeSets, eeiOn.map((x) => x.id), eei.view]),
+    [isArchive, day, effectiveFilters, deferredQuery, ask, askSelected, dashShown, activeSets, eeiOn, eei.view],
   );
   // The map pins only events with a specific place; country-only / no-location ones stay in the feed.
   const mapEvents = useMemo(() => visibleEvents.filter(isOnMap), [visibleEvents]);
@@ -583,7 +624,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
   }, [clearSelection]);
 
   return (
-    <div className="relative flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div data-dash-open={dashOpen ?? undefined} className="relative flex h-dvh flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <a
         href="#main-map"
         className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-[2000] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow"
@@ -670,15 +711,33 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
             onLocate={handleLocate}
             newIds={newIds}
             onOpenDetails={handleViewEvent}
-            alerts={ask ? NO_ALERTS : alerts}
+            alerts={ask || dashShown ? NO_ALERTS : alerts}
             alertsNow={alertsNow}
             onLocateAlert={handleLocateAlert}
             title={isArchive ? t('archive.title') : undefined}
             live={!isArchive}
             resetKey={feedResetKey}
             toolbar={
-              isArchive || filterCount || ask || inForce ? (
+              isArchive || filterCount || ask || inForce || dashShown ? (
                 <div className="space-y-2">
+                  {dashShown ? (
+                    <div data-dash-shown className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-violet-600 px-3 text-xs font-semibold text-white">
+                        {t('dash.shown', { incidents: dashShown.incidents, reports: dashShown.reports })}
+                      </span>
+                      {dashShown.missing > 0 ? (
+                        <span data-dash-missing className="text-xs text-amber-700 dark:text-amber-400">{t('dash.missing', { n: dashShown.missing })}</span>
+                      ) : null}
+                      <button type="button" data-dash-action="back" onClick={() => setDashOpen(dashShown.turn)}
+                        className="ms-auto h-8 rounded-lg px-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10">
+                        {t('dash.back')}
+                      </button>
+                      <button type="button" data-dash-action="clear" onClick={() => setDashShown(null)}
+                        className="h-8 rounded-lg px-2 text-xs font-semibold text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/10">
+                        {t('dash.clear')}
+                      </button>
+                    </div>
+                  ) : null}
                   {ask ? (
                     <div className="flex items-center gap-2">
                       <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-violet-600 px-3 text-xs font-semibold text-white">
@@ -789,7 +848,7 @@ export function MapPage({ mode = 'live' }: { mode?: 'live' | 'archive' }) {
               onPlaceCategory={canMove ? (target, slug) => void placeCategory(target, slug) : undefined}
               onPlaceLocate={canMove ? setLocating : undefined}
               canRemovePin={!isDemo && can('event.edit.any')}
-              topSlot={canAsk ? <AskMap turns={askTurns} selected={askSelected} onTurns={handleAskTurns} onSelect={handleAskSelect} onCite={handleLocate} /> : undefined}
+              topSlot={canAsk ? <AskMap turns={askTurns} selected={askSelected} onTurns={handleAskTurns} onSelect={handleAskSelect} onCite={handleLocate} left={askQuota.left} onQuotaRefresh={askQuota.refresh} onOpenDashboard={setDashOpen} onShowDashboard={(i) => void showDashEvents(i, { kind: 'all' })} /> : undefined}
               fitTo={askFit}
             />
             {canAsk && !moving ? <QuickReportButton /> : null}

@@ -11,7 +11,7 @@ export type FeatureKey =
   | 'ships_aircraft' | 'satellite' | 'ai_expand_ask' | 'insights' | 'data_export' | 'expand_daily' | 'weather' | 'airfields_ports' | 'geolocation'
   | 'feed_delay_min' | 'event_open' | 'event_summary' | 'source_link' | 'sources_detail' | 'media' | 'media_download'
   | 'share_daily' | 'copy_text' | 'feed_search' | 'devices' | 'idle_logout_min' | 'military_assets'
-  | 'filter_sets' | 'eei_text' | 'deep_analysis' | 'media_translate' | 'analysis_full';
+  | 'filter_sets' | 'eei_text' | 'deep_analysis' | 'media_translate' | 'analysis_full' | 'ai_dashboard';
 
 /** The plan whose limits apply: 'guest' when nobody is signed in (never stored on a profile). */
 export type EffectivePlan = PlanId | 'guest';
