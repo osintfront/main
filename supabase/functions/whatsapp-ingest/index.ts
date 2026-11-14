@@ -11,6 +11,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { inRegion } from "../_shared/region.ts";
 import { eventPlaceKeys, narrowPlaceKeys, placeKeys, samePlaceEvent } from "../_shared/samePlace.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { hebrewPlaceName } from "../_shared/placeHe.ts";
 import { CHEAP_MODELS, editReport, foreignShare, formatCategoryLessons, formatDescription, locationsForDb, mainCountry, mainPoint, translationsFor, type EditResult } from "../_shared/editor.ts";
 import { normalizeTypes, withEditorMain } from "../_shared/secondaryCats.ts";
 import { COUNTRY_RULE } from "../_shared/countryRule.ts";
@@ -903,6 +904,13 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
     ({ error } = await db.from("events").update(placePart).eq("id", eventId));
   }
   if (error) console.error("editor update failed", error.message);
+  // The editor's Hebrew place name, when the place database gave none (e.g. a Persian "تنگه هرمز"
+  // → "מצר הורמוז"). Its own write, after the places, so the place trigger never resets it.
+  const placeHe = hebrewPlaceName(edited);
+  if (placeHe) {
+    const { error: heErr } = await db.from("events").update({ location_name_he: placeHe }).eq("id", eventId).is("location_name_he", null);
+    if (heErr) console.error("place he update failed", heErr.message);
+  }
   // Deep analysis: the names this report mentions (links in the event window).
   try { await saveEventTerms(db, eventId, edited.terms ?? []); } catch { /* never stops the pipeline */ }
   // Places of several categories → one event per category (before it is shown).
