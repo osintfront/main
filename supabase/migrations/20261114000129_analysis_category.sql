@@ -20,7 +20,7 @@ on conflict (feature_key, plan_id) do update set enabled = excluded.enabled, not
 
 -- Without analysis_full, every translations.<lang>.full of an analysis is cut to its first
 -- paragraph (the opening lines up to the first one of 60+ characters; a date line alone is not
--- a paragraph) and flagged full_cut, so the site shows the upgrade window. The cut happens here,
+-- a paragraph; lines, since translations often keep one line per paragraph) and flagged full_cut, so the site shows the upgrade window. The cut happens here,
 -- in the database, so the rest never reaches a Free browser.
 create or replace function public.analysis_gate(p_tr jsonb, p_slug text) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
@@ -36,10 +36,10 @@ begin
   for k, v in select * from jsonb_each(p_tr) loop
     if jsonb_typeof(v) = 'object' and jsonb_typeof(v -> 'full') = 'string' then
       with parts as (
-        select btrim(p) p, n from regexp_split_to_table(v ->> 'full', '\n\s*\n') with ordinality t(p, n) where btrim(p) <> ''
+        select btrim(p) p, n from regexp_split_to_table(v ->> 'full', '\n') with ordinality t(p, n) where btrim(p) <> ''
       )
-      select string_agg(p, E'\n\n' order by n) into cut from parts
-      where n <= coalesce((select min(n) from parts where length(p) >= 60), (select max(n) from parts));
+      select string_agg(p, E'\n' order by n) into cut from parts
+      where n <= coalesce((select min(n) from parts where length(p) >= 60), (select min(n) from parts));
       out_ := jsonb_set(out_, array[k], (v - 'full') || jsonb_build_object('full', coalesce(cut, ''), 'full_cut', true));
     end if;
   end loop;
