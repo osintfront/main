@@ -20,6 +20,7 @@ const SHOTS = process.env.ASK_QA_SHOTS || require('os').tmpdir();
 const SB = 'https://fake.supabase.co';
 const PORT = 4174 + Math.floor(Math.random() * 500);
 const HE = /[֐-׿]/;
+let saves = 0;
 const en = LANG === 'en';
 fs.mkdirSync(SHOTS, { recursive: true });
 
@@ -577,7 +578,8 @@ const T = en
       const sendQ = async (q) => { await input.fill(q); await page.locator('[data-ask-action="send"]').click(); };
       const save = async (action) => {
         const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.locator(`[data-dash-action="${action}"]`).click()]);
-        const file = path.join(SHOTS, `${LANG}-${DEVICE}-${dl.suggestedFilename()}`);
+        saves = (saves || 0) + 1;
+        const file = path.join(SHOTS, `${LANG}-${DEVICE}-${saves}-${dl.suggestedFilename()}`);
         await dl.saveAs(file);
         return { name: dl.suggestedFilename(), buf: fs.readFileSync(file) };
       };
