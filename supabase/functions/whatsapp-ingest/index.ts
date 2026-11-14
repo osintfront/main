@@ -309,6 +309,10 @@ const CLASSIFY_TOOL = {
         type: "boolean",
         description: "true when the message sums up incidents that happened EARLIER, not now: a daily/weekly roundup, a tally or list of yesterday's strikes, 'summary of the day', 'over the past 24 hours…'. A report of one incident happening now = false.",
       },
+      is_analysis: {
+        type: "boolean",
+        description: "true when the message is an analysis or assessment of military activity rather than a report of one incident: flight paths / routes of drones or aircraft, ISR or reconnaissance patterns, flight-tracking tables (IntelSky, ADS-B), intelligence assessments, expected next moves. Such a message is an event (military-activity), never not_event.",
+      },
       reason: { type: "string", description: "Max 8 words, telegraphic" },
     },
     required: ["decision", "reason"],
@@ -367,6 +371,7 @@ Rules:
 - Gunfire, automatic fire (ירי סריקה), light-weapons fire: shooting-gunfire (small-arms fire).
 - Artillery, mortar or tank shelling (قصف مدفعي, مدفعية, هاون, قذائف, tank fire at a place): artillery-shelling — not airstrike (airstrike = aircraft / drones dropping or firing).
 - People killed (not a targeted killing of a specific person): killed. Wounded only: the kind of the attack (airstrike, shooting-gunfire…). No kind of attack known: killed, or wounded when nobody died.
+- Analyses and assessments of military activity (drone / aircraft flight paths, reconnaissance or ISR patterns, flight-tracking tables, intelligence assessments of what the army is doing or will do) ARE events: decision=event, category military-activity (or the fitting kind), is_analysis=true, location_name = the country or region it covers. Never not_event.
 - If torn between event and not_event, choose uncertain — never not_event.${CATEGORY_RULES}
 Examples:
 - "מפקד גזרת דרום אל-ליטאני, תת-אלוף X: המשך התקיפות של צה\"ל מדגיש את הצורך בפעולה ערבית" -> event, statements
@@ -378,6 +383,7 @@ Examples:
 - "תאונת דרכים בכביש 6" / "מחירי הדלק עולים מחר" / "מבצע 1+1 על פיצות" -> off_topic
 - "בוקר טוב לכולם, מי שרוצה להצטרף לקבוצה שישלח לי הודעה" -> not_event
 - "למי שזה רלוונטי, לפנות אליי בפרטי" -> not_event
+- "تحليل للمسارات التي سلكتها المسيرات الإسرائيلية اليوم: مسح استخباراتي فوق الضاحية والجنوب والبقاع" -> event, military-activity, is_analysis=true
 - uncertain: when you are not sure it is an event or which category fits.
 - duplicate: if one of the CANDIDATES (recent events, possibly from other channels and in another language) reports the same incident (same place, same action), even worded differently or with slightly different numbers. A different incident in the same area, or a new follow-up incident, is NOT a duplicate.
 - For a duplicate, set adds_new_info=false unless it adds concrete facts; then put only those facts in new_info.
@@ -494,6 +500,8 @@ function overlap(a: Set<string>, b: Set<string>): number {
 /** The same report again within the last hour (repost / forward / another channel copying it):
  *  merged as a source without asking the AI. */
 const SAME_TEXT = 0.55;
+/** A copy with extra words around the same sentence is at most this many times longer. */
+const CONTAIN_RATIO = 3;
 /** Channel signature only (@handle, WhatsApp/Telegram links, join-us lines): not news text. */
 function stripBoiler(t: string): string {
   return String(t ?? "")
@@ -516,7 +524,11 @@ function obviousDuplicate(text: string, sentAt: Date, pool: any[]): any | null {
     let shared = 0;
     for (const w of mine) if (theirs.has(w)) shared++;
     const small = Math.min(mine.size, theirs.size);
-    const contain = small >= 6 ? shared / small : 0;
+    const big = Math.max(mine.size, theirs.size);
+    // Containment only between copies of about the same length (the boilerplate is already
+    // stripped): a 7-word "artillery on Wadi Zabqin" is not "contained" in a 600-word
+    // analysis that happens to mention artillery and south Lebanon.
+    const contain = small >= 6 && big <= small * CONTAIN_RATIO ? shared / small : 0;
     const score = Math.max(overlap(mine, theirs), contain >= 0.8 ? SAME_TEXT : 0);
     if (score > bestScore) [best, bestScore] = [e, score];
   }
@@ -634,6 +646,13 @@ async function processOne(m: InMsg) {
   const c = same
     ? { decision: "duplicate", duplicate_of: same.id, adds_new_info: false, reason: "same text as an event from the last hour" } as any
     : (await cachedDecision(text)) ?? await classify({ ...m, text, sent_at: sentIso }, candidates ?? []);
+  // An analysis of military activity (flight paths, ISR, assessments) is news the owner wants
+  // published, even when the classifier calls it "commentary, not an event".
+  const analysis = c.is_analysis === true && !same;
+  if (analysis && (c.decision === "not_event" || c.decision === "off_topic")) {
+    c.decision = "event";
+    c.category_slug ||= "military-activity";
+  }
   const log = async (decision: string, event_id: string | null) =>
     db.from("whatsapp_ingest_log").upsert(
       { msg_key: key, chat_name: m.chat, sender: clip(m.sender, 200), sent_at: sentIso, message_text: text, decision, event_id, reason: clip(c.reason, 500), tg_group: m.group_id ?? null },
@@ -677,11 +696,13 @@ async function processOne(m: InMsg) {
   }
   // A summary of earlier incidents ("yesterday's strikes"): its own event with the full text,
   // never merged into a current incident and never pinned on the map (ai_suggestions.no_map).
-  const summary = c.is_summary === true && !same;
+  // An analysis of military activity is handled the same way: its own event in the feed,
+  // never merged into one of the incidents it mentions.
+  const summary = (c.is_summary === true || analysis) && !same;
   if (summary && c.decision === "duplicate") {
     c.decision = c.category_slug ? "event" : "uncertain";
     c.duplicate_of = undefined;
-    c.reason = `summary of earlier incidents — ${c.reason ?? ""}`;
+    c.reason = `${analysis ? "analysis of military activity" : "summary of earlier incidents"} — ${c.reason ?? ""}`;
   }
   // Outside Israel / the Middle East (Ukraine, Europe, world markets…): not for this map.
   // Same place within the hour (other channels, other wording): one event, more sources.
@@ -755,7 +776,7 @@ async function processOne(m: InMsg) {
     occurred_at: sentIso,
     created_by: BOT_USER_ID,
     classification_confidence: confident ? 0.8 : 0.4,
-    ai_suggestions: { ...(summary ? { no_map: true, summary: true } : {}), source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}), ...(m.light ? { light: true } : {}), ...(c.location_name_en ? { place_en: clip(c.location_name_en, 120) } : {}) },
+    ai_suggestions: { ...(summary ? { no_map: true, summary: true } : {}), ...(analysis ? { analysis: true } : {}), source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}), ...(m.light ? { light: true } : {}), ...(c.location_name_en ? { place_en: clip(c.location_name_en, 120) } : {}) },
   };
   if (row.latitude == null || row.longitude == null) {
     row.latitude = null;
@@ -1048,6 +1069,38 @@ async function pollChannel(ch: any, dry: boolean, out: Record<string, unknown>[]
   }
 }
 
+/** Staff fix: run a few posts of one channel through the pipeline again (their old decision is
+ *  dropped first). Used after a rule change, e.g. a post wrongly skipped or wrongly merged. */
+async function reprocessTelegram(channel: string, ids: number[]) {
+  const name = channelName(channel);
+  if (!name) return [{ error: "invalid channel name" }];
+  const out: Record<string, unknown>[] = [];
+  for (const id of ids.filter((x) => Number.isInteger(x) && x > 0).slice(0, 10)) {
+    const { title, posts } = await fetchChannel(name, id + 1);
+    const p = posts.find((x) => x.id === id);
+    if (!p) {
+      out.push({ id, status: "not_found" });
+      continue;
+    }
+    await db.from("whatsapp_ingest_log").delete().eq("msg_key", `tg:${p.post}`);
+    const media: InMedia[] = [];
+    for (const [i, u] of p.photos.entries()) {
+      const img = await imageAsBase64(u);
+      if (img) media.push({ kind: p.photoKinds?.[i] ?? "image", mime: img.mime, data: img.data });
+    }
+    try {
+      out.push({ id, ...(await oneAtATime(() => processOne({
+        msg_id: p.post, platform: "telegram", url: p.url, chat: title || name,
+        sender: p.forwardedFrom ?? undefined, sent_at: p.date ?? new Date().toISOString(), text: p.text, media,
+        reply_to: p.replyTo ?? undefined,
+      }))) });
+    } catch (e) {
+      out.push({ id, status: "error", error: String((e as Error)?.message ?? e).slice(0, 300) });
+    }
+  }
+  return out;
+}
+
 let cronSecret: string | null = null;
 async function cronAuthorized(given: string) {
   if (cronSecret === null) {
@@ -1103,6 +1156,13 @@ Deno.serve(async (req) => {
   if (cronHeader) {
     if (!(await cronAuthorized(cronHeader))) return json({ error: "unauthorized" }, 401);
     const b = await req.json().catch(() => ({}));
+    if (b?.telegram_reprocess) {
+      const r = b.telegram_reprocess;
+      const results = await reprocessTelegram(String(r.channel ?? ""), Array.isArray(r.ids) ? r.ids.map(Number) : []);
+      // @ts-ignore EdgeRuntime is provided by Supabase
+      if (background.length) EdgeRuntime.waitUntil(Promise.allSettled(background.splice(0)));
+      return json({ ok: true, results });
+    }
     if (!b?.telegram_poll) return json({ error: "unknown job" }, 400);
     if (!ANTHROPIC_API_KEY && !b.dry) return json({ error: "no Anthropic API key configured" }, 500);
     const results = await pollTelegram(!!b.dry);
