@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { LayerSection } from './LayerSection';
+import { WithTip } from '@/components/common/InfoTip';
 import { useI18n } from '@/i18n';
 import { supabase } from '@/integrations/supabase/client';
 import { INFRA_TXT, airfieldPopup, clusterIconHtml, loadInfra, portPopup, type AirfieldClass, type AirfieldProps, type PortProps } from '@/lib/infra';
@@ -140,12 +141,14 @@ export function InfraLayersPanel({ s }: { s: InfraState }) {
   const row = (k: Toggle, label: string) => {
     const failed = k === 'ports' ? s.bad.ports : s.bad.airfields;
     return (
-      <label key={k} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+      <WithTip key={k} tip={`info.infra.${k}`}>
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input type="checkbox" className="size-4 accent-sky-600" data-infra-toggle={k} checked={s.on[k]} onChange={(e) => s.toggle(k, e.target.checked)} />
         <span className="grid size-4 place-items-center rounded-full text-[9px] text-white" style={{ background: COLORS[k] }} aria-hidden>{GLYPH[k]}</span>
         <span className="flex-1">{label}{s.guest ? ' 🔒' : ''}</span>
         {failed && s.on[k] ? <span className="text-[11px] text-amber-600">⚠️ {T.unavailable}</span> : null}
       </label>
+      </WithTip>
     );
   };
   return (

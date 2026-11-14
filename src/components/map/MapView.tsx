@@ -26,6 +26,7 @@ import { DEFAULT_CATEGORIES } from '@/data/categoryRegistry';
 import { placeKind } from '@/lib/placeKind';
 import { buildPopupContent } from './popupContent';
 import { IconButton } from '@/components/common/IconButton';
+import { WithTip } from '@/components/common/InfoTip';
 import { IntelLayers } from './IntelLayers';
 
 interface MapViewProps {
@@ -1303,8 +1304,8 @@ export function MapView({
       {stylesOpen ? (
         <div className="absolute start-14 top-3 z-[650] w-52 rounded-xl bg-white/95 p-1.5 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10" role="menu">
           {BASE_STYLES.map((id) => (
+            <WithTip key={id} tip={`info.style.${id}`} className="gap-0.5 pe-0.5">
             <button
-              key={id}
               type="button"
               role="menuitemradio"
               aria-checked={baseStyle === id}
@@ -1325,6 +1326,7 @@ export function MapView({
                 {styleFailed === id ? <span className="block text-[11px] font-normal text-amber-700 dark:text-amber-400">{t('map.styleFailed')}</span> : null}
               </span>
             </button>
+            </WithTip>
           ))}
           <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-slate-100 px-2.5 pt-2 pb-1.5 text-sm text-slate-700 dark:border-slate-800 dark:text-slate-200">
             <input

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import L from 'leaflet';
 import { Church, Flag, Waves } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { WithTip } from '@/components/common/InfoTip';
 
 export type ControlRegion = 'lebanon' | 'syria' | 'yemen' | 'gaza';
 export const CONTROL_REGIONS: ControlRegion[] = ['lebanon', 'syria', 'yemen', 'gaza'];
@@ -243,11 +244,13 @@ export function AreaLayersPanel({ s }: { s: AreaState }) {
   return (
     <>
       <section className="space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <WithTip tip="info.control">
         <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
           <input type="checkbox" className="size-4 accent-sky-600" checked={s.controlOn} onChange={(e) => s.setControlOn(e.target.checked)} />
           <Flag className="size-4 text-slate-500" aria-hidden />
           <span className="flex-1">{T.control}</span>
         </label>
+        </WithTip>
         {s.controlOn ? (
           <div className="space-y-1.5 ps-6 text-xs text-slate-600 dark:text-slate-300">
             <div className="flex flex-wrap gap-x-3 gap-y-1">
@@ -265,12 +268,14 @@ export function AreaLayersPanel({ s }: { s: AreaState }) {
         ) : null}
       </section>
       <section className="mt-3 space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <WithTip tip="info.sects">
         <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
           <input type="checkbox" className="size-4 accent-sky-600" checked={s.sectsOn} onChange={(e) => s.setSectsOn(e.target.checked)} />
           <Church className="size-4 text-slate-500" aria-hidden />
           <span className="flex-1">{T.sects}</span>
           {s.sectsOn ? <span className="text-[11px] font-normal text-slate-500">{s.shownPlaces.length} {T.places}</span> : null}
         </label>
+        </WithTip>
         {s.sectsOn ? (
           <div className="space-y-1.5 ps-6 text-xs text-slate-600 dark:text-slate-300">
             <div className="grid grid-cols-2 gap-x-2 gap-y-1">
@@ -287,12 +292,14 @@ export function AreaLayersPanel({ s }: { s: AreaState }) {
         ) : null}
       </section>
       <section className="mt-3 space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <WithTip tip="info.wadis">
         <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
           <input type="checkbox" className="size-4 accent-sky-600" checked={s.wadisOn} onChange={(e) => s.setWadisOn(e.target.checked)} />
           <Waves className="size-4 text-slate-500" aria-hidden />
           <span className="flex-1">{T.wadis}</span>
           {s.wadisOn && s.wadiCount ? <span className="text-[11px] font-normal text-slate-500">{s.wadiCount} {T.courses}</span> : null}
         </label>
+        </WithTip>
         {s.wadisOn ? <p className="ps-6 text-[11px] text-slate-500">{T.wadisSource}</p> : null}
       </section>
     </>

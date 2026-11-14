@@ -14,6 +14,8 @@ import { MilitaryLayersGroup, MilitaryLegendItems, useMilitaryLayers } from './M
 import { ChokepointPanel } from './ChokepointPanel';
 import { CHOKEPOINT_TXT, fetchSilentVessels, loadSanctions, sanctionOf, type Sanction } from '@/lib/ships';
 import { supabase } from '@/integrations/supabase/client';
+import { WithTip } from '@/components/common/InfoTip';
+import type { InfoTipKey } from '@/lib/infoTips';
 import {
   EMERGENCY_SQUAWKS, SAT_SOURCES, SHIP_COLORS, SHIP_KINDS, fetchPlanes, fetchVessels, satDays, satKey, satTiles, shipFlag, shipKind,
   type Plane, type SatDay, type SatSource, type ShipKind, type Vessel,
@@ -515,14 +517,18 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
   // ── Panel ──
   const box = 'rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900';
-  const sectionHead = (Icon: typeof Ship, label: string, on: boolean, set: (v: boolean) => void, extra?: string, dim = false, locked = false) => (
+  const sectionHead = (Icon: typeof Ship, label: string, on: boolean, set: (v: boolean) => void, extra?: string, dim = false, locked = false, tip?: InfoTipKey) => {
+    const head = (
     <label className={`flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100${dim ? ' opacity-50' : ''}`}>
       <input type="checkbox" className="size-4 accent-sky-600" checked={on} onChange={(e) => set(e.target.checked)} />
       <Icon className="size-4 text-slate-500" aria-hidden />
       <span className="flex-1">{label}{locked ? ' 🔒' : ''}</span>
       {extra ? <span className="text-[11px] font-normal text-slate-500">{extra}</span> : null}
     </label>
-  );
+    );
+    // The (i) beside the header, never inside the label (a tap on it must not toggle the layer).
+    return tip ? <WithTip tip={tip}>{head}</WithTip> : head;
+  };
   // Ships and aircraft share one plan feature: a lock on both headers when the plan lacks it.
   const shipsLocked = !hasFeature(undefined, 'ships_aircraft');
   const dayLabel = (d: SatDay) => `${d.date}${d.cloud !== null ? ` · ${T.cloud} ${d.cloud}%` : ''}`;
@@ -576,8 +582,9 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
           )
         : null}
       {open ? (
+        // Phones: room at the bottom so the last rows (and their (i)) scroll clear of the OFI button.
         <div
-          className="ofm-scroll absolute start-14 top-3 z-[650] max-h-[calc(100%-24px)] w-80 max-w-[calc(100vw-72px)] overflow-y-auto rounded-xl bg-white/95 p-3 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10"
+          className="ofm-scroll absolute start-14 top-3 z-[650] max-h-[calc(100%-24px)] w-80 max-w-[calc(100vw-72px)] overflow-y-auto rounded-xl bg-white/95 p-3 max-sm:pb-20 shadow-xl ring-1 ring-slate-900/10 backdrop-blur dark:bg-slate-900/95 dark:ring-white/10"
           dir={dir}
           ref={(el) => {
             if (el) {
@@ -595,9 +602,10 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Satellite */}
           <section className="space-y-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-            {sectionHead(Satellite, T.sat, satOn, (v) => void toggleSat(v), satExtra, !profile)}
+            {sectionHead(Satellite, T.sat, satOn, (v) => void toggleSat(v), satExtra, !profile, false, 'info.sat')}
             {satOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
+                <WithTip tip="info.satSource">
                 <select className={`${box} w-full`} value={src} onChange={(e) => setSrc(e.target.value as SatSource)} aria-label={T.source}>
                   {SAT_SOURCES.map((s) => (
                     <option key={s} value={s} disabled={s === 's2' && key !== null && !key.sentinel2}>
@@ -605,6 +613,8 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
                     </option>
                   ))}
                 </select>
+                </WithTip>
+                <WithTip tip="info.satCompare">
                 <div className="flex gap-1">
                   {(['single', 'compare'] as const).map((m) => (
                     <button
@@ -617,6 +627,7 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
                     </button>
                   ))}
                 </div>
+                </WithTip>
                 {satBusy ? <p>{T.loading}</p> : satErr ? <p className="text-red-600">{satErr}</p> : !days.length ? <p>{T.none}</p> : (
                   <div className="space-y-1.5">
                     {mode === 'compare' ? (
@@ -641,10 +652,12 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
                   <RefreshCw className="size-3.5" aria-hidden />
                   {T.refresh}
                 </button>
+                <WithTip tip="info.fires">
                 <label className="flex cursor-pointer items-center gap-2 pt-1">
                   <input type="checkbox" className="size-4 accent-orange-600" checked={firesOn} onChange={(e) => onFires(e.target.checked)} />
                   {T.fires}
                 </label>
+                </WithTip>
               </div>
             ) : null}
           </section>
@@ -655,16 +668,21 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Ships */}
           <section className="space-y-2 border-b border-slate-100 py-3 dark:border-slate-800">
-            {sectionHead(Ship, T.ships, shipsOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setShipsOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), shipsOn ? `${shownShips.length} ${T.shown}` : undefined, false, shipsLocked)}
+            {sectionHead(Ship, T.ships, shipsOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setShipsOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), shipsOn ? `${shownShips.length} ${T.shown}` : undefined, false, shipsLocked, 'info.ships')}
             {shipsOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {shipErr ? <p className="text-red-600">{shipErr}</p> : !vessels.length ? <p>{T.noShips}</p> : null}
                 <ChokepointPanel map={map} lang={lang} onMap={shownShips.length} sanctioned={sanctionedCount}
                   silent={silentShips ? silentShips.length : null} regionName={regionName} onShow={() => setShipsOn(true)} />
+                <WithTip tip="info.shipsSilent">
                 <label className="flex cursor-pointer items-center gap-1.5">
                   <input type="checkbox" className="size-3.5" data-show-silent checked={showSilent} onChange={(e) => setShowSilent(e.target.checked)} />
                   {SX.showSilent}
                 </label>
+                </WithTip>
+                <WithTip tip="info.shipKinds">
+                  <span className="font-semibold">{T.kinds}</span>
+                </WithTip>
                 <div className="grid grid-cols-2 gap-x-2 gap-y-1">
                   {SHIP_KINDS.map((k) => (
                     <label key={k} className="flex cursor-pointer items-center gap-1.5">
@@ -710,22 +728,28 @@ export function IntelLayers({ map, open, onClose, firesOn, onFires, onFiresDate 
 
           {/* Aircraft */}
           <section className="space-y-2 pt-3">
-            {sectionHead(PlaneIcon, T.planes, planesOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setPlanesOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), planesOn ? `${shownPlanes.length} ${T.shown}` : undefined, false, shipsLocked)}
+            {sectionHead(PlaneIcon, T.planes, planesOn, (v) => (!v || hasFeature(undefined, 'ships_aircraft') ? setPlanesOn(v) : openGate(profile ? 'upgrade' : 'signup', 'ships_aircraft')), planesOn ? `${shownPlanes.length} ${T.shown}` : undefined, false, shipsLocked, 'info.planes')}
             {planesOn ? (
               <div className="space-y-2 ps-6 text-xs text-slate-600 dark:text-slate-300">
                 {planeErr ? <p className="text-red-600">{planeErr}</p> : null}
+                <WithTip tip="info.planesMil">
                 <label className="flex cursor-pointer items-center gap-1.5">
                   <input type="checkbox" className="size-3.5" checked={milOnly} onChange={(e) => setMilOnly(e.target.checked)} />
                   {T.milOnly}
                 </label>
+                </WithTip>
+                <WithTip tip="info.planesMilWorld">
                 <label className="flex cursor-pointer items-center gap-1.5">
                   <input type="checkbox" className="size-3.5" checked={milWorld} onChange={(e) => setMilWorld(e.target.checked)} />
                   {T.milWorld}
                 </label>
+                </WithTip>
+                <WithTip tip="info.planesEmergency">
                 <label className="flex cursor-pointer items-center gap-1.5">
                   <input type="checkbox" className="size-3.5" checked={emergency} onChange={(e) => setEmergency(e.target.checked)} />
                   {T.emergency}
                 </label>
+                </WithTip>
                 <label className="block">
                   {T.alt}
                   <select className={`${box} mt-0.5 w-full`} value={alt} onChange={(e) => setAlt(e.target.value as AltBand)}>
