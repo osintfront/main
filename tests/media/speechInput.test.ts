@@ -152,3 +152,17 @@ test('review fixes: speech text is never lost to timing', () => {
   assert.equal(past.state, 'ok');
   assert.equal(past.speech, 'said after the end');
 });
+
+test('Whisper (Groq) answer → the same cleaning as Gemini', async () => {
+  const { whisperToRaw, SPEECH_LIMITS: L } = await import('../../api/_lib/speechInput.ts');
+  const body = { text: ' مرحبا بكم في الأخبار ', language: 'arabic', duration: 4.2, segments: [{ start: 0, end: 2, text: ' مرحبا بكم ' }, { start: 2, end: 4.2, text: 'في الأخبار' }] };
+  const raw = whisperToRaw(body);
+  assert.deepEqual(raw, { segments: [{ start: 0, end: 2, text: 'مرحبا بكم' }, { start: 2, end: 4.2, text: 'في الأخبار' }], speech: 'مرحبا بكم في الأخبار', language: 'arabic', on_screen: [] });
+  const clean = cleanSpeech(raw, 4.2)!;
+  assert.equal(clean.state, 'ok');
+  assert.equal(clean.lang, 'ar');
+  assert.equal(clean.segments.length, 2);
+  assert.equal(whisperToRaw(null), null);
+  assert.equal(whisperToRaw({ error: { message: 'x' } }), null);
+  assert.equal(L.whisperBytes, 25 * 1024 * 1024);
+});

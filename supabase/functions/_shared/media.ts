@@ -79,7 +79,8 @@ export async function speechFor(
   const note = routeNote({ status, body, error: null, waitedMs: Date.now() - t0 });
   const b = body as any;
   if (out !== "failed" && b?.usage && typeof b?.model === "string") {
-    logUsage(purpose, `free:gemini:${b.model}`, { input_tokens: Number(b.usage.input) || 0, output_tokens: Number(b.usage.output) || 0 });
+    const provider = b.provider === "groq" ? "groq" : "gemini";
+    logUsage(purpose, `free:${provider}:${b.model}`, { input_tokens: Number(b.usage.input) || 0, output_tokens: Number(b.usage.output) || 0 });
   }
   return { out, note };
 }
