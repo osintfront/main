@@ -9,6 +9,29 @@ export function runAsReader<T>(uid: string | null, fn: () => Promise<T>): Promis
   return uid ? reader.run(uid, fn) : fn();
 }
 
+/** Usage rows of a call whose payer is decided after it (the ask plan step: a clarify turn is free). */
+const held = new AsyncLocalStorage<Record<string, unknown>[]>();
+export interface HeldUsage<T> { value: T; flush(uid: string | null, purpose?: string): void }
+/** Usage rows logged inside fn are kept, not written; flush writes them once with this user (and
+ *  purpose, when given). fn throws → they are written with no user and the error is rethrown.
+ *  A hold wins over runAsReader. */
+export async function holdUsage<T>(fn: () => Promise<T>): Promise<HeldUsage<T>> {
+  const rows: Record<string, unknown>[] = [];
+  let done = false;
+  const flush = (uid: string | null, purpose?: string) => {
+    if (done) return;
+    done = true;
+    for (const r of rows) writeRow({ ...r, user_id: uid, ...(purpose ? { purpose } : {}) });
+  };
+  try {
+    const value = await held.run(rows, fn);
+    return { value, flush };
+  } catch (e) {
+    flush(null);
+    throw e;
+  }
+}
+
 /** USD per million tokens [input, output]. Cache reads cost 10% of input, cache writes 125%. */
 const PRICES: Record<string, [number, number]> = {
   "free:": [0, 0], // free providers (Groq, Gemini, Cloudflare, Ollama, OpenRouter free)
@@ -63,6 +86,13 @@ export function logUsage(purpose: string, model: string, usage: Usage | undefine
     event_id: eventId ?? null,
     user_id: reader.getStore() ?? null,
   };
+  const hold = held.getStore();
+  if (hold) hold.push(row);
+  else writeRow(row);
+}
+
+function writeRow(row: Record<string, unknown>) {
+  if (!sink) return;
   // Fire and forget: logging must never slow down or break the pipeline.
   void sink.db.from("ai_usage").insert(row).then(({ error }) => {
     if (error) console.warn("ai_usage insert failed", error.message);

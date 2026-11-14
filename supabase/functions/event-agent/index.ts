@@ -11,8 +11,13 @@
 //   {action:"compose", text}     staff (event.create / event.edit.any) — "quick compose" on the report
 //                                form: free text in any language → title, summary, category, place…
 //                                Nothing is saved; the form is filled for the person to check.
-//   {action:"ask", question, history?, prev_ids?}  signed-in users — "ask the map": a free-text question about our events
-//                                → answer + event ids (shown on the map). 40 questions / hour / user.
+//   {action:"ask", question, history?, prev_ids?, lang?, clarify_reply?}  signed-in users — "ask the map": a free-text
+//                                question about our events → answer + event ids (shown on the map). 40 questions / hour / user.
+//                                With lang (new clients): a count question → {mode:"stats", dashboard_id, cached} (a statistics
+//                                dashboard built in the background; Max / Intel / staff, 3 credits) or {mode:"too_many"};
+//                                an unclear one → {mode:"clarify_stats"} (free); Pro → the text answer + upgrade_hint.
+//   {action:"dashboard_status", id}  the dashboard's owner — poll a build: status, stage, progress, result.
+//   {action:"dashboard_period", dashboard_id, period}  Max / Intel / staff — rebuild the same metric for 24h / 48h / 7d / 30d.
 //   {action:"eei_parse", text}   Pro / Max (or cron secret) — free-text EEI (צי"ח): split the pasted list into
 //                                theatres and topics (Haiku; cached by text; 5 splits / day / user).
 //   {action:"eei_save", raw_text, list}  Pro / Max — save the (edited) list; yesterday's is kept for restore;
@@ -42,6 +47,8 @@ import { videoForThumb } from "../_shared/videoOnDemand.ts";
 import { claudeUsage } from "../_shared/claudeUsage.ts";
 import { askMap } from "../_shared/ask.ts";
 import { cleanHistory, cleanIds } from "../_shared/askInput.ts";
+import { cleanClarifyReply, cleanLang, cleanPreset } from "../_shared/askStatsInput.ts";
+import { dashboardStatus, rebuildPeriod, startDashboard } from "../_shared/askStats.ts";
 import { eeiBudget, eeiSpentToday, parseEei, saveEei, tagTheatre } from "../_shared/eei.ts";
 import { LIMITS as EEI_LIMITS, parseCacheKey, runParse } from "../_shared/eeiInput.ts";
 import { afterEdit } from "../_shared/afterEdit.ts";
@@ -330,6 +337,33 @@ async function quotaGate(uid: string | null, kind: "ask" | "expand" = "expand"):
   if (q.budget_usd != null && Number(q.spent_today_usd) >= Number(q.budget_usd)) return json({ error: "budget" }, 429);
   if (q.limit != null && Number(q.used) >= Number(q.limit)) return json({ error: "quota", limit: q.limit, used: q.used }, 429);
   return null;
+}
+
+/** "Ask the map" callers (ask, dashboard_status, dashboard_period): signed in and active; 40 an hour
+ *  (not for polling); the AI quota for ask only (a finished dashboard stays readable). The cron secret
+ *  is staff with no user. canDashboard = the plan has ai_dashboard (or staff). */
+async function askCaller(req: Request, action: "ask" | "dashboard_status" | "dashboard_period"): Promise<{ uid: string | null; staff: boolean; canDashboard: boolean } | Response> {
+  if (await cronOk(req)) return { uid: null, staff: true, canDashboard: true };
+  const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: req.headers.get("authorization") ?? "" } },
+  });
+  const { data: who } = await asUser.auth.getUser();
+  const uid = who?.user?.id ?? null;
+  if (!uid) return json({ error: "sign in required" }, 401);
+  const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
+  if (prof?.status !== "active") return json({ error: "unauthorized" }, 401);
+  if (action !== "dashboard_status") {
+    const { count } = await db.from("ai_search_log").select("id", { count: "exact", head: true })
+      .eq("user_id", uid).gte("at", new Date(Date.now() - 3600_000).toISOString());
+    if ((count ?? 0) >= 40) return json({ error: "rate_limited" }, 429);
+  }
+  if (action === "ask") {
+    const blocked = await quotaGate(uid, "ask");
+    if (blocked) return blocked;
+  }
+  const { data: allowed } = await db.rpc("ai_dashboard_allowed", { p_uid: uid });
+  return { uid, staff: allowed?.staff === true, canDashboard: allowed?.enabled === true };
 }
 
 async function expand(id: string, gate: () => Promise<Response | null> = async () => null) {
@@ -862,31 +896,48 @@ async function handle(req: Request): Promise<Response> {
   if (action === "ask") {
     const question = String(body?.question ?? "").trim().slice(0, 500);
     if (question.length < 3) return json({ error: "question too short" }, 400);
-    const auth = req.headers.get("authorization") ?? "";
-    const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      auth: { persistSession: false },
-      global: { headers: { Authorization: auth } },
-    });
-    // Signed-in active users (40 / hour); the cron secret too (internal checks).
-    let uid: string | null = null;
-    if (!(await cronOk(req))) {
-      const { data: who } = await asUser.auth.getUser();
-      uid = who?.user?.id ?? null;
-      if (!uid) return json({ error: "sign in required" }, 401);
-      const { data: prof } = await db.from("profiles").select("status").eq("id", uid).maybeSingle();
-      if (prof?.status !== "active") return json({ error: "unauthorized" }, 401);
-      const { count } = await db.from("ai_search_log").select("id", { count: "exact", head: true })
-        .eq("user_id", uid).gte("at", new Date(Date.now() - 3600_000).toISOString());
-      if ((count ?? 0) >= 40) return json({ error: "rate_limited" }, 429);
-      const blocked = await quotaGate(uid, "ask");
-      if (blocked) return blocked;
-    }
+    const who = await askCaller(req, "ask");
+    if (who instanceof Response) return who;
     try {
       // A follow-up question carries the conversation so far (cleaned: it comes from the browser).
       const ctx = { history: cleanHistory(body?.history), prevIds: cleanIds(body?.prev_ids) };
-      const r = await runAsReader(uid, () => askMap(db, question, ctx));
-      await db.from("ai_search_log").insert({ user_id: uid, question, results: r.ids.length });
-      return json({ ok: true, ...r });
+      const out = await askMap(db, question, ctx, {
+        uid: who.uid, lang: cleanLang(body?.lang), canDashboard: who.canDashboard, clarify: cleanClarifyReply(body?.clarify_reply, question),
+      });
+      if (out.kind === "text") {
+        await db.from("ai_search_log").insert({ user_id: who.uid, question, results: out.result.ids.length });
+        return json({ ok: true, ...out.result, ...(out.upgradeHint ? { upgrade_hint: true } : {}) });
+      }
+      if (out.kind === "clarify") {
+        await db.from("ai_search_log").insert({ user_id: who.uid, question, results: 0 });
+        return json({ ok: true, mode: "clarify_stats" });
+      }
+      const r = await startDashboard(db, { uid: who.uid, staff: who.staff, question: out.question, lang: out.lang, metric: out.metric, period: out.period });
+      await db.from("ai_search_log").insert({ user_id: who.uid, question, results: 0 });
+      return json(r.body, r.status);
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
+    }
+  }
+  if (action === "dashboard_status") {
+    const who = await askCaller(req, "dashboard_status");
+    if (who instanceof Response) return who;
+    const did = String(body?.id ?? "");
+    if (!UUID.test(did)) return json({ error: "bad id" }, 400);
+    const r = await dashboardStatus(db, who.uid, did);
+    return json(r.body, r.status);
+  }
+  if (action === "dashboard_period") {
+    const who = await askCaller(req, "dashboard_period");
+    if (who instanceof Response) return who;
+    if (!who.canDashboard) return json({ error: "not_in_plan" }, 403);
+    const did = String(body?.dashboard_id ?? "");
+    const preset = cleanPreset(body?.period);
+    if (!UUID.test(did) || !preset) return json({ error: "bad request" }, 400);
+    try {
+      const r = await rebuildPeriod(db, { uid: who.uid, staff: who.staff, id: did, preset });
+      await db.from("ai_search_log").insert({ user_id: who.uid, question: `dashboard_period:${preset}`, results: 0 });
+      return json(r.body, r.status);
     } catch (e) {
       return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 502);
     }
