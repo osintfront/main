@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { hasFeature } from '@/lib/plans';
 import { openGate } from '@/components/plans/GateDialog';
 import { LayerSection } from './LayerSection';
+import { WithTip } from '@/components/common/InfoTip';
 import { useI18n } from '@/i18n';
 import { supabase } from '@/integrations/supabase/client';
 import { clusterIconHtml, isNotBuilt, loadInfra } from '@/lib/infra';
@@ -142,12 +143,14 @@ export function MilitaryLayersGroup({ s }: { s: MilState }) {
     const st = k === 'minor' ? s.status.minor : s.status.main;
     return (
       <Fragment key={k}>
+        <WithTip tip={`info.mil.${k}`}>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
           <input type="checkbox" className="size-4 accent-sky-600" data-mil-toggle={k} checked={s.on[k]} onChange={(e) => s.toggle(k, e.target.checked)} />
           <Swatch k={k} />
           <span className="flex-1">{T[k]}{s.guest ? ' 🔒' : ''}</span>
           {st && s.on[k] ? <span className="text-[11px] text-amber-600">⚠️ {st === 'notBuilt' ? T.notBuilt : T.unavailable}</span> : null}
         </label>
+        </WithTip>
         {k === 'minor' && s.on.minor && !s.zoomOk && !st
           ? <p data-mil-zoom-hint className="ps-6 text-[11px] text-slate-500 dark:text-slate-400">{T.zoomIn}</p> : null}
       </Fragment>
@@ -157,11 +160,13 @@ export function MilitaryLayersGroup({ s }: { s: MilState }) {
     <LayerSection id="military" icon={<Shield className="size-4 text-slate-500" aria-hidden />} title={T.title} info={t('info.military')}
       active={KINDS.filter((k) => s.on[k]).length + (s.foreignOnly ? 1 : 0)} locked={s.guest || !hasFeature(undefined, 'military_assets')}>
       {(['base', 'naval', 'range', 'minor'] as MilKind[]).map(row)}
+      <WithTip tip="info.mil.foreignOnly">
       <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
         <input type="checkbox" className="size-4 accent-amber-500" data-mil-foreign checked={s.foreignOnly} onChange={(e) => s.setForeignOnly(e.target.checked)} />
         <span className="size-4 shrink-0 rounded-[3px] bg-slate-200 dark:bg-slate-700" aria-hidden style={{ boxShadow: `0 0 0 2px ${FOREIGN_RING}` }} />
         <span className="flex-1">{T.foreignOnly}{s.guest ? ' 🔒' : ''}</span>
       </label>
+      </WithTip>
     </LayerSection>
   );
 }
