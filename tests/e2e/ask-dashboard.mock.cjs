@@ -178,7 +178,14 @@ async function openFor(browser, key, out) {
   const st = makeState(u);
   const phone = DEVICE === 'phone';
   const ctx = await browser.newContext({ viewport: phone ? { width: 390, height: 844 } : { width: 1280, height: 800 }, hasTouch: phone, isMobile: phone, acceptDownloads: true });
-  await ctx.addInitScript(([s, lang]) => { localStorage.setItem('ofm.auth', JSON.stringify(s)); localStorage.setItem('ofm.lang', lang); }, [session, LANG]);
+  await ctx.addInitScript(([s, lang]) => {
+    localStorage.setItem('ofm.auth', JSON.stringify(s)); localStorage.setItem('ofm.lang', lang);
+    window.__printed = 0; window.print = () => { window.__printed++; };
+    window.__exports = [];
+    new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.hasAttribute('data-dash-export')) {
+      requestAnimationFrame(() => window.__exports.push({ text: n.innerText, bg: getComputedStyle(n.firstElementChild || n).backgroundColor, theme: n.getAttribute('data-dash-theme'), view: n.querySelector('svg[data-view]')?.getAttribute('data-view') }));
+    } }).observe(document, { childList: true, subtree: true });
+  }, [session, LANG]);
   const page = await ctx.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|WebSocket|net::ERR|ERR_FAILED|Unexpected token '<'/.test(m.text())) errors.push(m.text().slice(0, 300)); });
@@ -551,6 +558,81 @@ const T = en
       allErrors.push(...errors);
       await ctx.close();
     }
+
+    // ── max: PDF and JPEG (checks 18, 19, 21, 22, 23) ──
+    {
+      const { ctx, page, errors } = await openFor(browser, 'max', out);
+      const input = page.locator('[data-ask-panel] form:not([data-ask-summary]) input');
+      const sendQ = async (q) => { await input.fill(q); await page.locator('[data-ask-action="send"]').click(); };
+      const save = async (action) => {
+        const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.locator(`[data-dash-action="${action}"]`).click()]);
+        const file = path.join(SHOTS, `${LANG}-${DEVICE}-${dl.suggestedFilename()}`);
+        await dl.saveAs(file);
+        return { name: dl.suggestedFilename(), buf: fs.readFileSync(file) };
+      };
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+      await sendQ(T.count);
+      await page.waitForSelector('[data-dash-sheet] [data-country]', { timeout: 20000 });
+      expect('c23_libsLazy', served.some((u) => /jspdf|dashboardExport|html-to-image/i.test(u)), !served.some((u) => /jspdf|dashboardExport|html-to-image/i.test(u)));
+      // 18. JPEG
+      const jpg = await save('jpeg');
+      const sof = (() => { const b = jpg.buf; for (let i = 2; i < b.length - 9; i++) if (b[i] === 0xff && (b[i + 1] === 0xc0 || b[i + 1] === 0xc2)) return b.readUInt16BE(i + 7); return 0; })();
+      expect('c18_jpegName', jpg.name, new RegExp(`^osintfront-dashboard-[^/]+-${day}\\.jpg$`).test(jpg.name));
+      expect('c18_jpegBytes', jpg.buf.slice(0, 3).toString('hex'), jpg.buf.slice(0, 3).toString('hex') === 'ffd8ff');
+      expect('c18_jpegWidth', sof, sof >= 1080);
+      // Not a blank page: a white 2,160 px JPEG is ~28 KB; the drawn dashboard is several times that.
+      expect('c18_jpegNotBlank', jpg.buf.length, jpg.buf.length > 90000);
+      // SVG colours survive the copy: the mini map's land (left part of the map box) is not black.
+      const px = await page.evaluate(async (b64) => {
+        const img = new Image(); img.src = `data:image/jpeg;base64,${b64}`; await img.decode();
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+        const pts = [[0.08, 0.3], [0.12, 0.35], [0.2, 0.4]].map(([fx, fy]) => x.getImageData(Math.round(img.width * fx), Math.round(img.height * fy), 1, 1).data);
+        return pts.map((d) => d[0] + d[1] + d[2]);
+      }, jpg.buf.toString('base64'));
+      expect('c18_mapNotBlack', px, px.every((v) => v > 300));
+      // 19. PDF
+      const pdf = await save('pdf');
+      const ptxt = pdf.buf.toString('latin1');
+      const pages = (ptxt.match(/\/Type \/Page\b(?!s)/g) || []).length;
+      const uris = (ptxt.match(/\/URI \(https:\/\/osintfront\.com\/e\//g) || []).length;
+      const mb = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/.exec(ptxt);
+      expect('c19_pdfName', pdf.name, new RegExp(`^osintfront-dashboard-[^/]+-${day}\\.pdf$`).test(pdf.name));
+      expect('c19_pdfHead', ptxt.slice(0, 5), ptxt.startsWith('%PDF-'));
+      expect('c19_mediaBox', mb && `${Math.round(mb[1])}x${Math.round(mb[2])}`, !!mb && Math.round(mb[1]) === 595 && Math.round(mb[2]) === 842);
+      expect('c19_pages', pages, pages === 2);
+      expect('c19_links', uris, uris === 14);
+      expect('c19_firstLink', ptxt.includes(`/URI (https://osintfront.com/e/${W.incidents[0].ids[0]})`), ptxt.includes(`/URI (https://osintfront.com/e/${W.incidents[0].ids[0]})`));
+      expect('c19_noVercel', !ptxt.includes('vercel.app'), !ptxt.includes('vercel.app'));
+      expect('c18_noPrint', await page.evaluate(() => window.__printed), (await page.evaluate(() => window.__printed)) === 0);
+      // 22. zoom + 24 h → the export copy follows the screen
+      await page.locator('[data-dash-action="zoom-in"]').click();
+      await page.locator('[data-dash-period="24h"]').click();
+      await page.waitForFunction(() => document.querySelector('[data-dash-period="24h"]')?.getAttribute('aria-pressed') === 'true', null, { timeout: 15000 });
+      await page.locator('[data-dash-action="zoom-in"]').click();
+      const screenView = await page.locator('[data-dash-sheet] svg[data-view]').getAttribute('data-view');
+      await save('jpeg');
+      await page.waitForTimeout(400);
+      const rec = await page.evaluate(() => window.__exports[window.__exports.length - 1]);
+      expect('c22_view', rec?.view === screenView, rec?.view === screenView);
+      expect('c22_text24h', rec && rec.text.includes('-40%') && !rec.text.includes('+40%'), !!rec && rec.text.includes('-40%') && !rec.text.includes('+40%'));
+      expect('c21_lightCopy', rec && `${rec.theme} ${rec.bg}`, !!rec && rec.theme === 'light' && rec.bg === 'rgb(255, 255, 255)');
+      // 23. a failing canvas → the error text, the dashboard still works
+      await page.evaluate(() => { window.__tb = HTMLCanvasElement.prototype.toBlob; HTMLCanvasElement.prototype.toBlob = function (cb) { cb(null); }; });
+      await page.locator('[data-dash-action="jpeg"]').click();
+      await page.waitForSelector('[data-dash-error]', { timeout: 30000 });
+      expect('c23_exportFailed', (await page.locator('[data-dash-error]').innerText()).length > 5, true);
+      await page.evaluate(() => { HTMLCanvasElement.prototype.toBlob = window.__tb; });
+      expect('c23_stillWorks', await page.locator('[data-dash-period="7d"]').isEnabled(), await page.locator('[data-dash-period="7d"]').isEnabled());
+      // 19b. zero incidents → 1 page, no links
+      await page.locator('[data-dash-action="close"]').click();
+      await page.locator('[data-ask-action="new"]').click();
+      await sendQ(T.zero);
+      await page.waitForSelector('[data-dash-sheet] [data-dash-zero]', { timeout: 20000 });
+      const zp = (await save('pdf')).buf.toString('latin1');
+      expect('c19_zeroPdf', `${(zp.match(/\/Type \/Page\b(?!s)/g) || []).length} pages, ${(zp.match(/\/URI /g) || []).length} links`, (zp.match(/\/Type \/Page\b(?!s)/g) || []).length === 1 && !(zp.match(/\/URI /g) || []).length);
+      allErrors.push(...errors);
+      await ctx.close();
+    }
     // ── staff ──
     {
       const { ctx, page, errors } = await openFor(browser, 'staff', out);
@@ -564,6 +646,13 @@ const T = en
       await page.waitForSelector('[data-dash-sheet]', { timeout: 20000 });
       await page.locator('[data-dash-prepared]').fill('C'.repeat(80));
       expect('c16_prepared60', (await page.locator('[data-dash-prepared]').inputValue()).length, (await page.locator('[data-dash-prepared]').inputValue()).length === 60);
+      await page.locator('[data-dash-prepared]').fill('ACME Ltd');
+      for (const a of ['jpeg', 'pdf']) {
+        await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.locator(`[data-dash-action="${a}"]`).click()]);
+        await page.waitForTimeout(400);
+      }
+      const recs = await page.evaluate(() => window.__exports.map((e) => e.text));
+      expect('c20_preparedInExports', recs.length >= 2 && recs.slice(-2).every((x) => x.includes('ACME Ltd')), recs.length >= 2 && recs.slice(-2).every((x) => x.includes('ACME Ltd')));
       const sc = await page.locator('[data-dash-period]').allInnerTexts();
       expect('c16_staffChipsNo3', sc.every((c) => !c.includes('3')), sc.every((c) => !c.includes('3')));
       await page.locator('[data-dash-action="close"]').click();

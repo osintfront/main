@@ -1,22 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FileDown, ImageDown, Loader2, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { useTheme } from '@/context/ThemeContext';
-import { DASH_CREDITS, fmtNum, PRESETS, type DashSelection, type DashState, type Preset } from '@/lib/askStats';
+import { DASH_CREDITS, exportFileName, fmtNum, PRESETS, sourceLines, type DashSelection, type DashState, type Preset } from '@/lib/askStats';
+import { SITE_URL } from '@/config/welcome';
+import { EXPORT_WIDTH } from '@/lib/dashExportLayout';
+import { mapShapesReady } from './MiniMap';
 import { type View } from '@/lib/dashGeometry';
 import { DashboardSheet } from './DashboardSheet';
 import { TipBox, useTip } from './charts/Tip';
+import { DASH_COLORS, DashColorsContext } from './charts/dashColors';
 import { cn } from '@/utils/cn';
 
-export interface DashExportApi { pdf: (o: ExportArgs) => Promise<void>; jpeg: (o: ExportArgs) => Promise<void> }
-export interface ExportArgs { state: DashState; preparedFor: string; view: View | null }
-
 /** The statistics dashboard window: full screen on a phone, a large modal on a desktop. */
-export function StatsDashboard({ state, staff, left, onSelect, onPeriod, onClose, onExport }: {
+export function StatsDashboard({ state, staff, left, onSelect, onPeriod, onClose }: {
   state: DashState; staff: boolean; left: number | null; onSelect: (sel: DashSelection) => void; onPeriod: (preset: Preset) => void; onClose: () => void;
-  onExport?: (kind: 'pdf' | 'jpeg', o: ExportArgs) => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { t, dir } = useI18n();
+  const exportRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
   const { tip, text, at } = useTip();
   const [preparedFor, setPreparedFor] = useState('');
@@ -50,12 +52,29 @@ export function StatsDashboard({ state, staff, left, onSelect, onPeriod, onClose
     setPending(true);
     onPeriod(p);
   };
+  const frame = () => new Promise<void>((ok) => requestAnimationFrame(() => ok()));
+  /** One export at a time: the off-screen light copy (current period, prepared-for and map view) → the file. */
   const run = async (kind: 'pdf' | 'jpeg') => {
-    if (!onExport || exporting) return;
+    if (exporting) return;
     setExporting(kind);
     setError(null);
     try {
-      await onExport(kind, { state, preparedFor, view });
+      await frame();
+      await frame();
+      await mapShapesReady();
+      await frame();
+      const node = exportRef.current;
+      if (!node) throw new Error('no export node');
+      const lib = await import('@/lib/dashboardExport');
+      if (kind === 'jpeg') lib.download(await lib.renderJpeg(node), exportFileName(r.title, 'jpg'));
+      else {
+        const generated = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', numberingSystem: 'latn', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+        lib.download(await lib.renderPdf(node, {
+          sources: sourceLines(r, SITE_URL), dir,
+          labels: { sources: t('dash.sources'), preparedFor: preparedFor.trim() ? t('dash.preparedForName', { name: preparedFor.trim() }) : null, generated: t('dash.generated', { time: generated }), site: 'osintfront.com' },
+          logoUrl: '/icon-192.png',
+        }), exportFileName(r.title, 'pdf'));
+      }
     } catch {
       setError(t('dash.exportFailed'));
     } finally {
@@ -93,20 +112,32 @@ export function StatsDashboard({ state, staff, left, onSelect, onPeriod, onClose
           {error ? <p data-dash-error role="alert" className="w-full text-xs font-semibold text-red-600">{error}</p> : null}
         </div>
         <div className={cn('transition-opacity', rebuilding && 'pointer-events-none opacity-50')}>
-          <DashboardSheet result={r} preparedFor={preparedFor} view={view} variant="screen" staff={staff} onPreparedFor={setPreparedFor} onView={setView} onSelect={onSelect} tip={tip} />
+          <DashColorsContext.Provider value={DASH_COLORS[theme === 'dark' ? 'dark' : 'light']}>
+            <DashboardSheet result={r} preparedFor={preparedFor} view={view} variant="screen" staff={staff} onPreparedFor={setPreparedFor} onView={setView} onSelect={onSelect} tip={tip} />
+          </DashColorsContext.Provider>
         </div>
         <div className="grid grid-cols-2 gap-2 border-t px-4 py-3" style={{ borderColor: 'var(--dash-line)' }}>
-          <button type="button" data-dash-action="pdf" disabled={!!exporting} onClick={() => void run('pdf')} className={cn(btn, 'text-white disabled:opacity-60')} style={{ background: 'var(--dash-accent)' }}>
+          <button type="button" data-dash-action="pdf" disabled={!!exporting} onClick={(e) => (e.stopPropagation(), void run('pdf'))} className={cn(btn, 'text-white disabled:opacity-60')} style={{ background: 'var(--dash-accent)' }}>
             {exporting === 'pdf' ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileDown className="size-4" aria-hidden />}
             {exporting === 'pdf' ? t('dash.exporting') : t('dash.pdf')}
           </button>
-          <button type="button" data-dash-action="jpeg" disabled={!!exporting} onClick={() => void run('jpeg')} className={cn(btn, 'ring-1 disabled:opacity-60')} style={{ color: 'var(--dash-ink)', borderColor: 'var(--dash-line)' }}>
+          <button type="button" data-dash-action="jpeg" disabled={!!exporting} onClick={(e) => (e.stopPropagation(), void run('jpeg'))} className={cn(btn, 'ring-1 disabled:opacity-60')} style={{ color: 'var(--dash-ink)', borderColor: 'var(--dash-line)' }}>
             {exporting === 'jpeg' ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ImageDown className="size-4" aria-hidden />}
             {exporting === 'jpeg' ? t('dash.exporting') : t('dash.jpeg')}
           </button>
         </div>
       </div>
       <TipBox text={text} at={at} />
+      {exporting
+        ? createPortal(
+            <div ref={exportRef} data-dash-export data-dash-theme="light" dir={dir} style={{ position: 'fixed', left: -20000, top: 0, width: EXPORT_WIDTH }}>
+              <DashColorsContext.Provider value={DASH_COLORS.light}>
+                <DashboardSheet result={r} preparedFor={preparedFor} view={view} variant="export" />
+              </DashColorsContext.Provider>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useI18n } from '@/i18n';
 import { type DashResult } from '@/lib/askStats';
 import { clampView, fitView, hotspotRadius, project, ringPath, viewKey, zoomAt, type View } from '@/lib/dashGeometry';
 import { useMark, type TipApi } from './charts/Tip';
+import { useDashColors } from './charts/dashColors';
 
 const W = 600, H = 360;
 type Country = { name: string; d: string };
@@ -20,6 +21,9 @@ function loadShapes(): Promise<Country[]> {
   return shapes;
 }
 
+/** Resolves when the country outlines are loaded (the export waits for them). */
+export const mapShapesReady = (): Promise<unknown> => loadShapes();
+
 /** Our own SVG map of the hotspots (no tiles): zoom with the wheel or a pinch, drag to pan, reset. */
 export function MiniMap({ places, targetCountry, view, onView, onSelect, tip, interactive }: {
   places: DashResult['places']; targetCountry: string | null; view: View | null; onView?: (v: View) => void;
@@ -27,6 +31,7 @@ export function MiniMap({ places, targetCountry, view, onView, onSelect, tip, in
 }) {
   const { t } = useI18n();
   const mark = useMark(tip);
+  const C = useDashColors();
   const [countries, setCountries] = useState<Country[]>([]);
   useEffect(() => { let live = true; void loadShapes().then((c) => live && setCountries(c)); return () => { live = false; }; }, []);
   const pins = places.map((p, i) => ({ p, i })).filter(({ p }) => !p.other && p.lat != null && p.lng != null);
@@ -97,7 +102,7 @@ export function MiniMap({ places, targetCountry, view, onView, onSelect, tip, in
         <g transform={`translate(${v.x} ${v.y}) scale(${v.k})`}>
           {countries.map((c, i) => (
             <path key={i} d={c.d} data-country={c.name} data-target={c.name === targetCountry ? '' : undefined} vectorEffect="non-scaling-stroke"
-              fill={c.name === targetCountry ? 'var(--dash-target)' : 'var(--dash-land)'} stroke="var(--dash-muted)" strokeOpacity={0.45} strokeWidth={0.8} fillRule="evenodd" />
+              fill={c.name === targetCountry ? C.target : C.land} stroke={C.muted} strokeOpacity={0.45} strokeWidth={0.8} fillRule="evenodd" />
           ))}
         </g>
         {pins.map(({ p, i }) => {
@@ -106,8 +111,8 @@ export function MiniMap({ places, targetCountry, view, onView, onSelect, tip, in
           const r = hotspotRadius(p.count, max);
           return (
             <g key={i} data-hotspot={i} className="cursor-pointer" {...mark(`hot:${i}`, t('dash.tip.hotspotPin', { place: p.name, count: p.count, reports: p.reports }), onSelect ? () => onSelect(i) : undefined)}>
-              <circle cx={x} cy={y} r={r} fill="var(--dash-hot)" fillOpacity={0.72} stroke="var(--dash-bg)" strokeWidth={2} />
-              <text x={x + r + 4} y={y + 4} fontSize={12} fontWeight={600} fill="var(--dash-ink)" stroke="var(--dash-panel)" strokeWidth={3} paintOrder="stroke">{`${p.name} ${p.count}`}</text>
+              <circle cx={x} cy={y} r={r} fill={C.hot} fillOpacity={0.72} stroke={C.bg} strokeWidth={2} />
+              <text x={x + r + 4} y={y + 4} fontSize={12} fontWeight={600} fill={C.ink} stroke={C.panel} strokeWidth={3} paintOrder="stroke">{`${p.name} ${p.count}`}</text>
             </g>
           );
         })}

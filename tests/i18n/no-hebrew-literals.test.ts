@@ -22,6 +22,7 @@ const FILES = [
   'src/components/ask/charts/BarChart.tsx',
   'src/components/ask/charts/HotspotBars.tsx',
   'src/components/ask/charts/Tip.tsx',
+  'src/components/ask/charts/dashColors.ts',
   'src/components/filters/FilterSetsBar.tsx',
   'src/components/filters/FilterSetHeader.tsx',
   'src/components/filters/EeiPanel.tsx',
