@@ -96,7 +96,8 @@ export const headlineSimilarity = (a: MatchRow, b: MatchRow) => jaccard(wordsOf(
 /** Headlines this close may cross kinds and countries (the same report filed twice). */
 const SAME_HEADLINE = 0.6;
 /** Headlines this close may cross countries within one kind (statements are filed under the
- *  speaker's country or the country they talk about). */
+ *  speaker's country or the country they talk about), or cross kinds within one country (a
+ *  statement and the drone it reports). */
 const TWIN_HEADLINE = 0.3;
 
 /**
@@ -107,8 +108,17 @@ export function textTwin(a: MatchRow, b: MatchRow, slug: Map<string, string>): b
   if (root(a) === root(b) || !inWindow(a, b, slug)) return false;
   const s = headlineSimilarity(a, b);
   if (s >= SAME_HEADLINE) return true;
+  if (s < TWIN_HEADLINE) return false;
   const sameKind = family(slug.get(a.category_id ?? "")) === family(slug.get(b.category_id ?? ""));
-  return sameKind && s >= TWIN_HEADLINE;
+  // Across kinds (one report filed as a statement and as the drone / military activity it
+  // describes) only within one known country; another country still needs SAME_HEADLINE.
+  return sameKind || sameCountry(a, b);
+}
+
+/** Both countries known and at least one in common (not a neighbour). */
+function sameCountry(a: MatchRow, b: MatchRow): boolean {
+  const ca = countryKey(a.country), cb = countryKey(b.country);
+  return ca.some((x) => cb.includes(x));
 }
 
 /** Same photo re-saved by another channel: a few bits apart (imageHash.ts SAME_PICTURE_BITS). */
