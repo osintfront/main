@@ -964,12 +964,12 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
 
 /** translations.<he|en>.full = the whole text translated (analyses & summaries). Merged into the
  *  translations as they are then (the editor may have written its headline meanwhile). */
-async function saveFullText(eventId: string, text: string) {
+async function saveFullText(eventId: string, text: string, waitMs = 20_000) {
   try {
     const full = await translateFullChain(text);
     if (!full) return;
     // Let the editor's headline / summary land first, then add the full text next to them.
-    await new Promise((r) => setTimeout(r, 20_000));
+    if (waitMs) await new Promise((r) => setTimeout(r, waitMs));
     const { data: cur } = await db.from("events").select("translations").eq("id", eventId).maybeSingle();
     const tr = cur?.translations && typeof cur.translations === "object" ? { ...cur.translations } : {};
     for (const l of ["he", "en"] as const) tr[l] = { ...(tr[l] ?? {}), full: full[l] };
@@ -1195,6 +1195,13 @@ Deno.serve(async (req) => {
   if (cronHeader) {
     if (!(await cronAuthorized(cronHeader))) return json({ error: "unauthorized" }, 401);
     const b = await req.json().catch(() => ({}));
+    if (b?.analysis_fulltext) {
+      // Backfill: the whole text of existing analyses (from their original report).
+      const ids: string[] = (Array.isArray(b.analysis_fulltext.ids) ? b.analysis_fulltext.ids : []).map(String).slice(0, 10);
+      const { data: rows } = await db.from("events").select("id,original_report_text").in("id", ids);
+      for (const r of rows ?? []) if (r.original_report_text) await saveFullText(r.id, r.original_report_text, 0);
+      return json({ ok: true, done: (rows ?? []).map((r: any) => r.id) });
+    }
     if (b?.telegram_reprocess) {
       const r = b.telegram_reprocess;
       const results = await reprocessTelegram(String(r.channel ?? ""), Array.isArray(r.ids) ? r.ids.map(Number) : []);
