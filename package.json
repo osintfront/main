@@ -38,7 +38,9 @@
     "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.4.1",
     "tailwindcss": "^4.1.4",
+    "topojson-client": "^3.1.0",
     "typescript": "~5.8.3",
-    "vite": "^6.3.3"
+    "vite": "^6.3.3",
+    "world-atlas": "^2.0.2"
   }
 }
