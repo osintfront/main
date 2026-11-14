@@ -15,7 +15,10 @@ test('the speech route', () => {
     assert.ok(s.includes(w), w);
   }
   assert.ok(/env\('GEMINI_SPEECH_KEY'\) \|\| env\('GEMINI_API_KEY'\)/.test(s), 'speech has its own paid key, the old one as fallback');
-  assert.ok(!/openai|whisper/i.test(s), 'no OpenAI');
+  assert.ok(!/api\.openai\.com/.test(s), 'no OpenAI');
+  for (const w of ['api.groq.com/openai/v1/audio/transcriptions', "env('GROQ_API_KEY')", 'whisper-large-v3', 'verbose_json', 'whisperToRaw(']) assert.ok(s.includes(w), w);
+  const post = s.slice(s.indexOf('export async function POST'));
+  assert.ok(post.indexOf('whisper(') > 0 && post.indexOf('whisper(') < post.indexOf(':generateContent'), 'Whisper first, then Gemini');
   const v = JSON.parse(read('vercel.json'));
   assert.equal(v.functions['api/transcribe.ts'].maxDuration, 120);
 });
@@ -42,6 +45,7 @@ test('the job', () => {
   }
   assert.ok(!s.includes('runAsReader'), 'not counted as an Ask-the-map credit');
   assert.ok(!s.includes('GEMINI_API_KEY'), 'the edge function never holds a Gemini key');
-  assert.ok(!/openai|whisper/i.test(s), 'no OpenAI');
+  assert.ok(!/api\.openai\.com/.test(s), 'no OpenAI');
+  assert.ok(s.includes('b.provider'), 'usage logged under the provider that answered');
   for (const f of [...walk('supabase/functions'), ...walk('api')]) assert.ok(!read(f).includes('api.openai.com'), f);
 });

@@ -1,15 +1,17 @@
 /// <reference types="node" />
-// POST /api/transcribe — Gemini writes down a stored video's speech and the text seen on screen.
+// POST /api/transcribe — writes down a stored video's speech (with timed lines) and the text seen on screen.
 // Only our Supabase functions may call it (header x-translate-secret = TRANSLATE_SECRET), and only
-// for a video inside our own public event-media bucket. Gemini runs on GEMINI_SPEECH_KEY (else the existing GEMINI_API_KEY)
-// (its own billed project); Claude does every translation afterwards (supabase/functions/_shared/media.ts).
-// Request:  { url } | { ready: true }
-// Answer:   200 { state: 'ok'|'none', lang, seconds, speech, on_screen, cut, model, usage }
+// for a video inside our own public event-media bucket.
+// Order (owner's decision): 1. Whisper on Groq (GROQ_API_KEY; files up to 25 MB; speech only, no on-screen
+// text); 2. Gemini as the fallback (GEMINI_SPEECH_KEY, its own billed project, else GEMINI_API_KEY; also reads
+// on-screen text). Claude does every translation afterwards (supabase/functions/_shared/media.ts).
+// Request:  { url, budget_ms? } | { ready: true }
+// Answer:   200 { state: 'ok'|'none', lang, seconds, speech, segments, on_screen, cut, model, provider, usage }
 //           200 { state: 'too_big'|'too_long'|'unavailable'|'unreadable', seconds? }
-//           401 unauthorized · 400 bad url · 503 off (no key) · 502 { error: 'busy', detail } (Gemini limit / refusal / time-out; detail = step + status)
+//           401 unauthorized · 400 bad url · 503 off (no key) · 502 { error: 'busy', detail } (both services failed; detail = why)
 // The speech text is never logged.
 import {
-  SPEECH_LIMITS, SPEECH_PROMPT, allowedMediaUrl, busyDetail, cleanSpeech, geminiOutcome, mp4DurationSec, remainingMs, routeDeadlineMs,
+  SPEECH_LIMITS, SPEECH_PROMPT, allowedMediaUrl, busyDetail, cleanSpeech, geminiOutcome, mp4DurationSec, remainingMs, routeDeadlineMs, whisperToRaw,
   type BusyStep,
 } from './_lib/speechInput.js';
 
@@ -92,6 +94,29 @@ async function gemini(step: BusyStep, path: string, init: RequestInit, deadline:
   return res;
 }
 
+const WHISPER = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const WHISPER_MODEL = 'whisper-large-v3';
+
+/** Whisper on Groq writes the speech down with timed lines; null = no answer (Gemini is tried next). */
+async function whisper(key: string, bytes: Uint8Array, deadline: number): Promise<{ raw: NonNullable<ReturnType<typeof whisperToRaw>>; note: null } | { raw: null; note: string }> {
+  const ms = remainingMs(deadline, Date.now(), 60_000);
+  if (ms < 5000) return { raw: null, note: 'whisper skipped: no time' };
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: 'video/mp4' }), 'video.mp4');
+  form.append('model', WHISPER_MODEL);
+  form.append('response_format', 'verbose_json');
+  form.append('timestamp_granularities[]', 'segment');
+  form.append('temperature', '0');
+  try {
+    const res = await fetch(WHISPER, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(ms) });
+    const body = await res.json().catch(() => null);
+    const raw = res.ok ? whisperToRaw(body) : null;
+    return raw ? { raw, note: null } : { raw: null, note: `whisper ${res.status} ${String((body as { error?: { message?: string } })?.error?.message ?? '').slice(0, 80)}`.trim() };
+  } catch (e) {
+    return { raw: null, note: `whisper ${(e as Error)?.name === 'TimeoutError' ? 'timeout' : 'network error'}` };
+  }
+}
+
 /** Upload through the Files API (resumable), wait until ACTIVE. Returns the file's name and uri. */
 async function uploadFile(key: string, bytes: Uint8Array, deadline: number): Promise<{ name: string; uri: string } | 'bad'> {
   const start = await gemini('upload_start', '/upload/v1beta/files', {
@@ -146,8 +171,9 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => null);
   // Speech has its own key (billing on, its own quota); the site's shared free key is the fallback.
   const key = env('GEMINI_SPEECH_KEY') || env('GEMINI_API_KEY');
-  if (b?.ready) return json({ ready: !!key });
-  if (!key) return json({ error: 'off' }, 503);
+  const groq = env('GROQ_API_KEY');
+  if (b?.ready) return json({ ready: !!(key || groq) });
+  if (!key && !groq) return json({ error: 'off' }, 503);
   const url = allowedMediaUrl(b?.url, env('SUPABASE_URL') || env('VITE_SUPABASE_URL'));
   if (!url) return json({ error: 'bad url' }, 400);
 
@@ -158,6 +184,20 @@ export async function POST(req: Request) {
   const seconds = mp4DurationSec(file);
   if (seconds != null && seconds > SPEECH_LIMITS.maxSec) return json({ state: 'too_long', seconds });
 
+  // 1. Whisper (Groq) first — speech with timed lines; no on-screen text.
+  let whisperNote: string | null = null;
+  if (groq && file.length <= SPEECH_LIMITS.whisperBytes) {
+    const w = await whisper(groq, file, deadline);
+    const clean = w.raw ? cleanSpeech(w.raw, seconds) : null;
+    if (clean) {
+      console.log('transcribe', clean.state, file.length, seconds, Date.now() - t0, 'whisper');
+      return json({ ...clean, seconds, model: WHISPER_MODEL, provider: 'groq', usage: { input: 0, output: 0 } });
+    }
+    whisperNote = w.note ?? 'whisper unreadable';
+    console.warn('transcribe whisper', whisperNote, file.length);
+  }
+  // 2. Gemini — the fallback (and the only path for files over Whisper's 25 MB).
+  if (!key) return json({ error: 'busy', detail: whisperNote ?? 'no speech service' }, 502);
   const model = env('GEMINI_MODEL') || 'gemini-3.5-flash-lite';
   let uploaded: { name: string; uri: string } | null = null;
   try {
@@ -188,10 +228,11 @@ export async function POST(req: Request) {
     const clean = text ? cleanSpeech(text, seconds) : null;
     if (!clean) return json({ state: 'unreadable', seconds });
     const usage = { input: Number(out?.usageMetadata?.promptTokenCount ?? 0), output: Number(out?.usageMetadata?.candidatesTokenCount ?? 0) };
-    console.log('transcribe', clean.state, file.length, seconds, Date.now() - t0);
-    return json({ ...clean, seconds, model, usage });
+    console.log('transcribe', clean.state, file.length, seconds, Date.now() - t0, 'gemini');
+    return json({ ...clean, seconds, model, provider: 'gemini', usage });
   } catch (e) {
-    const detail = e instanceof Busy ? e.detail : 'internal ' + String((e as Error)?.name ?? 'error').slice(0, 40);
+    const own = e instanceof Busy ? e.detail : 'internal ' + String((e as Error)?.name ?? 'error').slice(0, 40);
+    const detail = (whisperNote ? `${whisperNote}; gemini ${own}` : own).slice(0, 160);
     console.warn('transcribe busy', detail, file.length);
     return json({ error: 'busy', detail }, 502);
   } finally {

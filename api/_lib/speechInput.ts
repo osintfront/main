@@ -14,6 +14,7 @@ export const SPEECH_LIMITS = {
   cueMaxSec: 12,
   cueDefaultSec: 4,
   cueMinSec: 0.2,
+  whisperBytes: 26214400, // 25 MB — Groq's upload limit
 } as const;
 
 const BUCKET_PATH = '/storage/v1/object/public/event-media/';
@@ -262,4 +263,15 @@ export function busyDetail(step: BusyStep, status: number | null, body: unknown)
     if (typeof e.message === 'string' && e.message) parts.push(e.message.slice(0, 120));
   }
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+/** Groq Whisper's verbose_json answer as the raw shape cleanSpeech takes (no on-screen text); null = no answer. */
+export function whisperToRaw(body: unknown): { segments: { start: unknown; end: unknown; text: string }[]; speech: string; language: string; on_screen: string[] } | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const b = body as Record<string, unknown>;
+  if (typeof b.text !== 'string') return null;
+  const segments = (Array.isArray(b.segments) ? b.segments : [])
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object' && typeof (x as Record<string, unknown>).text === 'string')
+    .map((x) => ({ start: x.start, end: x.end, text: String(x.text).trim() }));
+  return { segments, speech: b.text.trim(), language: typeof b.language === 'string' ? b.language : '', on_screen: [] };
 }
