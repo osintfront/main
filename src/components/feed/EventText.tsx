@@ -56,6 +56,18 @@ export function eventTexts(event: PublicEvent, lang: string) {
 }
 
 /**
+ * Analyses & summaries: the whole text translated (site language, then English, then Hebrew).
+ * cut = the database gave only the first paragraph (no Pro), so the upgrade button is shown.
+ */
+export function analysisText(event: PublicEvent, lang: string): { text: string; cut: boolean } | null {
+  for (const l of [lang, 'en', 'he']) {
+    const tr = event.translations[l];
+    if (tr?.full?.trim()) return { text: tr.full.trim(), cut: tr.full_cut === true };
+  }
+  return null;
+}
+
+/**
  * The summary of an event with two reader buttons:
  *  "Expand" — the full report + religious meaning + other implications (written once by the agent);
  *  "Source text" — the original report, with a button back to the translated summary.
@@ -82,6 +94,7 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm, on
   const canCopy = hasFeature(undefined, 'copy_text');
   const hasSummary = hasFeature(undefined, 'event_summary');
   const { summary } = eventTexts(event, lang);
+  const analysis = analysisText(event, lang);
   const [view, setView] = useState<'summary' | 'source'>('summary');
   const [source, setSource] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<ExpandedByLang | null>(null);
@@ -218,6 +231,28 @@ export function EventText({ event, compact = false, terms, usedTerms, onTerm, on
         >
           {source ? <LinkifiedText text={source} mapsLabel={t('details.openInMaps')} /> : <span className="italic text-slate-500 dark:text-slate-400">{t('text.noSource')}</span>}
         </p>
+      ) : analysis ? (
+        <div data-analysis={analysis.cut ? 'cut' : 'full'}>
+          <p
+            className={cn(
+              'whitespace-pre-line break-words text-slate-600 dark:text-slate-300',
+              compact ? 'max-h-60 overflow-y-auto text-[13px] leading-relaxed' : 'text-[15px] leading-relaxed text-slate-800 dark:text-slate-200',
+            )}
+            dir="auto"
+          >
+            {linked(analysis.text)}
+          </p>
+          {analysis.cut ? (
+            <button
+              type="button"
+              onClick={() => openGate(profile ? 'upgrade' : 'signup', 'analysis_full')}
+              className="mt-1.5 inline-flex min-h-8 items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-sky-500 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              <Lock className="size-3.5" aria-hidden />
+              {t('lock.analysis')}
+            </button>
+          ) : null}
+        </div>
       ) : summary ? (
         <p className={cn('text-slate-600 dark:text-slate-300', compact ? 'text-[13px] leading-relaxed' : 'text-[15px] leading-relaxed text-slate-800 dark:text-slate-200')} dir="auto">
           {linked(summary)}

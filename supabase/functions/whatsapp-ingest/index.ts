@@ -19,9 +19,9 @@ import { logUsage, setUsageSink } from "../_shared/usage.ts";
 import { channelName, fetchChannel, imageAsBase64 } from "./telegram.ts";
 import { splitEventByCategory } from "../_shared/splitEvent.ts";
 import { saveEventTerms } from "../_shared/eventTerms.ts";
-import { translateBriefChain } from "../_shared/translate.ts";
+import { translateBriefChain, translateFullChain } from "../_shared/translate.ts";
 import { alreadyHas, hashImage } from "../_shared/imageHash.ts";
-import { AGENT_EXCLUDED_CATEGORIES, CATEGORY_RULES } from "../_shared/categoryRules.ts";
+import { AGENT_EXCLUDED_CATEGORIES, ANALYSIS_SLUG, CATEGORY_RULES } from "../_shared/categoryRules.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -746,6 +746,11 @@ async function processOne(m: InMsg) {
 
   const cats = await categories();
   let cat = c.decision === "event" ? cats.find((x) => x.slug === c.category_slug && x.slug !== "other") : undefined;
+  // Analyses & summaries: their own category (feed only); the topic the classifier saw
+  // (military-activity, airstrike…) becomes the secondary type.
+  const analysisCat = summary ? cats.find((x) => x.slug === ANALYSIS_SLUG) : undefined;
+  const topic = analysisCat ? (cat ?? cats.find((x) => x.slug === c.category_slug))?.slug : undefined;
+  if (analysisCat) cat = analysisCat;
   const confident = !!cat;
   // A draft keeps the AI's best guess of a category (editors fix it in one click).
   if (!cat && c.category_slug) cat = cats.find((x) => x.slug === c.category_slug && x.slug !== "other");
@@ -776,6 +781,7 @@ async function processOne(m: InMsg) {
     occurred_at: sentIso,
     created_by: BOT_USER_ID,
     classification_confidence: confident ? 0.8 : 0.4,
+    ...(topic && !["uncategorized", "other", ANALYSIS_SLUG].includes(topic) ? { secondary_categories: [topic] } : {}),
     ai_suggestions: { ...(summary ? { no_map: true, summary: true } : {}), ...(analysis ? { analysis: true } : {}), source: m.platform === "telegram" ? "telegram-ingest" : "whatsapp-ingest", model: MODEL, reason: c.reason ?? "", ...(m.agent ? { agent: clip(m.agent, 100) } : {}), ...(m.light ? { light: true } : {}), ...(c.location_name_en ? { place_en: clip(c.location_name_en, 120) } : {}) },
   };
   if (row.latitude == null || row.longitude == null) {
@@ -830,6 +836,8 @@ async function processOne(m: InMsg) {
   // Editor agent runs in the background so the extension gets its answer quickly;
   // the event appears at once and is rewritten in the house template seconds later.
   // Editor only for what is (or will be) on the map — not for drafts left for review.
+  // Analyses & summaries are shown whole to Pro / Max: translate the full text (also on light channels).
+  if (analysisCat) background.push(saveFullText(ins!.id, text));
   if (!m.light && (finalStatus === "published" || waitingForPlace)) background.push(applyEditor(ins!.id, row, text, `${platformName(m)} – ${m.chat}${c.original_source ? " / " + c.original_source : ""}`, sourceUrl(m, text), sentIso, waitingForPlace));
   // Everything else in another language (drafts, cheap mode): a cheap Hebrew/English headline +
   // summary, so the drafts list and the feed never show raw Arabic / Persian.
@@ -883,11 +891,17 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   const allCats = await categories();
   const rowSlug = allCats.find((x) => x.id === row.category_id)?.slug ?? null;
   const slugs = allCats.map((x) => x.slug);
-  const picked = withEditorMain(rowSlug, edited.category_slug, edited.secondary_category_slugs, slugs);
+  const isAnalysis = rowSlug === ANALYSIS_SLUG;
+  const triageMain = isAnalysis ? null : rowSlug;
+  const picked = withEditorMain(triageMain, edited.category_slug, edited.secondary_category_slugs, slugs);
   // Then the agreed rules that need no AI (assassination → Killed, a death in a statement, Wounded only).
   const types = normalizeTypes(picked.main, picked.secondary, slugs);
-  update.secondary_categories = types.secondary;
-  const newMain = types.main && types.main !== rowSlug ? allCats.find((x) => x.slug === types.main) : undefined;
+  // An analysis stays an analysis: the editor's kinds are its topics (secondary types).
+  update.secondary_categories = isAnalysis
+    ? [...new Set([...(Array.isArray(row.secondary_categories) ? row.secondary_categories as string[] : []), types.main, ...types.secondary])]
+      .filter((x): x is string => !!x && !["uncategorized", "other", ANALYSIS_SLUG].includes(x)).slice(0, 2)
+    : types.secondary;
+  const newMain = !isAnalysis && types.main && types.main !== rowSlug ? allCats.find((x) => x.slug === types.main) : undefined;
   if (newMain) update.category_id = newMain.id;
   if (!row.country && mainCountry(edited)) update.country = mainCountry(edited);
   if (edited.title) update.title = clip(edited.title, 200);
@@ -912,7 +926,14 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   // leave the event in its original language.
   const PLACE_KEYS = ["locations", "secondary_categories", "category_id", "country", "latitude", "longitude", "location_precision", "geocoding_confidence", "location_name"];
   // Corrected by hand meanwhile: keep the person's text.
-  const { data: man } = await db.from("events").select("ai_suggestions").eq("id", eventId).maybeSingle();
+  const { data: man } = await db.from("events").select("ai_suggestions,translations").eq("id", eventId).maybeSingle();
+  // The full text of an analysis (saveFullText) may already be there: keep it.
+  if (update.translations && man?.translations && typeof man.translations === "object") {
+    const tr = update.translations as Record<string, Record<string, unknown>>;
+    for (const [l, v] of Object.entries(man.translations as Record<string, any>)) {
+      if (typeof v?.full === "string") tr[l] = { ...(tr[l] ?? {}), full: v.full };
+    }
+  }
   const TEXT_KEYS = ["title", "description", "translations"];
   const textPart = Object.fromEntries(Object.entries(update).filter(([k]) => !PLACE_KEYS.includes(k) && !(man?.ai_suggestions?.manual_text && TEXT_KEYS.includes(k))));
   // Secondary types set by hand (manual_secondary) are left alone.
@@ -941,6 +962,24 @@ async function applyEditor(eventId: string, row: Record<string, unknown>, text: 
   if (publishWhenPlaced) for (const id of [eventId, ...siblings]) await publishIfPlaced(id);
 }
 
+/** translations.<he|en>.full = the whole text translated (analyses & summaries). Merged into the
+ *  translations as they are then (the editor may have written its headline meanwhile). */
+async function saveFullText(eventId: string, text: string) {
+  try {
+    const full = await translateFullChain(text);
+    if (!full) return;
+    // Let the editor's headline / summary land first, then add the full text next to them.
+    await new Promise((r) => setTimeout(r, 20_000));
+    const { data: cur } = await db.from("events").select("translations").eq("id", eventId).maybeSingle();
+    const tr = cur?.translations && typeof cur.translations === "object" ? { ...cur.translations } : {};
+    for (const l of ["he", "en"] as const) tr[l] = { ...(tr[l] ?? {}), full: full[l] };
+    const { error } = await db.from("events").update({ translations: tr }).eq("id", eventId);
+    if (error) console.error("full text update failed", error.message);
+  } catch (e) {
+    console.error("full text failed", String((e as Error)?.message ?? e).slice(0, 200));
+  }
+}
+
 async function publishIfPlaced(eventId: string) {
   const { data: now } = await db.from("events").select("status,latitude,deleted_at,ai_suggestions").eq("id", eventId).maybeSingle();
   // A summary has no pin by design: it is published to the feed only.
@@ -959,7 +998,7 @@ async function runEditor(text: string, srcLabel: string, url: string | null, sen
       editorDomains = [...new Set((data ?? []).map((s: any) => new URL(s.url).hostname.replace(/^www\./, "")))];
     }
     // Every place with its own category: an event spanning several categories is split later.
-    const cats = (await categories()).filter((c) => !["home-front-alerts", "other", "uncategorized"].includes(c.slug));
+    const cats = (await categories()).filter((c) => !["home-front-alerts", "other", "uncategorized", ANALYSIS_SLUG].includes(c.slug));
     const work = editReport({
       text, mode: "whatsapp", allowedDomains: editorDomains,
       categories: cats, detailedPlaces: true, maxPlaces: 30,

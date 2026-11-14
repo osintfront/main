@@ -1,8 +1,10 @@
 // Category rules set by the editors, shared by every agent that picks a category
 // (triage of Telegram / WhatsApp posts, the editor agent, quick compose, the news agents).
 
-/** Never chosen by an agent: only the Home Front Command feed creates these. */
-export const AGENT_EXCLUDED_CATEGORIES = new Set(["home-front-alerts", "other"]);
+/** Never chosen by an agent: home-front-alerts come only from the Home Front Command feed. */
+export const AGENT_EXCLUDED_CATEGORIES = new Set(["home-front-alerts", "other", "analysis"]);
+/** Analyses & summaries: set by the ingest from its is_analysis / is_summary flags, never by an agent. */
+export const ANALYSIS_SLUG = "analysis";
 
 export const CATEGORY_RULES = `
 Category rules (they override any other hint):
