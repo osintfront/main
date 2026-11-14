@@ -6,15 +6,20 @@
 export type SpeechState = 'ok' | 'none' | 'unreadable' | 'too_big' | 'too_long' | 'unavailable' | 'off' | 'limit';
 const SPEECH_STATES: readonly string[] = ['ok', 'none', 'unreadable', 'too_big', 'too_long', 'unavailable', 'off', 'limit'];
 
-export interface TextPair { orig: string; lang: string; he: string; en: string; whereHe: string; whereEn: string; from: 'frame' | 'video' }
+export type Box = [number, number, number, number]; // ymin, xmin, ymax, xmax — 0..1000
+export interface TextPair { orig: string; lang: string; he: string; en: string; whereHe: string; whereEn: string; from: 'frame' | 'video'; box: Box | null }
+export interface Segment { start: number; end: number; orig: string; he: string; en: string }
 export interface MediaSpeech {
   state: SpeechState; lang: string; seconds: number | null; orig: string; he: string; en: string; summaryHe: string; summaryEn: string; cut: boolean;
+  segments: Segment[];
 }
 export interface MediaReadingItem {
   mediaId: string; kind: 'image' | 'video'; thumb: string | null; descriptionHe: string; descriptionEn: string; texts: TextPair[]; speech: MediaSpeech | null;
 }
 export interface MediaTranslation {
   items: MediaReadingItem[]; todo: number; working: boolean; failed: boolean; staff: boolean; used: number; limit: number | null; budgetLeft: boolean;
+  /** Staff only: why the last run's video speech was not read. */
+  speechNote: string | null;
 }
 
 type Obj = Record<string, unknown>;
@@ -26,8 +31,25 @@ function mapPair(p: unknown): TextPair | null {
   if (!isObj(p) || !s(p.orig).trim()) return null;
   return {
     orig: s(p.orig), lang: s(p.lang) || 'und', he: s(p.he), en: s(p.en), whereHe: s(p.where_he), whereEn: s(p.where_en),
-    from: p.from === 'video' ? 'video' : 'frame',
+    from: p.from === 'video' ? 'video' : 'frame', box: mapBox(p.box),
   };
+}
+
+function mapBox(v: unknown): Box | null {
+  if (!Array.isArray(v) || v.length !== 4 || !v.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1000)) return null;
+  const [y0, x0, y1, x1] = v as number[];
+  return y0 < y1 && x0 < x1 ? [y0, x0, y1, x1] : null;
+}
+
+function mapSegments(v: unknown): Segment[] {
+  const out: Segment[] = [];
+  for (const x of Array.isArray(v) ? v : []) {
+    if (!isObj(x) || typeof x.start !== 'number' || typeof x.end !== 'number' || !Number.isFinite(x.start) || !Number.isFinite(x.end)) continue;
+    if (x.start < 0 || x.end <= x.start) continue;
+    out.push({ start: x.start, end: x.end, orig: s(x.orig), he: s(x.he), en: s(x.en) });
+    if (out.length >= 120) break;
+  }
+  return out;
 }
 
 function mapSpeech(v: unknown): MediaSpeech | null {
@@ -35,6 +57,7 @@ function mapSpeech(v: unknown): MediaSpeech | null {
   return {
     state: v.state as SpeechState, lang: s(v.lang) || 'und', seconds: typeof v.seconds === 'number' && Number.isFinite(v.seconds) ? v.seconds : null,
     orig: s(v.orig), he: s(v.he), en: s(v.en), summaryHe: s(v.summary_he), summaryEn: s(v.summary_en), cut: v.cut === true,
+    segments: mapSegments(v.segments),
   };
 }
 
@@ -56,6 +79,7 @@ export function mapTranslation(raw: unknown): MediaTranslation | null {
     items, todo: count(raw.todo), working: raw.working === true, failed: raw.failed === true, staff: raw.staff === true,
     used: count(raw.used), limit: typeof raw.limit === 'number' && Number.isFinite(raw.limit) ? raw.limit : null,
     budgetLeft: 'budget_left' in raw ? raw.budget_left === true : true,
+    speechNote: typeof raw.speech_note === 'string' && raw.speech_note.trim() ? raw.speech_note.trim().slice(0, 300) : null,
   };
 }
 

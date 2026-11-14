@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, Loader2, Lock } from 'lucide-react';
 import { featureLimit, hasFeature, usePlanVersion } from '@/lib/plans';
@@ -7,6 +7,11 @@ import { useAuth } from '@/hooks/useAuth';
 import type { MediaKind } from '@/types/event';
 import { useI18n } from '@/i18n';
 import { openLightbox } from '@/lib/lightbox';
+import { overlayBoxes, readingFor, type OverlayBox } from '@/lib/mediaOverlay';
+import { mountOverlay } from '@/lib/mediaOverlayDom';
+import type { Segment } from '@/lib/mediaReading';
+import { SubtitledVideo } from './SubtitledVideo';
+import { useEventReading } from '@/hooks/useEventReading';
 import { loadEventMedia, requestVideo, toMediaView, type EventMediaView } from '@/services/eventMediaService';
 import { safeExternalUrl } from '@/utils/url';
 
@@ -15,9 +20,10 @@ const RECENT_MS = 30 * 60_000; // keep checking fresh events for late photos/vid
 const POLL_MS = 30_000;
 
 type Still = EventMediaView['stills'][number];
+const NO_SEGMENTS: Segment[] = [];
 
 /** A video still with ▶. Play asks the server for the video (fetched once, max 50 MB). */
-function VideoStill({ still }: { still: Still }) {
+function VideoStill({ still, segments }: { still: Still; segments: Segment[] }) {
   const { t } = useI18n();
   const [state, setState] = useState<'idle' | 'loading' | 'playing' | 'too_big' | 'unavailable' | 'error'>(
     still.videoState === 'too_big' ? 'too_big' : still.videoState === 'unavailable' ? 'unavailable' : 'idle',
@@ -46,14 +52,13 @@ function VideoStill({ still }: { still: Still }) {
 
   if (state === 'playing' && src) {
     return (
-      <video
+      <SubtitledVideo
         src={src}
         poster={still.url}
-        controls
         autoPlay
-        playsInline
-        className="w-full rounded-lg bg-black"
-        style={{ aspectRatio: still.width && still.height ? `${still.width} / ${still.height}` : '16 / 9', maxHeight: 360 }}
+        aspect={still.width && still.height ? `${still.width} / ${still.height}` : '16 / 9'}
+        maxHeight={360}
+        segments={segments}
       />
     );
   }
@@ -94,8 +99,56 @@ function VideoStill({ still }: { still: Still }) {
   );
 }
 
-export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; occurredAt: string; kinds?: MediaKind[] }) {
+type Image = EventMediaView['images'][number];
+
+/** One picture; with saved boxes, the Original / Translated switch and the boxes over it. */
+function Picture({ m, boxes, overlay, setOverlay }: { m: Image; boxes: OverlayBox[]; overlay: boolean; setOverlay: (on: boolean) => void }) {
   const { t } = useI18n();
+  const host = useRef<HTMLButtonElement>(null);
+  const img = useRef<HTMLImageElement>(null);
+  const on = overlay && boxes.length > 0;
+  const key = JSON.stringify(boxes); // a new array each render; remount only when the boxes change
+  useEffect(() => {
+    if (!on || !host.current || !img.current) return;
+    return mountOverlay(host.current, img.current, JSON.parse(key) as OverlayBox[], { fit: 'cover', interactive: false });
+  }, [on, key]);
+  const labels = { original: t('mt.ov.original'), translated: t('mt.ov.translated'), hint: t('mt.ov.hint') };
+  return (
+    <>
+      <button
+        ref={host}
+        type="button"
+        onClick={() => openLightbox(m.url, '', boxes.length ? { boxes, on: overlay, labels, onChange: setOverlay } : undefined)}
+        aria-label={t('media.enlarge')}
+        className="relative block w-full cursor-zoom-in overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800"
+      >
+        <img
+          ref={img}
+          src={m.url}
+          alt=""
+          loading="lazy"
+          width={m.width ?? undefined}
+          height={m.height ?? undefined}
+          className="block h-auto max-h-60 w-full object-cover"
+        />
+      </button>
+      {boxes.length ? (
+        <div role="group" aria-label={t('mt.ov.switch')} className="ofm-ov__switch absolute bottom-1.5 start-1.5">
+          <button type="button" data-ov-mode="original" aria-pressed={!overlay} onClick={() => setOverlay(false)}>
+            {labels.original}
+          </button>
+          <button type="button" data-ov-mode="translated" aria-pressed={overlay} onClick={() => setOverlay(true)}>
+            {labels.translated}
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; occurredAt: string; kinds?: MediaKind[] }) {
+  const { t, lang } = useI18n();
+  const { reading, overlay, setOverlay } = useEventReading(eventId);
   const { profile } = useAuth();
   usePlanVersion();
   const [view, setView] = useState<EventMediaView | null>(null);
@@ -142,43 +195,31 @@ export function EventMedia({ eventId, occurredAt, kinds }: { eventId: string; oc
   }
   if (!view) return null;
   const more = firstOnly && !!kinds?.includes('video');
+  const boxesFor = (id: string) => overlayBoxes(readingFor(reading, [id]), lang);
+  const segmentsFor = (ids: (string | null)[]) => readingFor(reading, ids)?.speech?.segments ?? NO_SEGMENTS;
 
   return (
     <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-      {view.videos.map(({ video, poster }) => (
-        <video
-          key={video.id}
-          src={video.url}
-          poster={poster ?? undefined}
-          controls
-          preload="none"
-          playsInline
-          className="w-full rounded-lg bg-black"
-          style={{ aspectRatio: video.width && video.height ? `${video.width} / ${video.height}` : '16 / 9', maxHeight: 320 }}
-        />
+      {view.videos.map(({ video, poster, posterId }) => (
+        <div key={video.id} data-media-video={video.id}>
+          <SubtitledVideo
+            src={video.url}
+            poster={poster ?? undefined}
+            preload="none"
+            aspect={video.width && video.height ? `${video.width} / ${video.height}` : '16 / 9'}
+            maxHeight={320}
+            segments={segmentsFor([posterId, video.id])}
+          />
+        </div>
       ))}
       {view.stills.map((s) => (
-        <VideoStill key={s.id} still={s} />
+        <VideoStill key={s.id} still={s} segments={segmentsFor([s.id])} />
       ))}
       {view.images.length ? (
         <div className={view.images.length > 1 ? 'grid grid-cols-2 gap-1.5' : 'grid grid-cols-1'}>
           {view.images.map((m) => (
-            <div key={m.id} className="relative">
-              <button
-                type="button"
-                onClick={() => openLightbox(m.url)}
-                aria-label={t('media.enlarge')}
-                className="relative block w-full cursor-zoom-in overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800"
-              >
-                <img
-                  src={m.url}
-                  alt=""
-                  loading="lazy"
-                  width={m.width ?? undefined}
-                  height={m.height ?? undefined}
-                  className="block h-auto max-h-60 w-full object-cover"
-                />
-              </button>
+            <div key={m.id} data-media-id={m.id} className="relative">
+              <Picture m={m} boxes={boxesFor(m.id)} overlay={overlay} setOverlay={setOverlay} />
               {canDownload ? (
                 <a
                   href={m.url}

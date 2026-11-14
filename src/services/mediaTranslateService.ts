@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { mapTranslation, type MediaTranslation } from '@/lib/mediaReading';
+import { dropReading, getReading, setReading } from '@/lib/readingStore';
 
 /**
  * Media translation: the saved reading of an event's media (media_translation, a read with no AI) and
@@ -17,7 +18,6 @@ export class MediaTranslateError extends Error {
 
 const POLL_MS = 4000;
 const POLLS = 50;
-const cache = new Map<string, MediaTranslation | null>();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function client() {
@@ -45,12 +45,13 @@ async function errorCode(error: unknown): Promise<MediaCode> {
 
 /** The saved reading for this event (cached per event for the session); null when not allowed or on error. */
 export async function fetchMediaTranslation(eventId: string, force = false): Promise<MediaTranslation | null> {
-  if (!force && cache.has(eventId)) return cache.get(eventId)!;
+  const have = getReading(eventId);
+  if (!force && have !== undefined) return have;
   try {
     const { data, error } = await client().rpc('media_translation', { p_event: eventId });
     if (error) return null;
     const m = mapTranslation(data);
-    cache.set(eventId, m);
+    setReading(eventId, m);
     return m;
   } catch {
     return null;
@@ -73,7 +74,7 @@ export async function runMediaTranslation(
       body: { action: 'media_translate', event_id: eventId, ...(o.redo && !poll ? { redo: true } : {}), ...(poll ? { poll: true } : {}) },
     });
     if (error) {
-      cache.delete(eventId); // never keep a stale "working" for this event
+      dropReading(eventId); // never keep a stale "working" for this event
       throw new MediaTranslateError(await errorCode(error));
     }
     const d = (data ?? {}) as Record<string, unknown>;
@@ -86,6 +87,6 @@ export async function runMediaTranslation(
     }
     return { data: await fetchMediaTranslation(eventId, true), ran };
   }
-  cache.delete(eventId);
+  dropReading(eventId);
   throw new MediaTranslateError('failed');
 }

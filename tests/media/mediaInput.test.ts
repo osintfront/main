@@ -94,7 +94,7 @@ test('cleanRoute', () => {
   }
 });
 
-const speech = (o: Partial<RouteSpeech>): RouteSpeech => ({ state: 'ok', lang: 'ar', seconds: 60, speech: '', onScreen: [], cut: false, ...o });
+const speech = (o: Partial<RouteSpeech>): RouteSpeech => ({ state: 'ok', lang: 'ar', seconds: 60, speech: '', onScreen: [], cut: false, segments: [], ...o });
 const pic: SentItem = { n: 1, id: 'p', kind: 'image', imageUrl: 'https://x/p.jpg', speech: null };
 
 test('mediaUserContent: data only', () => {
@@ -223,4 +223,83 @@ test('cleanReading: bare numbers are not texts to translate', () => {
   const pair = (orig: string) => ({ orig, lang: 'ar', he: orig, en: orig, where_he: '', where_en: '' });
   const r = cleanReading({ items: [{ n: 1, description_he: 'מפה', description_en: 'A map', texts: [pair('64'), pair('27 · 3'), pair('C-130'), pair('تزويد بالوقود')] }] }, [pic])!;
   assert.deepEqual(r[0].texts.map((t) => t.orig), ['C-130', 'تزويد بالوقود']);
+});
+
+test('retry cap: a route failure counts a try; an off video is new again only while tries < 2', async () => {
+  const { routeOutcome } = await import('../../supabase/functions/_shared/mediaInput.ts');
+  assert.equal(routeOutcome('failed').tries, 1);
+  assert.equal(routeOutcome('failed', 1).tries, 2);
+  const v = { id: 'v', kind: 'video', imageUrl: null, videoUrl: 'https://x/v.mp4', videoBytes: 1, fetchable: false, videoState: null } as MediaItem;
+  const todo = (tries: number | undefined) => pickTodo([v], [{ media_id: 'v', speech_state: 'off', speech_tries: tries }], { speechOn: true, redo: false }).length;
+  assert.equal(todo(undefined), 1, 'off because the switch was off: new once speech is on');
+  assert.equal(todo(1), 1, 'one failure: one more try');
+  assert.equal(todo(2), 0, 'two failures: no more paid retries');
+  // the saved speech keeps the count only for an off answer
+  const sent: SentItem = { n: 1, id: 'v', kind: 'video', imageUrl: null, speech: routeOutcome('failed', 1) };
+  const r = cleanReading({ items: [{ n: 1, description_he: 'ו', description_en: 'v' }] }, [sent])!;
+  assert.equal(r[0].speech!.state, 'off');
+  assert.equal(r[0].speech!.tries, 2);
+});
+
+test('cleanBox', async () => {
+  const { cleanBox } = await import('../../supabase/functions/_shared/mediaInput.ts');
+  assert.deepEqual(cleanBox([100, 200, 300, 600]), [100, 200, 300, 600]);
+  assert.deepEqual(cleanBox([0.1, 0.2, 0.3, 0.6]), [100, 200, 300, 600]);
+  assert.equal(cleanBox([-5, 0, 1200, 500]), null);
+  assert.deepEqual(cleanBox([-5, 0, 1040, 500]), [0, 0, 1000, 500]);
+  assert.equal(cleanBox([100, 200, 104, 600]), null);
+  assert.equal(cleanBox([300, 200, 100, 600]), null);
+  for (const v of [['1', 2, 3, 4], [1, 2, 3], [1, 2, 3, 4, 5], null, 'x']) assert.equal(cleanBox(v), null, JSON.stringify(v));
+});
+
+test('cleanReading: boxes on picture texts only', () => {
+  const r = cleanReading({ items: [{ n: 1, description_he: 'ת', description_en: 'p', texts: [
+    { orig: 'ساخت ایران', lang: 'fa', he: 'תוצרת איראן', en: 'Made in Iran', box: [100, 100, 300, 600] },
+    { orig: 'عاجل', he: 'דחוף', en: 'Urgent', box: [5, 5, 5, 5] },
+  ] }] }, [pic])!;
+  assert.deepEqual(r[0].texts[0].box, [100, 100, 300, 600]);
+  assert.equal('box' in r[0].texts[1], false);
+  const vid: SentItem = { n: 1, id: 's', kind: 'video', imageUrl: 'https://x/s.jpg', speech: speech({ speech: 'قال الناطق', onScreen: ['عاجل'] }) };
+  const v = cleanReading({ items: [{ n: 1, description_he: 'ו', description_en: 'v', texts: [{ orig: 'عاجل', he: 'דחוף', en: 'Urgent', box: [10, 10, 100, 100] }],
+    speech: { has_speech: true, he: 'אמר', en: 'Said' } }] }, [vid])!;
+  assert.equal(v[0].texts[0].from, 'video');
+  assert.equal('box' in v[0].texts[0], false);
+});
+
+test('cleanRoute: timed lines', () => {
+  const r = cleanRoute(200, { state: 'ok', speech: 'a\nb', lang: 'ar', segments: [{ start: 0, end: 2, text: 'a' }, { start: 2, end: 1, text: 'b' }, { start: 3, end: 4, text: ' ' }] }) as RouteSpeech;
+  assert.deepEqual(r.segments, [{ start: 0, end: 2, text: 'a' }]);
+  assert.deepEqual((cleanRoute(200, { state: 'none', segments: [{ start: 0, end: 2, text: 'a' }] }) as RouteSpeech).segments, []);
+});
+
+test('mediaUserContent: numbered lines instead of the speech', () => {
+  const two: SentItem = { n: 2, id: 's', kind: 'video', imageUrl: null, speech: speech({ speech: 'a\nb', segments: [{ start: 0, end: 2, text: 'a' }, { start: 2, end: 4, text: 'b' }] }) };
+  const j = JSON.parse((mediaUserContent({ title: 't', summary: 's' }, [two])[1] as any).text.replace(/^Item 2: /, ''));
+  assert.deepEqual(j.segments, [{ i: 1, text: 'a' }, { i: 2, text: 'b' }]);
+  assert.equal(j.speech, null);
+  const none: SentItem = { ...two, speech: speech({ speech: 'whole speech' }) };
+  const k = JSON.parse((mediaUserContent({ title: 't', summary: 's' }, [none])[1] as any).text.replace(/^Item 2: /, ''));
+  assert.equal(k.speech, 'whole speech');
+  assert.deepEqual(k.segments, []);
+});
+
+test('cleanReading: translated lines', () => {
+  const vid: SentItem = { n: 1, id: 's', kind: 'video', imageUrl: null, speech: speech({ speech: 'a\nb', segments: [{ start: 0, end: 2, text: 'a' }, { start: 2, end: 4, text: 'b' }] }) };
+  const r = cleanReading({ items: [{ n: 1, description_he: 'ו', description_en: 'v',
+    speech: { has_speech: true, segments: [{ i: 1, he: 'שלום', en: 'Hello' }, { i: 2, en: 'News' }], summary_he: 'ס', summary_en: 'S' } }] }, [vid])!;
+  const sp = r[0].speech!;
+  assert.deepEqual(sp.segments, [{ start: 0, end: 2, orig: 'a', he: 'שלום', en: 'Hello' }, { start: 2, end: 4, orig: 'b', he: '', en: 'News' }]);
+  assert.equal(sp.he, 'שלום');
+  assert.equal(sp.en, 'Hello\nNews');
+  assert.equal(sp.state, 'ok');
+  const old = cleanReading({ items: [{ n: 1, description_he: 'ו', description_en: 'v', speech: { has_speech: true, he: 'הכול', en: 'All' } }] }, [vid])![0].speech!;
+  assert.equal(old.he, 'הכול');
+  assert.equal('segments' in old, false);
+  const empty = cleanReading({ items: [{ n: 1, description_he: 'ו', description_en: 'v', speech: { has_speech: true } }] }, [vid])![0].speech!;
+  assert.equal(empty.state, 'unreadable');
+});
+
+test('limits and prompt for boxes and lines', () => {
+  assert.equal(MEDIA_LIMITS.maxTokens, 8000);
+  for (const w of ['[ymin, xmin, ymax, xmax]', '0 to 1000', 'segments']) assert.ok(mediaSystemPrompt().includes(w), w);
 });

@@ -7,6 +7,7 @@ import { hasFeature, usePlanVersion } from '@/lib/plans';
 import { openGate, openGateFor } from '@/components/plans/GateDialog';
 import { buttonState, itemLabels, pairView, pick, type MediaReadingItem, type MediaTranslation } from '@/lib/mediaReading';
 import { MediaTranslateError, fetchMediaTranslation, runMediaTranslation } from '@/services/mediaTranslateService';
+import { setOverlayOn } from '@/lib/readingStore';
 import type { PublicEvent } from '@/types/event';
 
 /**
@@ -50,6 +51,7 @@ export function useMediaTranslate(event: PublicEvent, expandOpen: boolean): { bu
       setNotice(null);
       setPanel(true);
       setWorking(true);
+      setOverlayOn(id, true); // the event's pictures show the translation
       try {
         const r = await runMediaTranslation(id, { redo: o.redo });
         if (current.current !== id) return;
@@ -122,7 +124,10 @@ export function useMediaTranslate(event: PublicEvent, expandOpen: boolean): { bu
   } else if (state === 'show' || state === 'show_more') {
     button = (
       <>
-        <button type="button" data-mt-button className={btn} aria-expanded={panel} onClick={() => setPanel((p) => !p)}>
+        <button type="button" data-mt-button className={btn} aria-expanded={panel} onClick={() => {
+            if (!panel) setOverlayOn(event.id, true);
+            setPanel((p) => !p);
+          }}>
           <Languages className="size-3.5" aria-hidden />
           {panel ? t('mt.hide') : t('mt.show')}
         </button>
@@ -179,6 +184,11 @@ export function useMediaTranslate(event: PublicEvent, expandOpen: boolean): { bu
               </button>
             ) : null}
           </p>
+          {staff && data.speechNote ? (
+            <p data-mt-staff-note className="text-[11px] text-amber-700 dark:text-amber-300">
+              {t('mt.staffNote', { note: data.speechNote })}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>

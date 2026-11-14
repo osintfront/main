@@ -130,8 +130,8 @@ export function EventDetailsDialog({ event, onClose, onLocate, onChanged, onMove
     const previous = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      // The entry window above handles its own Escape.
-      if (e.key === 'Escape' && !document.querySelector('[data-deep-dialog]')) onClose();
+      // The entry window and the full-screen picture viewer above handle their own Escape.
+      if (e.key === 'Escape' && !document.querySelector('[data-deep-dialog], .ofm-lightbox')) onClose();
     };
     document.addEventListener('keydown', onKey);
     const overflow = document.body.style.overflow;

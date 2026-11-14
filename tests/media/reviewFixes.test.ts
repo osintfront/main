@@ -61,3 +61,19 @@ test('wiring of the fixes', () => {
   const ui = read('src/components/feed/MediaTranslate.tsx');
   assert.ok(/runMediaTranslation\(id, \{ join: true \}\)/.test(ui), 'the window joins, never starts');
 });
+
+test('overlay review: a skipped route does not spend the retry; wild boxes are dropped', async () => {
+  const m = await import('../../supabase/functions/_shared/mediaInput.ts');
+  assert.equal(m.routeOutcome('failed', 1, false).tries, 1, 'skip keeps the count');
+  assert.equal(m.routeOutcome('failed', 0, false).tries, undefined);
+  assert.equal(m.routeOutcome('failed', 1).tries, 2);
+  assert.equal(m.cleanBox([-200, -200, 1500, 1500]), null);
+  assert.deepEqual(m.cleanBox([-5, 0, 1020, 500]), [0, 0, 1000, 500]);
+  const job = read('supabase/functions/_shared/media.ts');
+  assert.ok(/routeOutcome\(r\.out,[^;]*, ms > 0\);/.test(job), 'a skip is not counted');
+  const sql = read('supabase/migrations/20261114000128_media_speech_note.sql');
+  assert.ok(sql.includes("~ '^[0-9]+$'"), 'a malformed tries never breaks the read');
+  const route = read('api/transcribe.ts');
+  assert.ok(route.includes("busyDetail('internal'") || route.includes('internal'), 'unknown errors are labelled internal');
+  assert.ok(/method: 'DELETE'[^\n]*signal: AbortSignal\.timeout/.test(route), 'cleanup has a time limit');
+});

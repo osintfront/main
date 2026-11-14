@@ -636,6 +636,7 @@ a, button, input, label, select, textarea, [role='button'] {
 }
 .ofm-lightbox__close {
   position: absolute;
+  z-index: 2; /* above the translation boxes */
   top: 12px;
   inset-inline-end: 12px;
   width: 40px;
@@ -742,3 +743,75 @@ a, button, input, label, select, textarea, [role='button'] {
 .ofm-compass a { display: grid; place-items: center; width: 34px; height: 34px; background: #fff; }
 .ofm-compass svg { transition: transform 0.15s; }
 .dark .ofm-compass a { background: #0f172a; }
+
+/* Translation on the picture: boxes over the original text (page elements; the picture is untouched). */
+.ofm-ov {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ofm-ov__box {
+  position: absolute;
+  display: flex;
+  align-items: safe center; /* overflow stays measurable (scrollHeight), never cut at the top */
+  justify-content: safe center;
+  padding: 1px 2px;
+  background: rgb(255 255 255 / 0.92);
+  color: #0f172a;
+  border-radius: 2px;
+  line-height: 1.2;
+  text-align: center;
+  font-weight: 600;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  box-shadow: 0 0 0 1px rgb(14 165 233 / 0.5);
+}
+.ofm-ov__box[data-ov-state='frame'] {
+  background: rgb(14 165 233 / 0.12);
+  outline: 2px solid rgb(14 165 233);
+}
+.ofm-ov__box[data-ov-state='orig'] {
+  background: rgb(254 243 199 / 0.95);
+}
+.ofm-ov__switch {
+  display: inline-flex;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.6);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ofm-ov__switch button {
+  padding: 4px 10px;
+  color: #fff;
+  min-height: 28px;
+}
+.ofm-ov__switch button[aria-pressed='true'] {
+  background: rgb(255 255 255 / 0.92);
+  color: #0f172a;
+}
+.ofm-ov__switch--viewer {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  font-size: 13px;
+}
+.ofm-ov__switch--viewer button {
+  min-height: 36px;
+  padding: 6px 14px;
+}
+.ofm-ov__hint {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  font-size: 12px;
+}
